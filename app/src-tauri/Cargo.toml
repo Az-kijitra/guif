@@ -2,23 +2,25 @@
 name = "reflexfiles-successor"
 version = "0.0.0"
 edition = "2021"
-description = "MVP Phase 1 (file list / tree view, keyboard navigation) — test scaffolding only. Implementation is added by code-generator. See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md."
+description = "MVP Phase 1 (file list / tree view, keyboard navigation) — vertical slice wiring the tested logic modules into a launchable Tauri app. See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md."
 
-# NOTE (unit-test-writer, TDD scaffolding): this Cargo.toml is intentionally
-# minimal. It only declares the dependencies needed to compile the unit tests
-# authored ahead of implementation (SPEC-0400-0001: Rust standard
-# `#[cfg(test)] mod tests`, tempfile-based fs integration tests). The Tauri
-# runtime dependency itself, and any other production dependency needed to
-# wire these modules into actual `#[tauri::command]` handlers, is left for
-# code-generator to add per docs/architecture/proposals/SPEC-0200-0001.md.
+# NOTE (code-generator): the Tauri runtime dependency and build-dependency
+# below wire the previously logic-only modules (fs::query, shared::schema,
+# keymap::defaults, config::io) into an actual launchable Tauri application,
+# per docs/architecture/proposals/SPEC-0200-0001.md §2 (app/(bootstrap)
+# registers commands; the feature modules themselves are unchanged).
 
 [lib]
 name = "reflexfiles_successor"
 path = "src/lib.rs"
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+tauri = { version = "2", features = [] }
 
 [dev-dependencies]
 tempfile = "3"

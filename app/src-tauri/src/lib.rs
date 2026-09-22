@@ -1,19 +1,30 @@
-//! Crate root (test scaffolding only).
-//!
-//! Module declarations mirror the feature-module layout approved in
-//! `docs/architecture/proposals/SPEC-0200-0001.md` §2/§3:
-//! - `fs` (SPEC-0300-0009 query logic)
+//! Crate root — also plays the `app/` (bootstrap) role from
+//! `docs/architecture/proposals/SPEC-0200-0001.md` §2/§3: it is the single
+//! place that constructs the Tauri application and registers commands
+//! (`invoke_handler`). Module declarations mirror the feature-module layout
+//! approved there:
+//! - `fs` (SPEC-0300-0009 query logic + the `fs_list_dir` Tauri command)
 //! - `keymap` (SPEC-0300-0010 defaults/key-processing logic, no persistence)
 //! - `config` (persistence I/O, SPEC-0200-0001 §6)
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
 //!
-//! Each module file below currently contains *only* unit tests
-//! (`#[cfg(test)] mod tests`) written ahead of implementation (TDD). They are
-//! expected to fail to compile until code-generator adds the corresponding
-//! implementation (the functions/types referenced by `super::*` in each
-//! test module).
+//! `main.rs` is a thin entry point that calls `run()` below (the standard
+//! Tauri 2 desktop template split, so `lib.rs` stays the single source of
+//! bootstrap wiring and can also be exercised by integration tests later).
 
 pub mod config;
 pub mod fs;
 pub mod keymap;
 pub mod shared;
+
+/// Builds and runs the Tauri application. This is the sole place in the
+/// backend that `use`s more than one feature module's public command
+/// surface at once (SPEC-0200-0001 §4.2: `app/(bootstrap) -> <feature>/`),
+/// consistent with feature modules never `use`-ing each other directly.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![fs::commands::fs_list_dir])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

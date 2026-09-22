@@ -38,6 +38,8 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 | ISS-0031 | 矛盾(記述) | SPEC-0300-0009, SPEC-0300-0010 | TBD項目に依拠した受入基準・相互参照の誤り(0010 AC-27がISS-0020のTBD値を前提、0009 AC-30/31がTBD閾値を前提、0010 AC-31が「要確認」アクションのキーを例示、§9前文「AC-30以降」はAC-40の誤り) | RESOLVED | spec-reviewerの修正依頼どおりspec-writerが修正(2026-09-22) |
 | ISS-0032 | 矛盾(記述) | SPEC-0300-0009, SPEC-0300-0010 | 第3版(ISS-0020/ISS-0029残課題の解消)の反映漏れ: ヘッダのステータス・最終改訂欄、変更履歴表、R-23の列挙、_issues.mdの詳細節・registryの一部が第2版の記述のまま残っていた | RESOLVED | オーケストレーター(2026-09-22): ヘッダ・変更履歴表・R-23・本ファイル・registryを第3版に同期 |
 | ISS-0033 | 矛盾 | SPEC-0300-0010(R-34, R-35, §4.2 #33/#34) | ISS-0020解消で確定したvim既定`zip_create`=Z/`zip_extract`=Shift+Zが、R-34の救済照合(Shiftのみの修飾キーは`Shift+`を除いた文字列とも照合)によりShift+Z押下時に両アクションが一致する。両者は同一ハンドラに属するためR-35前段では決着せず、R-35後段(同一ハンドラ内の解決順は未規定・architecture-mapper申し送り)の領域に落ちる。両アクションとも区分「後続」でPhase 1はno-opのため実装には影響しない | PENDING_HUMAN_REVIEW(ZIP実装フェーズ=SPEC-0300-0006着手までに解決要) | |
+| ISS-0034 | 矛盾(記述) | SPEC-0200-0001(§4.1 SHOULD-19) | `app/src/routes/+page.svelte`の`containerWidth`/`containerHeight`(`$state`)がroutes層に状態を保持しており、SPEC-0200-0001 §4.1「routesは状態を保持しない」に文言上抵触する。機能上の実害はない | PENDING_HUMAN_REVIEW | |
+| ISS-0035 | 未決定 | SPEC-0400-0001 | UI配線層(`fs/commands.rs`のDTO変換、`shared/ipc/fs.ts`、`list-state.svelte.ts`)に単体テストが無い。呼び出し先の純粋ロジックは既存181+16件のテストで担保済みだが、DTO変換・エラー整形・no-op分岐等の薄いorchestration部分は未検証 | PENDING_HUMAN_REVIEW(coverage-auditor工程前に解消推奨) | |
 
 ---
 
