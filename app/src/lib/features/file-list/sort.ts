@@ -1,0 +1,31 @@
+// SPEC-0300-0009 §4 (R-30~R-33): sort key/order state. The actual comparison
+// is performed by the backend (fs_list_dir, R-32); the frontend never
+// re-sorts the entries it receives.
+
+export const SORT_KEYS = ["name", "size", "type", "modified"] as const;
+
+export type SortKey = (typeof SORT_KEYS)[number];
+export type SortOrder = "asc" | "desc";
+
+export interface SortState {
+  key: SortKey;
+  order: SortOrder;
+}
+
+// R-30 note (ISS-0022-c resolved): initial default is name/asc.
+export const DEFAULT_SORT_STATE: SortState = { key: "name", order: "asc" };
+
+// R-31: re-selecting the current key toggles asc<->desc; a different key
+// resets the order to asc.
+export function nextSortState(current: SortState, selectedKey: SortKey): SortState {
+  if (current.key === selectedKey) {
+    return { key: selectedKey, order: current.order === "asc" ? "desc" : "asc" };
+  }
+  return { key: selectedKey, order: "asc" };
+}
+
+// R-32: render entries in the exact order the backend returned them, without
+// mutating or re-sorting the input array.
+export function renderEntriesInBackendOrder<T>(entries: readonly T[]): T[] {
+  return entries.slice();
+}

@@ -1,0 +1,15 @@
+{
+  "name": "reflexfiles-successor",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "MVP Phase 1 (file list / tree view, keyboard navigation) — test scaffolding only. Implementation is added by code-generator. See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

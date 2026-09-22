@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+import {
+  extendRangeSelection,
+  filterFocusableEntries,
+  moveFocusColumn,
+  moveFocusPage,
+  moveFocusRow,
+} from "./navigation";
+
+// Spec: SPEC-0300-0009 (file list / tree view detail) R-56~R-60
+// Per SPEC-0300-0009 AC-41~AC-44 (ISS-0025 dedup), the *result* of firing
+// move_up/move_down/move_left/move_right/page_up/page_down/Shift+move is
+// verified under SPEC-0300-0010's AC-06/AC-07/AC-08/AC-16 (this file). The
+// *key press causing dispatch* is covered separately in key-dispatch.test.ts.
+// SPEC-0300-0009 AC-45 (focus only traverses visible entries) is also covered
+// here since it directly exercises the same navigation module.
+//
+// Module under test (not yet implemented): ./navigation.ts
+
+describe("moveFocusRow (SPEC-0300-0009 R-56, R-57 / SPEC-0300-0010 AC-06)", () => {
+  const visible = ["a", "b", "c", "d"];
+
+  it("AC-06: move_down moves the focused index down by exactly one row in display order", () => {
+    expect(moveFocusRow(visible, 1, "down")).toBe(2);
+  });
+
+  it("AC-06: move_up moves the focused index up by exactly one row in display order", () => {
+    expect(moveFocusRow(visible, 2, "up")).toBe(1);
+  });
+
+  it("does not move past the last visible entry", () => {
+    expect(moveFocusRow(visible, 3, "down")).toBe(3);
+  });
+
+  it("does not move before the first visible entry", () => {
+    expect(moveFocusRow(visible, 0, "up")).toBe(0);
+  });
+});
+
+describe("moveFocusColumn (SPEC-0300-0009 R-58 / SPEC-0300-0010 AC-07)", () => {
+  // 6 entries laid out with rowsPerColumn=3: col0=[0,1,2], col1=[3,4,5]
+  const rowsPerColumn = 3;
+  const totalCount = 6;
+
+  it("AC-07: move_right jumps to the same row position in the next column", () => {
+    // index 1 (row 1, col 0) -> index 4 (row 1, col 1)
+    expect(moveFocusColumn(1, "right", rowsPerColumn, totalCount)).toBe(4);
+  });
+
+  it("AC-07: move_left jumps to the same row position in the previous column", () => {
+    // index 4 (row 1, col 1) -> index 1 (row 1, col 0)
+    expect(moveFocusColumn(4, "left", rowsPerColumn, totalCount)).toBe(1);
+  });
+
+  it("does not move past the last column", () => {
+    expect(moveFocusColumn(5, "right", rowsPerColumn, totalCount)).toBe(5);
+  });
+
+  it("does not move before the first column", () => {
+    expect(moveFocusColumn(0, "left", rowsPerColumn, totalCount)).toBe(0);
+  });
+});
+
+describe("moveFocusPage (SPEC-0300-0009 R-59 / SPEC-0300-0010 AC-08)", () => {
+  const visible = Array.from({ length: 50 }, (_, i) => `entry-${i}`);
+  const rows = 10;
+
+  it("AC-08: page_down moves the focus forward by one page (rows) worth of entries", () => {
+    expect(moveFocusPage(visible, 5, "down", rows)).toBe(15);
+  });
+
+  it("AC-08: page_up moves the focus backward by one page (rows) worth of entries", () => {
+    expect(moveFocusPage(visible, 25, "up", rows)).toBe(15);
+  });
+
+  it("clamps to the last entry when a page-down would overshoot the list", () => {
+    expect(moveFocusPage(visible, 45, "down", rows)).toBe(49);
+  });
+
+  it("clamps to the first entry when a page-up would undershoot the list", () => {
+    expect(moveFocusPage(visible, 5, "up", rows)).toBe(0);
+  });
+});
+
+describe("extendRangeSelection (SPEC-0300-0009 R-60 / SPEC-0300-0010 AC-16)", () => {
+  const visible = ["a", "b", "c", "d", "e"];
+
+  it("AC-16: Shift+move extends the selection from the anchor to the new focus position", () => {
+    const result = extendRangeSelection(visible, "b", "d");
+    expect(result).toEqual(new Set(["b", "c", "d"]));
+  });
+
+  it("AC-16: Shift+move in the opposite direction still selects the inclusive range", () => {
+    const result = extendRangeSelection(visible, "d", "b");
+    expect(result).toEqual(new Set(["b", "c", "d"]));
+  });
+});
+
+describe("filterFocusableEntries (SPEC-0300-0009 R-56, AC-45)", () => {
+  it("AC-45: focus traversal only considers entries that are currently visible (post-filter)", () => {
+    const all = ["a", "b", "c", "d", "e"];
+    const visible = ["a", "c", "e"]; // "b" and "d" are hidden by a search filter
+    const focusable = filterFocusableEntries(all, visible);
+    expect(focusable).toEqual(["a", "c", "e"]);
+    expect(focusable).not.toContain("b");
+    expect(focusable).not.toContain("d");
+  });
+});
