@@ -21,6 +21,12 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 tauri = { version = "2", features = [] }
+# R-50/R-50-1 (SPEC-0300-0011 §7): OS-standard trash-bin delete. `trash`
+# wraps the platform trash API (Windows Recycle Bin) directly; this is a
+# concrete-implementation dependency, not a Storage Provider abstraction
+# (SPEC-0400-0001 §4.1) — there is no trait, no generic backend parameter,
+# and no runtime backend switching anywhere in fs_ops.
+trash = "3"
 
 [dev-dependencies]
 tempfile = "3"

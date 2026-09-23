@@ -4,6 +4,7 @@
 |---|---|---|---|---|
 | 2026-09-22 | 未採番(SPEC-0300-0009) | PASS(フロント・バック双方) | `docs/architecture/traceability.md` L42 | unit-test-writer → code-generator → code-reviewer → 発注者(rustup導入後、`cargo test --lib`実行) |
 | 2026-09-22 | 未採番(SPEC-0300-0010) | PASS(フロント・バック双方) | `docs/architecture/traceability.md` L43 | unit-test-writer → code-generator → code-reviewer → 発注者(rustup導入後、`cargo test --lib`実行) |
+| 2026-09-23 | 未採番(SPEC-0300-0011) | PASS(フロント・バック双方) | 以下「## 2026-09-23 MVP Phase 2」セクション参照 | unit-test-writer → code-generator → code-reviewer(4回) → オーケストレーター(blocker修正・回帰テスト追加) → 最終判定「PR作成可」 |
 
 ## 2026-09-22 MVP Phase 1(SPEC-0300-0009/0010) テスト実行結果
 
@@ -56,4 +57,74 @@ test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 - `app/src-tauri/src/config/io.rs`
 
 **既知リスクの解消**: `config/io.rs`の`Config`構造体が`#[serde(flatten)]`を用いており、`toml`クレートとの既知の相性問題(スカラー/テーブルの宣言順序制約)が懸念されていたが、`ac33_saving_unrelated_settings_preserves_manually_edited_keymap_fields`テスト(flatten構造体のTOMLラウンドトリップを直接検証)が成功したことにより、この懸念は解消された。
+
+## 2026-09-23 MVP Phase 2(SPEC-0300-0011) テスト実行結果
+
+### フロントエンド(vitest): PASS
+
+**対象ファイル** (10ファイル(Phase 1) + 9ファイル(Phase 2新規) + 2ファイル(Phase 2変更/新テスト) / Phase 1: 181件 + Phase 2新規: 74件 = 計255件)
+
+**Phase 2新規テスト対象**
+- `app/src/lib/features/file-ops/{target-resolution,clipboard-mode,conflict-flow,progress-modal,delete-flow,rename-flow,create-flow,name-validation,error-format}.test.ts` (9ファイル)
+- `app/src/lib/features/keyboard/keymap-validate.test.ts` (新規)
+- `app/src/lib/features/keyboard/delete-override-validation.test.ts` (新規)
+
+**Phase 1から変更のあるファイル**
+- `app/src/lib/features/keyboard/keymap-resolve.test.ts` (追加テスト含む)
+
+**実行コマンド・結果**
+- `cd app && npx vitest run`: 255件全て成功
+- `npx tsc --noEmit -p tsconfig.json`: エラーなし
+
+**実行プロセス・検証経緯**
+1. **初回実装(code-generator)**: フロント252件・バック66件成功と報告
+2. **初回レビュー(code-reviewer)**: AC-74テストの自己言及バグを検出(検索対象の禁止文字列リテラル自体がテストファイル内にあり、テストが自分自身を検出してしまう)
+   - **修正(オーケストレーター)**: `file!()`マクロで自己ファイルを除外 → 回帰テスト後、バック66件全成功に
+3. **2回目レビュー(code-reviewer)**: 実装コードにblocker 2件を検出
+   - **B1**: `preflight_transfer`が`copy_batch`/`move_batch`から未配線で、宛先が複製元内部にある場合に自己参照的な無限再帰でスタックオーバーフローする実機クラッシュ(実機再現済み)
+   - **B2**: `delete`アクションのカスタムキー割当Shift禁止バリデーション(`validateCustomOverride`)が実際の解決経路(`resolveBinding`)から未呼び出し
+   - **修正(オーケストレーター)**: B1(`NotFound`以外の構造的エラーのみ全体拒否)・B2(`resolveBinding`内でvalidateCustomOverride呼び出し追加) → フロント255件・バック68件全成功
+4. **発注者確認**: ISS-0052(進捗表示・キャンセル機能、R-40〜R-45)の追加実装指示
+   - **追加実装(code-generator)**: フロント255件・バック74件成功
+5. **3回目レビュー(code-reviewer)**: 追加実装をレビュー、BLK-1を検出
+   - **BLK-1**: `preflight_transfer`が単一パス早期returnのため、複数アイテムのバッチで欠落ファイルが先頭にあると2件目以降の構造的危険が見逃される(B1修正が不完全だった)
+   - **修正(オーケストレーター)**: 2パス構成に変更 → 回帰テスト追加 → バック75件全成功
+6. **4回目最終レビュー(code-reviewer)**: BLK-1修正のみを再検証 → **「PR作成可」(blockerなし)と判定**
+   - **軽微な修正(オーケストレーター)**: 未使用importの削除 → フロント255件・バック75件全成功維持
+
+### バックエンド(Rust): PASS
+
+**対象ファイル** (Phase 1: 4ファイル/16件テスト + Phase 2新規: 8ファイル/59件テスト = 計12ファイル/75件テスト)
+
+**Phase 2新規実装ファイル**
+- `app/src-tauri/src/fs_ops/{name_validation,preflight,transfer,delete,rename,create,error,commands}.rs` (8ファイル)
+
+**実行コマンド・結果**
+- `cd app/src-tauri && export PATH="$HOME/.cargo/bin:$PATH" && cargo test --lib`: 75件全て成功
+  ```
+  test result: ok. 75 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+  ```
+
+**実行プロセス・検証経緯**
+
+同フロントエンドと並行実施。以下の検出・修正サイクルを経て、最終的に75件全成功を達成:
+- **初回実装**: 66件成功(AC-74テストのfile!()マクロ除外により改善)
+- **2回目レビュー後修正**: 68件成功(B1/B2 blocker修正後)
+- **追加実装**: 74件成功(ISS-0052進捗表示・キャンセル機能追加)
+- **3回目レビュー後修正**: 75件成功(BLK-1修正・2パス構成導入)
+
+詳細なテスト内容・blockersの検出・修正履歴については、フロントエンド項の「実行プロセス・検証経緯」を参照(両者は並行実施、検出・修正サイクルが連動)。
+
+### 既知の残課題(非blocker)
+
+これら課題は最終レビューで「PR作成可」と判定された際に、blockerではなく今後の改善項目として記録されたもの:
+
+**ISS-0052関連(進捗表示・キャンセル機能)**
+- (a) イベント名/operation_id方式の仕様追認要
+- (b) R-43原文とのグローバル/操作単位キャンセルの差異の追認要
+- (c) `features/file-ops/`側の実UI配線は未実装
+- (d) `keymap-validate.ts`のShift検出が正規化前の生文字列への大文字小文字区別の完全一致(MIN-1)
+
+**その他仕様未確定項(引き続きGAP)**
+- ISS-0039, ISS-0040, ISS-0041-b, ISS-0044(項目a/d), ISS-0046: TBDとして仕様確定待機
 

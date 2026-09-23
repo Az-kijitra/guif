@@ -2,6 +2,8 @@
 // overrides with profile defaults, normalizing key-binding strings, and
 // matching a keydown event against a resolved list of bindings.
 
+import { validateCustomOverride } from "./keymap-validate";
+
 const MODIFIER_ORDER = ["Ctrl", "Alt", "Shift", "Meta"] as const;
 type ModifierName = (typeof MODIFIER_ORDER)[number];
 
@@ -13,11 +15,16 @@ export interface KeydownLikeEvent {
   metaKey: boolean;
 }
 
-// R-33: normalize a binding string's modifier order to Ctrl -> Alt -> Shift
-// -> Meta, followed by the key itself.
+// R-33/R-33-1: normalize a binding string's modifier order to
+// Ctrl -> Alt -> Shift -> Meta, followed by the key itself. A single-
+// alphabet-character key body is also uppercased here so that the
+// binding-string side matches the same case-insensitive normalization
+// `eventKeyToken` already applies to the event side (R-33-2: this affects
+// only the key body's letter case, never the Shift modifier itself).
 export function normalizeKeyString(binding: string): string {
   const parts = binding.split("+");
-  const key = parts[parts.length - 1];
+  const rawKey = parts[parts.length - 1];
+  const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
   const presentModifiers = new Set(parts.slice(0, -1));
 
   const orderedModifiers = MODIFIER_ORDER.filter((mod: ModifierName) => presentModifiers.has(mod));
@@ -34,9 +41,20 @@ export interface ResolveBindingInput {
 // R-30/R-31/R-32: a custom override (if present) replaces the profile
 // default entirely. An empty-string override disables the action (no
 // bindings). Multiple bindings may be comma-separated.
+//
+// R-18-2/R-56-4-2-1: before a custom override is accepted, each of its
+// comma-separated bindings is validated via `validateCustomOverride` (this
+// currently only restricts Shift on the `delete` action). Any invalid
+// binding causes the whole override to be discarded in favor of the
+// profile default, rather than silently dropping just that one binding.
 export function resolveBinding(input: ResolveBindingInput): string[] {
-  const raw =
-    input.actionId in input.customOverrides ? input.customOverrides[input.actionId] : input.profileDefault;
+  let raw = input.profileDefault;
+  if (input.actionId in input.customOverrides) {
+    const candidate = input.customOverrides[input.actionId];
+    const bindings = candidate === "" ? [] : candidate.split(",").map((s) => s.trim());
+    const allValid = bindings.every((binding) => validateCustomOverride(input.actionId, binding) !== null);
+    raw = allValid ? candidate : input.profileDefault;
+  }
 
   if (raw === "") {
     return [];
