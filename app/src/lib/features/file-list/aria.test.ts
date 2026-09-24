@@ -60,15 +60,39 @@ describe("computeTreeFocusReassignment (SPEC-0300-0009 R-14, AC-09)", () => {
 });
 
 describe("computeFileListAria (SPEC-0300-0009 R-24, AC-52)", () => {
+  // SHOULD-39 (docs/architecture/proposals/SPEC-0200-0001.md §3.1.6):
+  // computeFileListAria's signature is extended to
+  // `{ focusedPath: string; isFocusedPathVisible: boolean }` so it can
+  // express SPEC-0300-0012 R-119 (below). These 2 pre-existing calls pass
+  // `isFocusedPathVisible: true`, i.e. the ordinary case where the focused
+  // row is part of the currently displayed set (search inactive, or the
+  // focused entry survives the filter) — AC-52's baseline behavior.
   it("AC-52: exposes role=listbox and aria-multiselectable=true", () => {
-    const aria = computeFileListAria({ focusedPath: "C:/root/a" });
+    const aria = computeFileListAria({ focusedPath: "C:/root/a", isFocusedPathVisible: true });
     expect(aria.role).toBe("listbox");
     expect(aria["aria-multiselectable"]).toBe(true);
   });
 
-  it("AC-52: aria-activedescendant points at the focused row's id", () => {
-    const aria = computeFileListAria({ focusedPath: "C:/root/a" });
+  it("AC-52: aria-activedescendant points at the focused row's id when that row is visible", () => {
+    const aria = computeFileListAria({ focusedPath: "C:/root/a", isFocusedPathVisible: true });
     expect(aria["aria-activedescendant"]).toBe("C:/root/a");
+  });
+});
+
+// SPEC-0300-0012 R-119 / AC-120 (ISS-0062-adjacent "form" confirmed by
+// SHOULD-39 independently of ISS-0062's own resolution): when the focused
+// entry has been filtered out of the currently visible set, the file list
+// must not keep `aria-activedescendant` pointing at a hidden row.
+describe("computeFileListAria — R-119 hidden-focus exception (SPEC-0300-0012 R-119, AC-120)", () => {
+  it("AC-120: omits aria-activedescendant entirely when the focused entry is not part of the visible (filtered) set", () => {
+    const aria = computeFileListAria({ focusedPath: "C:/root/a", isFocusedPathVisible: false });
+    expect(aria["aria-activedescendant"]).toBeUndefined();
+  });
+
+  it("still exposes role=listbox and aria-multiselectable=true when aria-activedescendant is omitted", () => {
+    const aria = computeFileListAria({ focusedPath: "C:/root/a", isFocusedPathVisible: false });
+    expect(aria.role).toBe("listbox");
+    expect(aria["aria-multiselectable"]).toBe(true);
   });
 });
 

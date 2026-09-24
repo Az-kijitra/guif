@@ -5,6 +5,15 @@
 | 2026-09-22 | 未採番(SPEC-0300-0009) | PASS(フロント・バック双方) | `docs/architecture/traceability.md` L42 | unit-test-writer → code-generator → code-reviewer → 発注者(rustup導入後、`cargo test --lib`実行) |
 | 2026-09-22 | 未採番(SPEC-0300-0010) | PASS(フロント・バック双方) | `docs/architecture/traceability.md` L43 | unit-test-writer → code-generator → code-reviewer → 発注者(rustup導入後、`cargo test --lib`実行) |
 | 2026-09-23 | 未採番(SPEC-0300-0011) | PASS(フロント・バック双方) | 以下「## 2026-09-23 MVP Phase 2」セクション参照 | unit-test-writer → code-generator → code-reviewer(4回) → オーケストレーター(blocker修正・回帰テスト追加) → 最終判定「PR作成可」 |
+| 2026-09-24 | 未採番(SPEC-0300-0012) | PASS(フロントのみ。Rust変更なし) | 以下「## 2026-09-24 MVP Phase 3」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(IME/修飾キー/空選択の修正・回帰テスト追加) → 判定「PR作成可」 |
+
+## 2026-09-24 MVP Phase 3(SPEC-0300-0012 検索) テスト実行結果
+
+- `cd app && npx vitest run`: 23ファイル/326件全成功(既存255件は無回帰、Phase 3で71件追加)。
+- `npx tsc --noEmit`: エラーなし。`npx vite build`: 成功(`.svelte`ファイルのコンパイル確認。svelte-checkは未導入)。
+- レビューで検出・修正: IME変換中のEnter/矢印が検索アクションとして誤発火(`isComposing`を`KeydownLikeEvent`に追加し通過させる)、修飾キー付きキーの誤発火、0件絞り込み時の全選択による選択全消し。いずれも回帰テストを追加。
+- 残課題(非blocker): ISS-0065(`openFocused`の非表示エントリ対応、`invert_selection`のキー未定義、AC-101/AC-113-3のUI未実装等)。
+- 未実施: 実アプリ上での目視確認(Tauri起動)。
 
 ## 2026-09-22 MVP Phase 1(SPEC-0300-0009/0010) テスト実行結果
 

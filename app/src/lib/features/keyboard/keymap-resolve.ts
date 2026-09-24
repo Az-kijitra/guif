@@ -13,6 +13,7 @@ export interface KeydownLikeEvent {
   altKey: boolean;
   shiftKey: boolean;
   metaKey: boolean;
+  isComposing?: boolean;
 }
 
 // R-33/R-33-1: normalize a binding string's modifier order to

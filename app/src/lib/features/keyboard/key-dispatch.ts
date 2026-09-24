@@ -73,11 +73,19 @@ export function isTreeHandledAction(actionId: string): boolean {
   return (TREE_HANDLED_ACTIONS as readonly string[]).includes(actionId);
 }
 
+// SPEC-0300-0012 R-121 action identifiers, resolved by the search bar's 4
+// dedicated keys (R-14-2 below).
+export type SearchAction = "cancel" | "confirm" | "history_prev" | "query_clear";
+
 export interface DispatchContext {
   isSettingsOpen: boolean;
   isOverlayOpen: boolean;
   isMenuBarActive: boolean;
   isTreeFocused: boolean;
+  // R-14-2 (SPEC-0300-0010 addendum, ISS-0064, SPEC-0200-0001 §3.1.4/§3.1.4-1):
+  // true while the search <input> is focused. Owned/derived by
+  // features/search/search-state.svelte.ts's `inputFocused` getter.
+  isSearchInputFocused: boolean;
   profile: Profile;
   customOverrides: Record<string, string>;
   onHardcodedShortcut: (action: "exit" | "settings") => boolean;
@@ -86,14 +94,45 @@ export interface DispatchContext {
   onMenuBarKey: (action: string | null, event: KeydownLikeEvent) => boolean;
   onTreeAction: (action: string, event: KeydownLikeEvent) => boolean;
   onListAction: (action: string | null, event: KeydownLikeEvent) => boolean;
+  // R-14-2/R-121: fired for Escape/Enter/ArrowUp/ArrowDown while the search
+  // input is focused.
+  onSearchAction: (action: SearchAction) => void;
+}
+
+// SPEC-0300-0012 R-121: the search bar's own 4 keys, resolved by fixed key
+// identity — this bypasses keymap matching entirely (SPEC-0300-0010 §3.1
+// classification (a), explicitly extended for R-14-2 per the architecture
+// addendum, ISS-0064, human-approved 2026-09-24).
+function matchesSearchInputAction(event: KeydownLikeEvent): SearchAction | null {
+  // IME composition (e.g. Enter to commit a conversion, arrows to pick a
+  // candidate) and modified keys must reach the input untouched.
+  if (event.isComposing === true) return null;
+  if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return null;
+  switch (event.key) {
+    case "Escape":
+      return "cancel";
+    case "Enter":
+      return "confirm";
+    case "ArrowUp":
+      return "history_prev";
+    case "ArrowDown":
+      return "query_clear";
+    default:
+      return null;
+  }
 }
 
 // R-11/R-12: dispatch a keydown event through the fixed priority chain,
 // stopping at the first handler that reports the event as handled.
 //
-// Priority order (R-12):
+// Priority order (R-12, unchanged — R-14-2 is an independent guard next to
+// R-14, not a new numbered row, MUST-41/42):
 //   1. hardcoded shortcuts (Ctrl+Q / Ctrl+,) — independent of keymap/state
 //   2. settings screen open -> suppress all further processing (R-14)
+//   R-14-2. search input focused -> only its own 4 keys are processed
+//      (SPEC-0300-0012 R-120/R-121, SPEC-0200-0001 §3.1.4). Evaluated
+//      immediately after R-14 and before priority 2 below, so R-14's
+//      guarantee (nothing fires while settings is open) is never weakened.
 //   3. exit action resolved via the keymap (in case it's rebound)
 //   4. overlay (modal/dropdown/sort menu/context menu) — traps all keys (R-13)
 //   5. menu bar
@@ -106,6 +145,19 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
   }
 
   if (ctx.isSettingsOpen) {
+    return false;
+  }
+
+  if (ctx.isSearchInputFocused) {
+    const searchAction = matchesSearchInputAction(event);
+    if (searchAction !== null) {
+      ctx.onSearchAction(searchAction);
+      return true;
+    }
+    // Not one of the 4 recognized search keys: stop the dispatch chain here
+    // (mirrors the isSettingsOpen `return false` pattern) without
+    // preventDefault, so the <input> keeps handling it as ordinary text
+    // entry (AC-123).
     return false;
   }
 

@@ -5,6 +5,9 @@ import {
   moveFocusColumn,
   moveFocusPage,
   moveFocusRow,
+  resolveFocusIndexForVisibleSet,
+  toRealIndex,
+  toVisualIndex,
 } from "./navigation";
 
 // Spec: SPEC-0300-0009 (file list / tree view detail) R-56~R-60
@@ -104,5 +107,73 @@ describe("filterFocusableEntries (SPEC-0300-0009 R-56, AC-45)", () => {
     expect(focusable).toEqual(["a", "c", "e"]);
     expect(focusable).not.toContain("b");
     expect(focusable).not.toContain("d");
+  });
+});
+
+// SPEC-0300-0012 (search) / docs/architecture/proposals/SPEC-0200-0001.md
+// §3.1.3 (MUST-37): `focusedIndex` is always stored on the `entries`
+// (real/unfiltered) basis. Movement math (moveFocusRow/moveFocusColumn
+// above) instead operates in "visual index" space (position within the
+// currently visible/filtered array). `toVisualIndex`/`toRealIndex` are the
+// two conversion functions bridging real <-> visual index spaces, matched
+// by path identity (not by array position, since the same path generally
+// sits at different positions in `entries` vs. `visible`).
+//
+// Module under test (not yet implemented): ./navigation.ts (new exports)
+
+describe("toVisualIndex (SPEC-0200-0001 §3.1.3, R-56)", () => {
+  const entries = [{ path: "a" }, { path: "b" }, { path: "c" }, { path: "d" }, { path: "e" }];
+  const visible = [{ path: "a" }, { path: "c" }, { path: "e" }]; // "b"/"d" filtered out
+
+  it("converts a real index whose entry is visible into its position within `visible`", () => {
+    // entries[2] = "c", which is visible[1]
+    expect(toVisualIndex(2, entries, visible)).toBe(1);
+  });
+
+  it("returns -1 when the entry at realIndex is currently filtered out (not present in `visible`)", () => {
+    // entries[1] = "b", which is not part of `visible`
+    expect(toVisualIndex(1, entries, visible)).toBe(-1);
+  });
+
+  it("returns -1 for a realIndex outside the bounds of `entries`", () => {
+    expect(toVisualIndex(99, entries, visible)).toBe(-1);
+  });
+});
+
+describe("toRealIndex (SPEC-0200-0001 §3.1.3, R-56)", () => {
+  const entries = [{ path: "a" }, { path: "b" }, { path: "c" }, { path: "d" }, { path: "e" }];
+  const visible = [{ path: "a" }, { path: "c" }, { path: "e" }];
+
+  it("converts a visual index back into the matching real (entries-basis) index", () => {
+    // visible[1] = "c", which is entries[2]
+    expect(toRealIndex(1, entries, visible)).toBe(2);
+  });
+
+  it("returns -1 for a visualIndex outside the bounds of `visible`", () => {
+    expect(toRealIndex(5, entries, visible)).toBe(-1);
+    expect(toRealIndex(-1, entries, visible)).toBe(-1);
+  });
+
+  it("§3.1.4-2 (MUST-44) primitive case: returns -1 for any visualIndex when `visible` is empty", () => {
+    expect(toRealIndex(0, entries, [])).toBe(-1);
+  });
+});
+
+describe("resolveFocusIndexForVisibleSet (SPEC-0300-0012 R-109-2-1 ONLY — see SHOULD-45: this is NOT the same rule as R-107-1's close-time focus restoration, which moves DOM focus to the listbox container without touching focusedIndex at all)", () => {
+  const entries = [{ path: "a" }, { path: "b" }, { path: "c" }, { path: "d" }, { path: "e" }];
+  const visible = [{ path: "a" }, { path: "c" }, { path: "e" }];
+
+  it("rule 1: keeps the current real index unchanged when its entry is present in `visible`", () => {
+    // entries[2] = "c", which is in `visible`
+    expect(resolveFocusIndexForVisibleSet(entries, visible, 2)).toBe(2);
+  });
+
+  it("rule 2: falls back to the real index of visible[0] when the current entry is filtered out", () => {
+    // entries[1] = "b" is not in `visible`; visible[0] = "a" = entries[0]
+    expect(resolveFocusIndexForVisibleSet(entries, visible, 1)).toBe(0);
+  });
+
+  it("rule 3: returns null (do not move focus into the list) when `visible` is empty", () => {
+    expect(resolveFocusIndexForVisibleSet(entries, [], 2)).toBeNull();
   });
 });

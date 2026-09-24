@@ -8,17 +8,40 @@
 // business logic or state of its own (§4.1 SHOULD-19).
 //
 // Exported as a single module-scope instance built from Svelte 5 runes, the
-// same pattern §5.3 prescribes for shared state owner modules.
+// same pattern §5.3 prescribes for shared state owner modules. Also exports
+// the underlying factory (`createFileListState`) so tests can build isolated
+// instances (SPEC-0300-0012/traceability.md SHOULD-38 follow-up).
+//
+// SPEC-0300-0012 (search) / SPEC-0200-0001 §3.1.2, §3.1.3 (MUST-37), §3.1.4-2
+// (MUST-44): `focusedIndex` continues to be stored on the `entries`
+// (real/unfiltered) basis at all times. The movement/selection wrappers below
+// accept an explicit `visible` array (routes' `filteredEntries`, §3.1.2) and
+// internally convert real <-> visual index spaces via
+// toVisualIndex/toRealIndex (features/file-list/navigation.ts) before
+// touching `focusedIndex`, applying the §3.1.4-2 (MUST-44) 3-step defense so
+// a filtered-out (hidden) entry is never moved into or selected.
 
 import { fsListDir, type FsEntry } from "$lib/shared/ipc/fs";
 import { DEFAULT_SORT_STATE, type SortState } from "./sort";
 import { resetListStateOnDirChange, computeGoParentTarget } from "./dir-load";
-import { selectSingle, applySelectToggle } from "./selection";
-import { moveFocusRow, moveFocusColumn, type RowDirection, type ColumnDirection } from "./navigation";
+import {
+  selectSingle,
+  applySelectToggle,
+  selectAllVisible,
+  invertSelectionVisible,
+} from "./selection";
+import {
+  moveFocusRow,
+  moveFocusColumn,
+  toVisualIndex,
+  toRealIndex,
+  type RowDirection,
+  type ColumnDirection,
+} from "./navigation";
 import { computeListLayout, type ListLayout } from "./list-layout";
 import { INITIAL_UI_STATE } from "./aria";
 
-function createFileListState() {
+export function createFileListState() {
   let currentPath = $state(".");
   let entries = $state<FsEntry[]>([]);
   let selected = $state<Set<string>>(new Set());
@@ -56,28 +79,83 @@ function createFileListState() {
     return entries[focusedIndex];
   }
 
-  function moveRow(direction: RowDirection): void {
-    focusedIndex = moveFocusRow(entries, focusedIndex, direction);
+  // §3.1.4-2 (MUST-44) step 1: an empty `visible` makes every movement/
+  // selection wrapper an immediate no-op.
+  function moveRow(visible: readonly FsEntry[], direction: RowDirection): void {
+    if (visible.length === 0) return;
+    const visualIndex = toVisualIndex(focusedIndex, entries, visible);
+    // §3.1.3: a -1 (currently-hidden focus) falls back to visual index 0 as
+    // a defensive starting point for the movement calculation.
+    const safeVisualIndex = visualIndex === -1 ? 0 : visualIndex;
+    const nextVisual = moveFocusRow(visible, safeVisualIndex, direction);
+    const nextReal = toRealIndex(nextVisual, entries, visible);
+    // §3.1.4-2 (MUST-44) step 3: never write an unresolved (-1) index.
+    if (nextReal === -1) return;
+    focusedIndex = nextReal;
   }
 
-  function moveColumn(direction: ColumnDirection, rowsPerColumn: number): void {
-    focusedIndex = moveFocusColumn(focusedIndex, direction, rowsPerColumn, entries.length);
+  function moveColumn(visible: readonly FsEntry[], direction: ColumnDirection, rowsPerColumn: number): void {
+    if (visible.length === 0) return;
+    const visualIndex = toVisualIndex(focusedIndex, entries, visible);
+    const safeVisualIndex = visualIndex === -1 ? 0 : visualIndex;
+    // SHOULD-47: totalCount is visible.length (visual space), not
+    // entries.length.
+    const nextVisual = moveFocusColumn(safeVisualIndex, direction, rowsPerColumn, visible.length);
+    const nextReal = toRealIndex(nextVisual, entries, visible);
+    if (nextReal === -1) return;
+    focusedIndex = nextReal;
   }
 
-  function selectFocused(): void {
+  // §3.1.4-2 (MUST-44) step 2: a selection-changing operation no-ops when the
+  // currently focused real entry is not part of `visible` (prevents
+  // selecting a hidden entry, R-123).
+  function selectFocused(visible: readonly FsEntry[]): void {
+    if (visible.length === 0) return;
     const entry = focusedEntry();
     if (entry === undefined) return;
+    if (toVisualIndex(focusedIndex, entries, visible) === -1) return;
     const result = selectSingle(entry.path);
     selected = result.selected;
     anchor = result.anchor;
   }
 
-  function toggleFocused(): void {
+  function toggleFocused(visible: readonly FsEntry[]): void {
+    if (visible.length === 0) return;
     const entry = focusedEntry();
     if (entry === undefined) return;
-    const result = applySelectToggle({ selected, focusedIndex, visibleCount: entries.length }, entry.path);
+    const visualIndex = toVisualIndex(focusedIndex, entries, visible);
+    if (visualIndex === -1) return;
+    const result = applySelectToggle(
+      { selected, focusedIndex: visualIndex, visibleCount: visible.length },
+      entry.path,
+    );
     selected = result.selected;
-    focusedIndex = result.focusedIndex;
+    const nextReal = toRealIndex(result.focusedIndex, entries, visible);
+    if (nextReal !== -1) {
+      focusedIndex = nextReal;
+    }
+  }
+
+  // SHOULD-37(a)/SPEC-0300-0009 R-54/R-55/SPEC-0300-0012 R-123: select_all and
+  // invert-selection operate on the visible (filtered) entries only. Neither
+  // touches `focusedIndex`, so no real<->visual conversion is needed.
+  function selectAll(visible: readonly FsEntry[]): void {
+    if (visible.length === 0) return;
+    selected = selectAllVisible(visible.map((e) => e.path));
+  }
+
+  function invertSelection(visible: readonly FsEntry[]): void {
+    if (visible.length === 0) return;
+    selected = invertSelectionVisible(
+      visible.map((e) => e.path),
+      selected,
+    );
+  }
+
+  // §3.1.3/MUST-39: public update function for routes to reflect the result
+  // of resolveFocusIndexForVisibleSet (R-109-2-1) into state.
+  function focusIndex(realIndex: number): void {
+    focusedIndex = realIndex;
   }
 
   // R-61: opening a directory entry navigates into it; opening a file is a
@@ -132,6 +210,9 @@ function createFileListState() {
     moveColumn,
     selectFocused,
     toggleFocused,
+    selectAll,
+    invertSelection,
+    focusIndex,
     openFocused,
     goParent,
     layout,

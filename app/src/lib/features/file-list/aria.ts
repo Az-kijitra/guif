@@ -53,15 +53,22 @@ export function computeTreeFocusReassignment(
 export interface FileListAria {
   role: "listbox";
   "aria-multiselectable": true;
-  "aria-activedescendant": string;
+  "aria-activedescendant"?: string;
 }
 
-// R-24/AC-52: file list root ARIA attributes.
-export function computeFileListAria(input: { focusedPath: string }): FileListAria {
+// R-24/AC-52, SPEC-0300-0012 R-119/AC-120 (SPEC-0200-0001 §3.1.6 SHOULD-39):
+// file list root ARIA attributes. `aria-activedescendant` is omitted
+// entirely (not just left pointing at a stale id) when the focused entry has
+// been filtered out of the currently visible set, so the list never keeps
+// pointing at a hidden row.
+export function computeFileListAria(input: {
+  focusedPath: string;
+  isFocusedPathVisible: boolean;
+}): FileListAria {
   return {
     role: "listbox",
     "aria-multiselectable": true,
-    "aria-activedescendant": input.focusedPath,
+    ...(input.isFocusedPathVisible ? { "aria-activedescendant": input.focusedPath } : {}),
   };
 }
 

@@ -121,12 +121,19 @@ describe("TREE_HANDLED_ACTIONS / isTreeHandledAction (SPEC-0300-0010 R-15, AC-05
 });
 
 describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)", () => {
+  // SHOULD-44 (SPEC-0200-0001 §3.1.4): the only change existing callers of
+  // this helper need is these 2 new default fields
+  // (`isSearchInputFocused`/`onSearchAction`) for SPEC-0300-0012's R-14-2.
+  // `dispatchKeydown`'s return type is unchanged (still plain `boolean`), so
+  // none of the pre-existing `expect(handled).toBe(...)` assertions below
+  // need to change.
   function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
     return {
       isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
+      isSearchInputFocused: false,
       profile: "windows" as const,
       customOverrides: {},
       onHardcodedShortcut: vi.fn().mockReturnValue(false),
@@ -135,6 +142,7 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
       onMenuBarKey: vi.fn().mockReturnValue(false),
       onTreeAction: vi.fn().mockReturnValue(false),
       onListAction: vi.fn().mockReturnValue(false),
+      onSearchAction: vi.fn(),
       ...overrides,
     };
   }
@@ -219,5 +227,137 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
     const handled = dispatchKeydown(key("ArrowDown"), ctx);
     expect(handled).toBe(true);
     expect(ctx.onListAction).toHaveBeenCalledWith("move_down", expect.anything());
+  });
+});
+
+// SPEC-0300-0012 R-120/R-121 + docs/architecture/proposals/SPEC-0200-0001.md
+// §3.1.4 (MUST-38/41/42, ISS-0064, SPEC-0300-0010 追補 R-14-2, 発注者承認
+// 2026-09-24): while the search <input> is focused, R-14-2 is evaluated
+// immediately after R-14 (isSettingsOpen) and before priority 2 (exit
+// action resolution). R-12's numbered priority table (1~6) itself is NOT
+// changed — R-14-2 is an independent guard alongside R-14, not a new row.
+describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-input-focused guard)", () => {
+  function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      isSettingsOpen: false,
+      isOverlayOpen: false,
+      isMenuBarActive: false,
+      isTreeFocused: false,
+      isSearchInputFocused: false,
+      profile: "windows" as const,
+      customOverrides: {},
+      onHardcodedShortcut: vi.fn().mockReturnValue(false),
+      onExitAction: vi.fn().mockReturnValue(false),
+      onOverlayKey: vi.fn().mockReturnValue(false),
+      onMenuBarKey: vi.fn().mockReturnValue(false),
+      onTreeAction: vi.fn().mockReturnValue(false),
+      onListAction: vi.fn().mockReturnValue(false),
+      onSearchAction: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it("when the search input is NOT focused, R-14-2 is a no-op and dispatch proceeds exactly as before", () => {
+    const ctx = makeContext({ onListAction: vi.fn().mockReturnValue(true) });
+    const handled = dispatchKeydown(key("ArrowDown"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+    expect(ctx.onListAction).toHaveBeenCalled();
+  });
+
+  it("R-121: Escape while the search input is focused resolves to onSearchAction('cancel') and stops the chain", () => {
+    const ctx = makeContext({ isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("Escape"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).toHaveBeenCalledWith("cancel");
+    expect(ctx.onListAction).not.toHaveBeenCalled();
+  });
+
+  it("code-review M1: IME composition Enter/arrows pass through to the input (no search action, no preventDefault)", () => {
+    for (const k of ["Enter", "ArrowUp", "ArrowDown", "Escape"]) {
+      const ctx = makeContext({ isSearchInputFocused: true });
+      const handled = dispatchKeydown({ ...key(k), isComposing: true }, ctx);
+      expect(handled).toBe(false);
+      expect(ctx.onSearchAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it("code-review m1: modified Enter/arrow keys are not search actions", () => {
+    for (const mods of [{ shiftKey: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }]) {
+      const ctx = makeContext({ isSearchInputFocused: true });
+      const handled = dispatchKeydown(key("Enter", mods), ctx);
+      expect(handled).toBe(false);
+      expect(ctx.onSearchAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R-121: Enter while the search input is focused resolves to onSearchAction('confirm')", () => {
+    const ctx = makeContext({ isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("Enter"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).toHaveBeenCalledWith("confirm");
+  });
+
+  it("R-121/R-122: ArrowUp while the search input is focused resolves to onSearchAction('history_prev')", () => {
+    const ctx = makeContext({ isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("ArrowUp"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).toHaveBeenCalledWith("history_prev");
+  });
+
+  it("R-121: ArrowDown while the search input is focused resolves to onSearchAction('query_clear') (SHOULD-53: renamed from 'history_clear')", () => {
+    const ctx = makeContext({ isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("ArrowDown"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).toHaveBeenCalledWith("query_clear");
+  });
+
+  it("AC-123: a key outside the 4 recognized search keys stops the chain WITHOUT being treated as handled, so the <input> keeps it as ordinary text entry (e.g. vim 'j' must not move list focus while typing in the search box)", () => {
+    const ctx = makeContext({
+      isSearchInputFocused: true,
+      profile: "vim",
+      onListAction: vi.fn().mockReturnValue(true),
+    });
+    const handled = dispatchKeydown(key("j"), ctx);
+    // handled=false: no preventDefault, so the browser still inserts "j"
+    // into the <input> — dispatch is nonetheless stopped (onListAction must
+    // not fire), matching the isSettingsOpen (R-14) `return false` pattern.
+    expect(handled).toBe(false);
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+    expect(ctx.onListAction).not.toHaveBeenCalled();
+  });
+
+  it("MUST-41: R-14 (isSettingsOpen) is evaluated before R-14-2 and remains authoritative — settings-open still suppresses everything even while the search input is (nominally) focused", () => {
+    const ctx = makeContext({ isSettingsOpen: true, isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("Escape"), ctx);
+    expect(handled).toBe(false);
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+  });
+
+  it("priority 1 (hardcoded Ctrl+Q/Ctrl+,) still fires ahead of R-14-2 while the search input is focused", () => {
+    const ctx = makeContext({
+      isSearchInputFocused: true,
+      onHardcodedShortcut: vi.fn().mockReturnValue(true),
+    });
+    const handled = dispatchKeydown(key("q", { ctrlKey: true }), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+  });
+
+  it("SHOULD-50: priority 2 (exit action resolved via the keymap) is suppressed while the search input is focused, since R-14-2 sits before it in the chain", () => {
+    // A custom keymap rebinding `exit` onto a key that is not one of the 4
+    // recognized search keys (Escape/Enter/ArrowUp/ArrowDown) — R-14-2 must
+    // still swallow it rather than letting the rebound exit action reach
+    // onExitAction (this is exactly the accident scenario R-14-2's design
+    // rationale describes for `input_keymap_custom.exit`).
+    const ctx = makeContext({
+      isSearchInputFocused: true,
+      customOverrides: { exit: "x" },
+      onExitAction: vi.fn().mockReturnValue(true),
+    });
+    const handled = dispatchKeydown(key("x"), ctx);
+    expect(handled).toBe(false);
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
   });
 });
