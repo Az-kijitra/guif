@@ -86,6 +86,8 @@ export interface DispatchContext {
   // true while the search <input> is focused. Owned/derived by
   // features/search/search-state.svelte.ts's `inputFocused` getter.
   isSearchInputFocused: boolean;
+  // true while the search bar is open, regardless of where focus is.
+  isSearchActive?: boolean;
   profile: Profile;
   customOverrides: Record<string, string>;
   onHardcodedShortcut: (action: "exit" | "settings") => boolean;
@@ -159,6 +161,16 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
     // preventDefault, so the <input> keeps handling it as ordinary text
     // entry (AC-123).
     return false;
+  }
+
+  // Search bar still open (e.g. after Enter moved focus to the list): Escape
+  // leaves the search (user-confirmed 2026-09-24, revises R-109-2-4).
+  if (
+    ctx.isSearchActive === true &&
+    matchesSearchInputAction(event) === "cancel"
+  ) {
+    ctx.onSearchAction("cancel");
+    return true;
   }
 
   const action = resolveActionForKey(event, ctx.profile, ctx.customOverrides);

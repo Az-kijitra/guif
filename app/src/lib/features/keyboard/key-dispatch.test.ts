@@ -273,6 +273,20 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
     expect(ctx.onListAction).not.toHaveBeenCalled();
   });
 
+  it("Escape while the search bar is open but focus is elsewhere (after Enter) cancels the search", () => {
+    const ctx = makeContext({ isSearchActive: true, isSearchInputFocused: false });
+    const handled = dispatchKeydown(key("Escape"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onSearchAction).toHaveBeenCalledWith("cancel");
+  });
+
+  it("other keys are unaffected while the search bar is open but not input-focused", () => {
+    const ctx = makeContext({ isSearchActive: true, onListAction: vi.fn().mockReturnValue(true) });
+    expect(dispatchKeydown(key("ArrowDown"), ctx)).toBe(true);
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+    expect(ctx.onListAction).toHaveBeenCalled();
+  });
+
   it("code-review M1: IME composition Enter/arrows pass through to the input (no search action, no preventDefault)", () => {
     for (const k of ["Enter", "ArrowUp", "ArrowDown", "Escape"]) {
       const ctx = makeContext({ isSearchInputFocused: true });

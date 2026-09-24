@@ -130,6 +130,7 @@
         isMenuBarActive: false,
         isTreeFocused: false,
         isSearchInputFocused: searchState.inputFocused,
+        isSearchActive: searchState.active,
         profile: "windows",
         customOverrides: {},
         onHardcodedShortcut: () => false,
