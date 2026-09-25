@@ -1,6 +1,141 @@
 import { describe, expect, it } from "vitest";
 import { createSearchState } from "./search-state.svelte";
 
+// --- Phase 4 (SPEC-0300-0013) extension --------------------------------
+// Spec: SPEC-0300-0013 §11 (R-247~R-250, R-248-1~R-248-4), SPEC-0300-0012
+//   R-121/R-122 (呼び出しUIは直近1件のまま、変更なし)
+// Architecture: docs/architecture/proposals/SPEC-0200-0001.md §3.2.5
+//   (search-state.svelte.ts's `history: string|null` -> `historyList:
+//   string[]` extension; `history` getter kept as `historyList[0] ?? null`
+//   for backward compatibility, MUST-43-adjacent regression-avoidance)
+//
+// This is a breaking *internal* change (the module now stores a bounded MRU
+// list instead of a single value) but is backward-compatible at the public
+// `history`/`historyPrev()` surface — every pre-existing test above this
+// comment block continues to describe correct, unchanged behavior under the
+// new implementation (the `history` getter is derived from `historyList[0]`)
+// and is intentionally left unmodified. The new tests below exercise the
+// newly-added `historyList`/`hydrateHistory` surface directly.
+//
+// $lib/shared/state/status-message.svelte is not touched by this module;
+// no additional mocking is required for these tests (confirm() calling
+// $lib/shared/state/navigation-persistence.svelte's requestSave() is a
+// real-singleton no-op here, exactly as in
+// features/navigation-history/navigation-history-state.test.ts, since
+// hydrateAll() is never invoked in this file so `hydrated` stays false).
+
+describe("historyList (R-247, R-248, R-248-1, R-248-2, AC-245, AC-245-1)", () => {
+  it("starts empty", () => {
+    const s = createSearchState();
+    expect(s.historyList).toEqual([]);
+  });
+
+  it("confirm() adds the trimmed query to the front of historyList", () => {
+    const s = createSearchState();
+    s.open();
+    s.setQuery("report");
+    s.confirm();
+    expect(s.historyList).toEqual(["report"]);
+  });
+
+  it("R-248-2: re-confirming an already-present query moves it to the front instead of duplicating it", () => {
+    const s = createSearchState();
+    s.open();
+    s.setQuery("first");
+    s.confirm();
+    s.setQuery("second");
+    s.confirm();
+    s.setQuery("first");
+    s.confirm();
+    expect(s.historyList).toEqual(["first", "second"]);
+  });
+
+  it("AC-245: confirming 21 distinct queries keeps only the 20 most recent, dropping the first-confirmed one", () => {
+    const s = createSearchState();
+    s.open();
+    for (let i = 0; i < 21; i++) {
+      s.setQuery(`query-${i}`);
+      s.confirm();
+    }
+    expect(s.historyList).toHaveLength(20);
+    expect(s.historyList).not.toContain("query-0");
+    expect(s.historyList[0]).toBe("query-20"); // most recently confirmed is first
+  });
+
+  it("AC-245-1: re-confirming an existing query does not increase historyList's length", () => {
+    const s = createSearchState();
+    s.open();
+    s.setQuery("repeat");
+    s.confirm();
+    s.setQuery("other");
+    s.confirm();
+    s.setQuery("repeat");
+    s.confirm();
+    expect(s.historyList).toHaveLength(2);
+  });
+
+  it("the public `history` getter stays in sync with historyList[0] (backward compatibility)", () => {
+    const s = createSearchState();
+    s.open();
+    s.setQuery("a");
+    s.confirm();
+    s.setQuery("b");
+    s.confirm();
+    expect(s.history).toBe(s.historyList[0]);
+    expect(s.history).toBe("b");
+  });
+
+  it("AC-245-2: historyPrev (ArrowUp) still loads only the single most-recent entry, even when historyList holds many", () => {
+    const s = createSearchState();
+    s.open();
+    for (let i = 0; i < 5; i++) {
+      s.setQuery(`q${i}`);
+      s.confirm();
+    }
+    s.setQuery("typing something else");
+    s.historyPrev();
+    expect(s.query).toBe("q4");
+  });
+});
+
+describe("hydrateHistory (R-247, R-248-3, MUST-49(a) — order-preserving dedupe+limit, NOT applyMru)", () => {
+  it("adopts the loaded list as historyList", () => {
+    const s = createSearchState();
+    s.hydrateHistory(["newest", "older"]);
+    expect(s.historyList).toEqual(["newest", "older"]);
+  });
+
+  it("deduplicates (keeping the first/newest occurrence) while preserving relative order", () => {
+    const s = createSearchState();
+    s.hydrateHistory(["a", "b", "a", "c"]);
+    expect(s.historyList).toEqual(["a", "b", "c"]);
+  });
+
+  it("R-248-3: truncates an over-limit loaded list to 20, keeping the head (newest-first) and dropping the tail", () => {
+    const s = createSearchState();
+    const loaded = Array.from({ length: 21 }, (_, i) => `q${i}`); // index 0 = newest
+    s.hydrateHistory(loaded);
+    expect(s.historyList).toHaveLength(20);
+    expect(s.historyList).toEqual(loaded.slice(0, 20));
+  });
+
+  it("an empty loaded list yields an empty historyList and a null `history` getter", () => {
+    const s = createSearchState();
+    s.hydrateHistory([]);
+    expect(s.historyList).toEqual([]);
+    expect(s.history).toBeNull();
+  });
+
+  it("hydrateHistory does not itself count as a confirm (does not, by itself, trigger any query mutation)", () => {
+    const s = createSearchState();
+    s.open();
+    s.setQuery("typed");
+    s.hydrateHistory(["restored"]);
+    expect(s.query).toBe("typed"); // untouched
+    expect(s.history).toBe("restored");
+  });
+});
+
 // Spec: SPEC-0300-0012 (search: partial match + regex, detail) §3, §6
 // Architecture: docs/architecture/proposals/SPEC-0200-0001.md §3.1.2, §3.1.4,
 //   §3.1.4-1 (MUST-43)

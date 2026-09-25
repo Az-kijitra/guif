@@ -9,15 +9,20 @@
 // Deliberately does NOT own `filteredEntries`/`error` — those are derived by
 // routes/+page.svelte from features/search/matching.ts (§3.1.2).
 
+import { applyMru, dedupeAndLimit } from "$lib/shared/mru-list";
+import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
+
+const SEARCH_HISTORY_LIMIT = 20; // R-248
+
 export type SearchAction = "cancel" | "confirm" | "history_prev" | "query_clear";
 
 export function createSearchState() {
   let active = $state(false);
   let query = $state("");
   let regexMode = $state(false);
-  // R-121/R-122: only the single most-recent confirmed query is kept (no
-  // history stack).
-  let history = $state<string | null>(null);
+  // R-247/R-248: bounded MRU list (max 20, plain-string identity, no path
+  // normalization: R-248-2). The UI (R-122) still recalls only [0].
+  let historyList = $state<string[]>([]);
   // Raw onfocus/onblur-tracked value (non-public — see `inputFocused` below).
   let rawFocused = $state(false);
 
@@ -54,15 +59,23 @@ export function createSearchState() {
       active = false;
       return;
     }
-    history = trimmed;
+    historyList = applyMru(historyList, trimmed, SEARCH_HISTORY_LIMIT);
+    navigationPersistence.requestSave();
+  }
+
+  // Startup hydrate: order-preserving dedupe + limit (MUST-49). Does not
+  // request a save.
+  function hydrateHistory(loaded: readonly string[]): void {
+    historyList = dedupeAndLimit(loaded, SEARCH_HISTORY_LIMIT);
   }
 
   // R-121/R-122 (ArrowUp): loads the single most-recent confirmed query back
   // into the input. No-op (does not throw, leaves the current text
   // untouched) when there is no prior confirmed query.
   function historyPrev(): void {
-    if (history === null) return;
-    query = history;
+    const latest = historyList[0];
+    if (latest === undefined) return;
+    query = latest;
   }
 
   // R-121 (ArrowDown): resets the input text only — does not close the bar.
@@ -87,8 +100,11 @@ export function createSearchState() {
     get regexMode() {
       return regexMode;
     },
-    get history() {
-      return history;
+    get history(): string | null {
+      return historyList[0] ?? null;
+    },
+    get historyList() {
+      return historyList;
     },
     // §3.1.4-1 (MUST-43): derived as `active && rawFocused`, NOT the raw
     // onfocus/onblur-tracked value alone. The search bar closing via any of
@@ -107,9 +123,15 @@ export function createSearchState() {
     cancel,
     confirm,
     historyPrev,
+    hydrateHistory,
     queryClear,
     setInputFocused,
   };
 }
 
 export const searchState = createSearchState();
+
+navigationPersistence.register({
+  getSnapshot: () => ({ searchHistory: $state.snapshot(searchState.historyList) }),
+  hydrate: (data) => searchState.hydrateHistory(data.searchHistory),
+});

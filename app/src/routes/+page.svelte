@@ -30,6 +30,19 @@
   import { searchState } from "$lib/features/search/search-state.svelte";
   import { computeFilteredEntries } from "$lib/features/search/matching";
   import SearchBar from "$lib/features/search/SearchBar.svelte";
+  import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
+  import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
+  import NavigationHistoryList from "$lib/features/navigation-history/NavigationHistoryList.svelte";
+  import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
+  import { statusMessage } from "$lib/shared/state/status-message.svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { homeDir } from "@tauri-apps/api/path";
+  import {
+    createAfterUserNavigation,
+    createCloseRequestHandler,
+    createOverlayController,
+    loadInitialDirectory,
+  } from "./navigation-wiring";
 
   let containerEl: HTMLDivElement | undefined = $state();
   let containerWidth = $state(0);
@@ -37,6 +50,8 @@
   // §3.1.5 (MUST-39): a DOM element reference exposed by <SearchBar>, used
   // only to sequence `.focus()` calls — not a domain state value (SHOULD-54).
   let searchInputEl: HTMLInputElement | undefined = $state();
+  // §3.2.9-1 (MUST-45): the history list listbox element, same purpose.
+  let historyListEl: HTMLDivElement | undefined = $state();
 
   let layout = $derived(fileListState.layout(containerWidth || 800, containerHeight || 400));
 
@@ -54,6 +69,42 @@
   let filteredEntries = $derived(filterResult.filteredEntries);
 
   let keydownHandler: ((event: Event) => void) | undefined;
+  let unlistenClose: (() => void) | undefined;
+  let destroyed = false;
+
+  // §3.2.4: the single call-through point for every R-208 user-initiated move
+  // (openFocused / goParent / history+jump confirm / initial path). Reload
+  // paths (F5, toggle_hidden, file watching; R-209) must NOT use this.
+  const afterUserNavigation = createAfterUserNavigation((path) =>
+    navigationHistoryState.recordVisit(path),
+  );
+
+  // §3.2.9-1: mutual exclusion of search bar / history list plus all DOM
+  // focus sequencing.
+  const overlay = createOverlayController({
+    search: searchState,
+    history: navigationHistoryState,
+    focus: {
+      container: () => containerEl?.focus(),
+      historyList: () => historyListEl?.focus(),
+      searchInput: () => searchInputEl?.focus(),
+    },
+    nextTick: tick,
+    navigate: (path) => void afterUserNavigation(fileListState.loadDirectory(path)),
+  });
+  const { closeOverlayList, activateSearch, openHistoryList } = overlay;
+
+  // §3.2.6 (MUST-52): both exit routes (hardcoded Ctrl+Q and a keymap-bound
+  // "exit") converge here; onCloseRequested performs the flush.
+  function requestAppExit(): void {
+    try {
+      getCurrentWindow()
+        .close()
+        .catch(() => {});
+    } catch {
+      // Not running inside Tauri (plain browser dev): nothing to close.
+    }
+  }
 
   function focusedPath(): string {
     return fileListState.entries[fileListState.focusedIndex]?.path ?? "";
@@ -111,7 +162,14 @@
   }
 
   onMount(() => {
-    void fileListState.loadDirectory(".");
+    void bootstrap();
+  });
+
+  // §3.2.6/§3.2.7: single async IIFE. Only hydrateAll() is awaited before the
+  // key listener is attached; the initial directory load is fire-and-forget.
+  async function bootstrap(): Promise<void> {
+    await navigationPersistence.hydrateAll();
+    if (destroyed) return;
 
     keydownHandler = (event: Event) => {
       const ke = event as KeyboardEvent;
@@ -126,16 +184,32 @@
 
       const ctx: DispatchContext = {
         isSettingsOpen: false,
-        isOverlayOpen: false,
+        isOverlayOpen: navigationHistoryState.isOpen,
         isMenuBarActive: false,
         isTreeFocused: false,
         isSearchInputFocused: searchState.inputFocused,
         isSearchActive: searchState.active,
         profile: "windows",
         customOverrides: {},
-        onHardcodedShortcut: () => false,
-        onExitAction: () => false,
-        onOverlayKey: () => false,
+        onHardcodedShortcut: (action) => {
+          if (action === "exit") {
+            requestAppExit();
+            return true;
+          }
+          return false;
+        },
+        onExitAction: (action) => {
+          if (action === "exit") {
+            requestAppExit();
+            return true;
+          }
+          return false;
+        },
+        // §3.2.8: the history/jump list rides on the existing overlay slot.
+        onOverlayKey: (action, overlayEvent) => {
+          if (!navigationHistoryState.isOpen) return false;
+          return overlay.handleIntent(resolveListKeyIntent(overlayEvent, action));
+        },
         onMenuBarKey: () => false,
         onTreeAction: () => false,
         onSearchAction: handleSearchAction,
@@ -155,10 +229,10 @@
               fileListState.moveColumn(filteredEntries, "right", Math.max(layout.rows, 1));
               return true;
             case "open":
-              void fileListState.openFocused();
+              void afterUserNavigation(fileListState.openFocused());
               return true;
             case "go_parent":
-              void fileListState.goParent();
+              void afterUserNavigation(fileListState.goParent());
               return true;
             case "select_toggle":
               fileListState.toggleFocused(filteredEntries);
@@ -172,8 +246,19 @@
               // R-105/R-105-1/R-105-2: activate (or re-affirm) the search
               // bar and move DOM focus into its <input> once it has
               // rendered.
-              searchState.open();
-              void tick().then(() => searchInputEl?.focus());
+              activateSearch();
+              return true;
+            // R-222/R-223: no entries.length guards here on purpose.
+            case "history":
+              openHistoryList("history");
+              return true;
+            case "history_jump_list":
+              openHistoryList("jump");
+              return true;
+            case "jump_add":
+              // R-212-1: nothing to register while the current directory is
+              // undetermined.
+              if (fileListState.currentPath) navigationHistoryState.addJump(fileListState.currentPath);
               return true;
             default:
               return false;
@@ -188,9 +273,29 @@
     };
 
     attachGlobalKeydownListener(window, keydownHandler);
-  });
+
+    // R-208 #6 / §3.2.7: fire-and-forget (not awaited).
+    void loadInitialDirectory({
+      lastVisited: navigationHistoryState.visitHistory[0],
+      load: (path) => afterUserNavigation(fileListState.loadDirectory(path)),
+      homeDir,
+    });
+
+    // R-244: flush pending navigation data before the window closes.
+    try {
+      const unlisten = await getCurrentWindow().onCloseRequested(
+        createCloseRequestHandler({ flush: () => navigationPersistence.flush() }),
+      );
+      if (destroyed) unlisten();
+      else unlistenClose = unlisten;
+    } catch {
+      // Not running inside Tauri (plain browser dev).
+    }
+  }
 
   onDestroy(() => {
+    destroyed = true;
+    unlistenClose?.();
     if (keydownHandler !== undefined) {
       window.removeEventListener("keydown", keydownHandler, { capture: true });
     }
@@ -200,11 +305,12 @@
 <main>
   <h1>ReflexFiles Successor — Phase 1</h1>
 
-  <!-- R-104: positioned between the menu bar and the path bar. Phase 1's
-       minimal vertical slice has not yet built a dedicated menu bar
-       component (later phase), so the search bar is placed directly below
-       the heading and above the path display, which stands in for that
-       boundary in this slice. -->
+  <p class="current-path">Current directory: {fileListState.currentPath}</p>
+
+  <!-- R-104 (2nd ed.) / R-216: the search bar and the history/jump list share
+       one overlay region directly BELOW the path bar (the current-path line
+       stands in for the path bar in this slice). They are mutually exclusive
+       (§3.2.9-1). -->
   {#if searchState.active}
     <SearchBar
       bind:inputEl={searchInputEl}
@@ -219,8 +325,27 @@
       onInputBlur={() => searchState.setInputFocused(false)}
     />
   {/if}
-
-  <p class="current-path">Current directory: {fileListState.currentPath}</p>
+  {#if navigationHistoryState.isOpen}
+    <NavigationHistoryList
+      bind:listEl={historyListEl}
+      items={navigationHistoryState.mode === "history"
+        ? navigationHistoryState.visitHistory
+        : navigationHistoryState.jumpList}
+      selectedIndex={navigationHistoryState.selectedIndex}
+      label={navigationHistoryState.mode === "history" ? "Visit history" : "Jump list"}
+      onRowClick={(index) => {
+        navigationHistoryState.selectIndex(index);
+        overlay.handleIntent("confirm");
+      }}
+      onRemove={(index) => {
+        navigationHistoryState.removeIndex(index);
+        if (!navigationHistoryState.isOpen) containerEl?.focus();
+      }}
+    />
+  {/if}
+  {#if statusMessage.text}
+    <p role="status" class="status-message">{statusMessage.text}</p>
+  {/if}
 
   {#if fileListState.loading}
     <p>Loading…</p>
@@ -269,6 +394,10 @@
   }
   .current-path {
     font-family: monospace;
+  }
+  .status-message {
+    color: #555;
+    margin: 0.25rem 0;
   }
   .error {
     color: #b00020;

@@ -35,7 +35,7 @@ export const ACTION_IDS = [
   "sort_menu",
   "history_jump_list",
   "jump_add",
-  "jump_add_url",
+  "new_folder",
   "history",
   "toggle_size",
   "toggle_time",
@@ -60,6 +60,7 @@ export const EXCLUDED_ACTION_IDS = [
   "open_terminal_wsl",
   "open_vscode",
   "open_git_client",
+  "jump_add_url", // SPEC-0300-0013 R-256 / SPEC-0300-0010 5th edition 4.4
 ] as const;
 
 // §4.2: windows profile defaults (all 34 actions).
@@ -92,7 +93,7 @@ export const WINDOWS_DEFAULTS: Record<string, string> = {
   sort_menu: "S",
   history_jump_list: "Ctrl+J",
   jump_add: "Ctrl+Shift+J",
-  jump_add_url: "Ctrl+Shift+U",
+  new_folder: "Ctrl+Shift+N",
   history: "Ctrl+Y",
   toggle_size: "Ctrl+Shift+S",
   toggle_time: "Ctrl+Shift+T",
@@ -130,7 +131,7 @@ export const VIM_DEFAULTS: Record<string, string> = {
   sort_menu: "S",
   history_jump_list: "Ctrl+J",
   jump_add: "Ctrl+Shift+J",
-  jump_add_url: "Ctrl+Shift+U",
+  new_folder: "Ctrl+Shift+N",
   history: "Ctrl+Y",
   toggle_size: "Ctrl+Shift+S",
   toggle_time: "Ctrl+Shift+T",
@@ -156,7 +157,7 @@ export const SAME_ACROSS_PROFILES_ACTION_IDS = [
   "sort_menu",
   "history_jump_list",
   "jump_add",
-  "jump_add_url",
+  "new_folder",
   "history",
   "toggle_size",
   "toggle_time",

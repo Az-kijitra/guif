@@ -6,6 +6,15 @@
 | 2026-09-22 | 未採番(SPEC-0300-0010) | PASS(フロント・バック双方) | `docs/architecture/traceability.md` L43 | unit-test-writer → code-generator → code-reviewer → 発注者(rustup導入後、`cargo test --lib`実行) |
 | 2026-09-23 | 未採番(SPEC-0300-0011) | PASS(フロント・バック双方) | 以下「## 2026-09-23 MVP Phase 2」セクション参照 | unit-test-writer → code-generator → code-reviewer(4回) → オーケストレーター(blocker修正・回帰テスト追加) → 最終判定「PR作成可」 |
 | 2026-09-24 | 未採番(SPEC-0300-0012) | PASS(フロントのみ。Rust変更なし) | 以下「## 2026-09-24 MVP Phase 3」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(IME/修飾キー/空選択の修正・回帰テスト追加) → 判定「PR作成可」 |
+| 2026-09-26 | 未採番(SPEC-0300-0013) | PASS(フロント・バック双方) | 以下「## 2026-09-26 MVP Phase 4」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(flush並行呼び出しの修正・回帰テスト、ヘッドレスブラウザでの動作確認) → 判定「PR作成可」 |
+
+## 2026-09-26 MVP Phase 4(SPEC-0300-0013 ジャンプリスト・訪問履歴・検索履歴永続化) テスト実行結果
+
+- `cd app && npx vitest run`: 30ファイル/503件全成功。`cargo test --lib`: 101件全成功(Phase 2の75件+Phase 4)。`npx tsc --noEmit`エラーなし、`npx vite build`成功。
+- レビューで検出・修正: `flush()`が並行呼び出し時(デバウンス保存中にCtrl+Q)に後続の保存完了を待たず最新の変更を失う問題(MUST-55の穴)を、「in-flightも未保存もなくなるまで継続」に修正し回帰テストを追加。`requestAppExit`の`close()`のreject未処理も修正。
+- 動作確認(Tauri IPCをモックしたヘッドレスEdge): 起動時の履歴読込・初期パス記録・保存、Ctrl+Shift+Jでジャンプ登録、Ctrl+J/Ctrl+Yで一覧表示(フォーカスが一覧へ)、Escapeで閉じて一覧へフォーカス復帰、履歴選択での移動と履歴先頭化・保存を確認。
+- 残課題(非blocker): ISS-0076/0077/0080/0081/0082/0085/0086残課題、code-reviewer minor(初期パス失敗時のメッセージ、`hydrate`例外時のリスナー未登録、同期コマンドのメインスレッド実行 等)、SPEC-0300-0013 R-252-2の正式訂正。
+- 未実施: 実Tauriでの`onCloseRequested`による終了時フラッシュ(×ボタン・Ctrl+Q)と実際の`navigation.toml`書込の目視確認。
 
 ## 2026-09-24 MVP Phase 3(SPEC-0300-0012 検索) テスト実行結果
 

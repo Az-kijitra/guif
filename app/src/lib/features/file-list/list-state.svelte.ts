@@ -52,7 +52,13 @@ export function createFileListState() {
   let loading = $state(false);
   let error = $state<string | null>(null);
 
-  async function loadDirectory(path: string): Promise<void> {
+  // SHOULD-62/68 (SPEC-0200-0001 §3.2.4): returns the loaded path on success,
+  // or null when nothing was navigated (failure, or a stale response that a
+  // newer loadDirectory call outran). Stale responses never touch state.
+  let loadSequence = 0;
+
+  async function loadDirectory(path: string): Promise<string | null> {
+    const mySequence = ++loadSequence;
     loading = true;
     error = null;
     try {
@@ -62,16 +68,21 @@ export function createFileListState() {
         sortKey: sort.key,
         sortOrder: sort.order,
       });
+      if (mySequence !== loadSequence) return null;
       entries = result;
       currentPath = path;
       const reset = resetListStateOnDirChange();
       selected = reset.selected;
       focusedIndex = reset.focusedIndex;
       anchor = reset.anchor;
+      return path;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      if (mySequence === loadSequence) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+      return null;
     } finally {
-      loading = false;
+      if (mySequence === loadSequence) loading = false;
     }
   }
 
@@ -160,19 +171,20 @@ export function createFileListState() {
 
   // R-61: opening a directory entry navigates into it; opening a file is a
   // no-op in Phase 1 (viewer integration is a later phase, SPEC-0300-0008).
-  async function openFocused(): Promise<void> {
+  async function openFocused(): Promise<string | null> {
     const entry = focusedEntry();
-    if (entry === undefined || entry.entryType !== "dir") return;
-    await loadDirectory(entry.path);
+    if (entry === undefined || entry.entryType !== "dir") return null;
+    return loadDirectory(entry.path);
   }
 
   // R-63: go_parent works even when the current listing is empty, and is a
   // no-op once already at a filesystem root.
-  async function goParent(): Promise<void> {
+  async function goParent(): Promise<string | null> {
     const target = computeGoParentTarget({ currentPath, visibleCount: entries.length });
     if (target.shouldNavigate && target.path !== undefined) {
-      await loadDirectory(target.path);
+      return loadDirectory(target.path);
     }
+    return null;
   }
 
   function layout(containerWidth: number, containerHeight: number): ListLayout {

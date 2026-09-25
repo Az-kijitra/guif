@@ -31,6 +31,8 @@ pub fn run() {
         // R-42/R-43 (ISS-0052): per-operation-id cancellation flags for
         // in-flight copy/move batches (fs_ops::commands::CancelRegistry).
         .manage(fs_ops::commands::CancelRegistry::default())
+        // MUST-48(c): serializes navigation.toml load/save.
+        .manage(config::commands::NavigationIoLock::default())
         .invoke_handler(tauri::generate_handler![
             fs::commands::fs_list_dir,
             fs_ops::commands::fs_ops_copy,
@@ -40,6 +42,8 @@ pub fn run() {
             fs_ops::commands::fs_ops_delete_permanently,
             fs_ops::commands::fs_ops_rename,
             fs_ops::commands::fs_ops_create,
+            config::commands::config_load_navigation,
+            config::commands::config_save_navigation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

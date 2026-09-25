@@ -4,7 +4,11 @@ fn main() {
     // ACL permissions, referenced by capabilities/default.json.
     tauri_build::try_build(
         tauri_build::Attributes::new()
-            .app_manifest(tauri_build::AppManifest::new().commands(&["fs_list_dir"])),
+            .app_manifest(tauri_build::AppManifest::new().commands(&[
+                "fs_list_dir",
+                "config_load_navigation",
+                "config_save_navigation",
+            ])),
     )
     .expect("failed to run tauri-build");
 }
