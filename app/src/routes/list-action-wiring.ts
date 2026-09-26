@@ -25,9 +25,12 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   addJump: (path: string) => void;
   currentPath: () => string;
   fileOps: { handleAction(action: string, event: { shiftKey: boolean }): boolean };
+  archive: { handleAction(action: string): boolean };
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
+// SPEC-0300-0014 R-305: ZIP create / extract. Not navigation either (R-397).
+const ZIP_ACTIONS = new Set(["zip_create", "zip_extract"]);
 
 export function createListActionHandler<E extends EntryLike>(deps: ListActionDeps<E>) {
   return function onListAction(action: string | null, event: { shiftKey: boolean }): boolean {
@@ -35,6 +38,7 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
     // SPEC-0300-0011 R-14: file operations are not navigation (R-208/R-209),
     // so afterUserNavigation is never involved.
     if (FILE_OP_ACTIONS.has(action)) return deps.fileOps.handleAction(action, event);
+    if (ZIP_ACTIONS.has(action)) return deps.archive.handleAction(action);
 
     switch (action) {
       case "move_up":
@@ -85,10 +89,14 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
   };
 }
 
+interface TypedEntryLike extends EntryLike {
+  entryType: "file" | "dir";
+}
+
 export interface FileOpsContextDeps {
   currentPath: () => string;
-  entries: () => readonly EntryLike[];
-  filteredEntries: () => readonly EntryLike[];
+  entries: () => readonly TypedEntryLike[];
+  filteredEntries: () => readonly TypedEntryLike[];
   selected: () => ReadonlySet<string>;
   focusedPath: () => string | null;
 }
@@ -96,11 +104,13 @@ export interface FileOpsContextDeps {
 // MUST-61 / SPEC-0300-0011 R-10-1: operation targets are limited to what is
 // displayed. The focused path is reported only if it is displayed; the
 // selection is intersected with the displayed entries. Re-evaluated on every
-// call (all inputs are getters).
+// call (all inputs are getters). MUST-67 (SPEC-0200-0001 §3.4.13-3): each
+// entry carries its `entryType` (file-ops ignores it; the archive controller
+// needs it to reject a DIRECTORY named x.zip).
 export function createFileOpsContext(deps: FileOpsContextDeps) {
   return function context(): {
     currentPath: string;
-    entries: { name: string; path: string }[];
+    entries: { name: string; path: string; entryType: "file" | "dir" }[];
     selected: string[];
     focusedPath: string | null;
   } {
@@ -109,7 +119,7 @@ export function createFileOpsContext(deps: FileOpsContextDeps) {
     const focused = deps.focusedPath();
     return {
       currentPath: deps.currentPath(),
-      entries: shown.map((e) => ({ name: e.name, path: e.path })),
+      entries: shown.map((e) => ({ name: e.name, path: e.path, entryType: e.entryType })),
       selected: [...deps.selected()].filter((p) => shownPaths.has(p)),
       focusedPath: focused !== null && focused !== "" && shownPaths.has(focused) ? focused : null,
     };

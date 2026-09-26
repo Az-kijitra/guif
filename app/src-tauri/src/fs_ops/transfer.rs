@@ -44,7 +44,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::identity::{is_strictly_within, same_entity};
+use crate::shared::identity::{is_strictly_within, same_entity};
 use super::preflight::{self, TransferPreflightError};
 
 /// R-22: a single failed item within a batch result.

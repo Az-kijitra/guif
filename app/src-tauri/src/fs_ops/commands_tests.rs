@@ -8,6 +8,8 @@
 
 use super::*;
 use crate::fs_ops::test_support::*;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 fn is_cancelled(flag: &Arc<AtomicBool>) -> bool {
     flag.load(Ordering::Relaxed)

@@ -16,6 +16,11 @@
     "allow-fs-ops-rename",
     "allow-fs-ops-create",
     "allow-fs-ops-detect-conflicts",
+    "allow-archive-check-create",
+    "allow-archive-create",
+    "allow-archive-detect-conflicts",
+    "allow-archive-extract",
+    "allow-archive-cancel",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

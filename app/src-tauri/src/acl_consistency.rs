@@ -41,6 +41,12 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "fs_ops_rename",
     "fs_ops_create",
     "fs_ops_detect_conflicts", // new in Phase 2 wiring (SPEC-0200-0001 §3.3.7)
+    // Phase 5 (SPEC-0300-0014 R-371 / R-386 / R-387 / R-388; SPEC-0200-0001 §3.4.2):
+    "archive_check_create",
+    "archive_create",
+    "archive_detect_conflicts",
+    "archive_extract",
+    "archive_cancel",
 ];
 
 /// Removes `// ...` line comments (good enough for the three files here).
@@ -202,6 +208,31 @@ fn must64_every_tauri_command_defined_in_fs_ops_commands_is_registered() {
         }
     }
     assert!(!defined.is_empty(), "no #[tauri::command] found in fs_ops/commands.rs (parser broken?)");
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+// Phase 5: the same "defined but never registered" guard for `archive/commands.rs`
+// (`archive_*` commands; SPEC-0200-0001 §3.4.2 last bullet).
+#[test]
+fn must64_every_tauri_command_defined_in_archive_commands_is_registered() {
+    let source = include_str!("archive/commands.rs");
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let mut parts = strip_line_comments(production_part).split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String =
+                after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("archive_") {
+                defined.insert(name);
+            }
+        }
+    }
+    assert_eq!(defined.len(), 5, "archive/commands.rs must define the five archive_* commands, found {defined:?}");
     let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
     assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
 }

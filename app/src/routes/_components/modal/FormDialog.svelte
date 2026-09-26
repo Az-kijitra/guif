@@ -40,6 +40,9 @@
 >
   <h2 id="modal-title">{spec.title}</h2>
   <div class="body">
+    {#each spec.lines ?? [] as line, i (i)}
+      <p class="line">{line}</p>
+    {/each}
     {#each spec.fields as field (field.id)}
       <label class="field">
         <span>{field.label}</span>
@@ -87,6 +90,11 @@
   h2 {
     margin: 0 0 0.5rem;
     font-size: 1.05rem;
+  }
+  .line {
+    margin: 0.2rem 0;
+    font-family: monospace;
+    overflow-wrap: anywhere;
   }
   .field {
     display: flex;

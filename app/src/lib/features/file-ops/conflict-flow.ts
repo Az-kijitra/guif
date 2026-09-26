@@ -4,9 +4,18 @@
 // for the actual per-item overwrite/skip execution and the non-UI-path
 // `conflict` rejection (AC-29/AC-29-1).
 
-// R-31/R-31-1: exactly these three choices, in this order — no "keep both".
-export const CONFLICT_DIALOG_CHOICES = ["overwrite", "skip", "cancel"] as const;
-export type ConflictChoice = (typeof CONFLICT_DIALOG_CHOICES)[number];
+import type { ConflictChoice, ConflictDecision, ConflictSessionResult } from "$lib/shared/conflict-session";
+
+// SPEC-0200-0001 §3.4.1: the async session, the choice constant and their
+// types live in shared/ so that features/archive uses the SAME implementation
+// (SPEC-0300-0014 R-377).
+export { CONFLICT_DIALOG_CHOICES, runConflictSessionAsync } from "$lib/shared/conflict-session";
+export type {
+  AsyncConflictDecider,
+  ConflictChoice,
+  ConflictDecision,
+  ConflictSessionResult,
+} from "$lib/shared/conflict-session";
 
 export interface ConflictDialogState {
   name: string;
@@ -24,24 +33,16 @@ export function createConflictDialogState(name: string): ConflictDialogState {
   };
 }
 
-export interface ConflictDecision {
-  choice: ConflictChoice;
-  applyToAll: boolean;
-}
-
 export type ConflictDecider = (item: string) => ConflictDecision;
-
-export interface ConflictSessionResult {
-  canceled: boolean;
-  resolutions: Record<string, "overwrite" | "skip">;
-}
 
 // R-33/R-34/R-34-2: run the conflict-dialog sequencing over a batch of
 // conflicting items. When "apply to all" is checked, the first decision is
 // reused for every subsequent item without asking again; otherwise each
 // item is evaluated individually (one at a time, per R-34-2).
 export function runConflictSession(items: readonly string[], decide: ConflictDecider): ConflictSessionResult {
-  const resolutions: Record<string, "overwrite" | "skip"> = {};
+  // Null prototype: an entry named "__proto__" must be an ordinary own key
+  // (it is sent to the backend as a JSON key), not a prototype assignment.
+  const resolutions: Record<string, "overwrite" | "skip"> = Object.create(null);
   let appliedChoice: "overwrite" | "skip" | null = null;
 
   for (const item of items) {
@@ -62,38 +63,6 @@ export function runConflictSession(items: readonly string[], decide: ConflictDec
       }
     }
 
-    resolutions[item] = choice;
-  }
-
-  return { canceled: false, resolutions };
-}
-
-export type AsyncConflictDecider = (item: string) => Promise<ConflictDecision>;
-
-// Async twin of runConflictSession (SPEC-0200-0001 §3.3.4): a synchronous
-// decider cannot wait for a dialog. Items are asked one at a time, awaiting
-// each answer (R-34-2). A decide rejection propagates to the caller.
-export async function runConflictSessionAsync(
-  items: readonly string[],
-  decide: AsyncConflictDecider,
-): Promise<ConflictSessionResult> {
-  const resolutions: Record<string, "overwrite" | "skip"> = {};
-  let appliedChoice: "overwrite" | "skip" | null = null;
-
-  for (const item of items) {
-    let choice: ConflictChoice;
-    if (appliedChoice !== null) {
-      choice = appliedChoice;
-    } else {
-      const decision = await decide(item);
-      choice = decision.choice;
-      if (choice === "cancel") {
-        return { canceled: true, resolutions: {} };
-      }
-      if (decision.applyToAll) {
-        appliedChoice = choice;
-      }
-    }
     resolutions[item] = choice;
   }
 

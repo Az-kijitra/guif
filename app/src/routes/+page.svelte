@@ -20,8 +20,6 @@
   import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
   import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
   import NavigationHistoryList from "$lib/features/navigation-history/NavigationHistoryList.svelte";
-  import { createFileOpsController } from "$lib/features/file-ops/file-ops-controller";
-  import { createInternalClipboard } from "$lib/features/file-ops/clipboard-port";
   import { modalHost } from "$lib/shared/state/modal-host.svelte";
   import ModalHost from "./_components/modal/ModalHost.svelte";
   import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
@@ -34,9 +32,9 @@
     createOverlayController,
     loadInitialDirectory,
   } from "./navigation-wiring";
-  import { createListActionHandler, createFileOpsContext } from "./list-action-wiring";
+  import { createListActionHandler } from "./list-action-wiring";
+  import { createOperationControllers } from "./operations-wiring";
   import { createSearchActionHandler } from "./search-wiring";
-  import { fileOpsIpc } from "./file-ops-ipc";
   import {
     computeDispatchOverlayFlags,
     createModalFocusController,
@@ -129,21 +127,17 @@
     focusIndex: (index) => fileListState.focusIndex(index),
   });
 
-  // Phase 2 (SPEC-0300-0011): screen-level file operations. Operation targets
-  // are limited to the displayed entries (MUST-61); reloads after an
-  // operation are not navigation, so no visit is recorded (R-208/R-209).
-  const fileOps = createFileOpsController({
-    ipc: fileOpsIpc,
+  // Phase 2 (SPEC-0300-0011) file operations and Phase 5 (SPEC-0300-0014) ZIP
+  // create/extract: both see the displayed entries only (MUST-61) and reload
+  // without recording a visit (R-208/R-209, R-397). Assembly: operations-wiring.
+  const { fileOps, archive } = createOperationControllers({
     modal: modalHost,
     status: statusMessage,
-    clipboard: createInternalClipboard(),
-    context: createFileOpsContext({
-      currentPath: () => fileListState.currentPath,
-      entries: () => fileListState.entries,
-      filteredEntries: () => filteredEntries,
-      selected: () => fileListState.selected,
-      focusedPath: () => focusedPath(),
-    }),
+    currentPath: () => fileListState.currentPath,
+    entries: () => fileListState.entries,
+    filteredEntries: () => filteredEntries,
+    selected: () => fileListState.selected,
+    focusedPath: () => focusedPath(),
     reload: (opts) => fileListState.reload(opts),
   });
 
@@ -157,6 +151,7 @@
     addJump: (path) => navigationHistoryState.addJump(path),
     currentPath: () => fileListState.currentPath,
     fileOps,
+    archive,
   });
 
   // §3.3.2: modal keys (Escape/Enter/Tab...) are fixed, keymap-independent.

@@ -23,7 +23,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::identity::{is_strictly_within, same_entity};
+use crate::shared::identity::{is_strictly_within, same_entity};
 use super::name_validation::{self, NameError};
 
 /// R-24: preflight rejection codes for a copy/move batch.

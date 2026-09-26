@@ -8,6 +8,17 @@
 | 2026-09-24 | 未採番(SPEC-0300-0012) | PASS(フロントのみ。Rust変更なし) | 以下「## 2026-09-24 MVP Phase 3」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(IME/修飾キー/空選択の修正・回帰テスト追加) → 判定「PR作成可」 |
 | 2026-09-26 | 未採番(SPEC-0300-0013) | PASS(フロント・バック双方) | 以下「## 2026-09-26 MVP Phase 4」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(flush並行呼び出しの修正・回帰テスト、ヘッドレスブラウザでの動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0011 第4版 画面配線 + ISS-0105 vim削除) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 2 画面配線」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行) → code-reviewer → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
+| 2026-09-27 | 未採番(SPEC-0300-0014 第3版 ZIP作成/展開) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 5 ZIP」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行、CP932等の実験含む) → code-reviewer(セキュリティ重点) → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
+
+## 2026-09-27 Phase 5 ZIP作成/展開(SPEC-0300-0014 第3版)テスト実行結果
+
+- `cd app && npx vitest run`: 55ファイル/1117件全成功。`cargo test --lib`: 535件全成功。`npx tsc --noEmit`エラー0、`npx vite build`成功。
+- 設計監査で検出・解消した主な問題: 展開先の既存ファイルを名前解決の窓で無断置換しうる件(→`MoveFileExW`をREPLACE_EXISTINGなしで呼ぶ`move_no_replace`)、書き出し先が未存在だと全エントリが拒否されるバグ(同一性判定`None`の扱い)、ディレクトリを`.zip`として展開対象にしうる件(entryType)、進捗ダイアログが開く前にキー入力が一覧へ届く件(showProgress→listen→invoke)、名前の長い正当ファイルが一時名の長さで失敗する件、エントリ数上限判定が遅くメモリを使い切られる件。
+- 実験で判明したzip crate 7.2の挙動(自前で補った点): 完全一致の重複名を黙って1件に潰す(中央ディレクトリを自前走査)、AES(方式99・ビット0なし)を暗号化と認識しない、宣言サイズと実データの食い違いを検出しない、サイズ0のDeflateで`UnexpectedEof`、複数ディスクを開けてしまう、名前はCP437として化ける(UTF-8として妥当ならUTF-8、そうでなければ`name_raw`+`encoding_rs`でCP932)。
+- code-reviewerで検出・修正: ZIPのDOS日時をUTC扱いで読み書きしていた(他ツールと日本で9時間ずれる)→`time`の`local-offset`でローカル時刻へ、計画中のキャンセルで空の展開先が作られる、作成時のIOエラーが`zip_corrupt`扱い、`__proto__`エントリ名、EOCD不一致検査、名前の防御的検査。攻撃名約40件(`..`、絶対パス、UNC、ADS、予約名、8.3等)はレビューで全て拒否を確認。
+- 動作確認(Tauri IPCモックのヘッドレスEdge): Ctrl+Alt+Zで作成フォーム(入力欄にフォーカス、対象件数表示)→Escapeで閉じて一覧へ、Enterで事前検査→作成、Ctrl+Alt+Xで展開フォーム(展開先=ZIP名のサブフォルダ)→衝突ダイアログ(既定=キャンセル)→Escapeで展開せず。
+- 未実施: 実Tauriでの手動確認(`tests/manual/phase5-zip-checklist.md` MZ-01〜MZ-28。実ZIP作成・展開、エクスプローラーとの相互運用〈日時・日本語名〉、進捗・キャンセル、空き容量、AltGr配列等)。
+- 残課題(非blocker): minor 5(BufWriter)、6(TOCTOU窓、ハンドルベース操作でないと閉じられない)、9(読み取り専用ファイルの上書きで中断)、SHOULD-89(計画中のキャンセルボタン不応答)、ISS-0099(CP932は実装済み、実ZIPでの手動確認)。
 
 ## 2026-09-27 Phase 2 画面配線(SPEC-0300-0011 第4版)+ ISS-0105 テスト実行結果
 

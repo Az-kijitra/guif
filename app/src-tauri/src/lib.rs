@@ -10,11 +10,17 @@
 //! - `keymap` (SPEC-0300-0010 defaults/key-processing logic, no persistence)
 //! - `config` (persistence I/O, SPEC-0200-0001 §6)
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
+//! - `archive` (SPEC-0300-0014 ZIP create/extract — Phase 5; see
+//!   `archive/mod.rs`)
 //!
 //! `main.rs` is a thin entry point that calls `run()` below (the standard
 //! Tauri 2 desktop template split, so `lib.rs` stays the single source of
 //! bootstrap wiring and can also be exercised by integration tests later).
 
+// SPEC-0200-0001 §3.4.13-7: the only unsafe in the crate is archive/win_fs.rs.
+#![deny(unsafe_code)]
+
+pub mod archive;
 pub mod config;
 pub mod fs;
 pub mod fs_ops;
@@ -33,8 +39,8 @@ mod acl_consistency;
 pub fn run() {
     tauri::Builder::default()
         // R-42/R-43 (ISS-0052): per-operation-id cancellation flags for
-        // in-flight copy/move batches (fs_ops::commands::CancelRegistry).
-        .manage(fs_ops::commands::CancelRegistry::default())
+        // in-flight copy/move/ZIP operations (ONE instance shared by fs_ops and archive, §3.4.1).
+        .manage(shared::cancel::CancelRegistry::default())
         // MUST-48(c): serializes navigation.toml load/save.
         .manage(config::commands::NavigationIoLock::default())
         .invoke_handler(tauri::generate_handler![
@@ -49,6 +55,11 @@ pub fn run() {
             fs_ops::commands::fs_ops_detect_conflicts,
             config::commands::config_load_navigation,
             config::commands::config_save_navigation,
+            archive::commands::archive_check_create,
+            archive::commands::archive_create,
+            archive::commands::archive_detect_conflicts,
+            archive::commands::archive_extract,
+            archive::commands::archive_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

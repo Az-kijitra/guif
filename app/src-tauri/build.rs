@@ -19,6 +19,11 @@ fn main() {
                 "fs_ops_rename",
                 "fs_ops_create",
                 "fs_ops_detect_conflicts",
+                "archive_check_create",
+                "archive_create",
+                "archive_detect_conflicts",
+                "archive_extract",
+                "archive_cancel",
             ])),
     )
     .expect("failed to run tauri-build");

@@ -155,6 +155,88 @@ describe("import boundaries (SPEC-0200-0001 §4.1, SHOULD-84(a))", () => {
   });
 });
 
+// SPEC-0300-0014 R-310 / §0.4 / SPEC-0200-0001 §3.4.1, §3.4.6, §3.4.7, §3.4.10:
+// features/archive must not depend on features/file-ops (or any feature) and
+// vice versa; everything they share goes through shared/. Explicit checks so
+// that a silently missing module (RED until Phase 5 is implemented) is visible
+// instead of the generic scans passing on an empty directory.
+describe("Phase 5 archive boundaries (SPEC-0300-0014 R-310, SPEC-0200-0001 §3.4)", () => {
+  const edges = collectEdges();
+  // Production modules only (test files also count in the generic scans above).
+  const archiveEdges = edges.filter(
+    (e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "archive" && !/\.test\.ts$/.test(e.from),
+  );
+  const exists = (rel: string): boolean => {
+    try {
+      return statSync(join(SRC, rel)).isFile();
+    } catch {
+      return false;
+    }
+  };
+
+  it("§3.4.6: the planned modules exist (feature files, shared/ipc, shared/conflict-session, routes wiring)", () => {
+    const planned = [
+      "lib/features/archive/archive-controller.ts",
+      "lib/features/archive/target-rules.ts",
+      "lib/features/archive/dialog-specs.ts",
+      "lib/features/archive/result-report.ts",
+      "lib/features/archive/error-format.ts",
+      "lib/features/archive/path-util.ts",
+      "lib/shared/ipc/archive.ts",
+      "lib/shared/conflict-session.ts",
+      "routes/archive-ipc.ts",
+      "routes/operations-wiring.ts",
+    ];
+    expect(planned.filter((f) => !exists(f))).toEqual([]);
+  });
+
+  it("the scanner sees features/archive PRODUCTION modules at all (guards against an empty scan)", () => {
+    expect(archiveEdges.length).toBeGreaterThan(0);
+  });
+
+  it("features/archive never imports another feature (file-ops in particular), type imports and relative escapes included", () => {
+    const bad = edges.filter(
+      (e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "archive" && e.toLayer.kind === "feature" && e.toLayer.name !== "archive",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("no other feature imports features/archive (the only route is routes/ composition, §4.1 path 2)", () => {
+    const bad = edges.filter(
+      (e) => e.fromLayer.kind === "feature" && e.toLayer.kind === "feature" && e.toLayer.name === "archive" && e.fromLayer.name !== "archive",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("features/archive never imports routes/ (and shared/ never imports features/ or routes/: re-checked for the new shared modules)", () => {
+    expect(archiveEdges.filter((e) => e.toLayer.kind === "routes").map(fmt)).toEqual([]);
+    const sharedBad = edges.filter(
+      (e) => e.fromLayer.kind === "shared" && (e.toLayer.kind === "feature" || e.toLayer.kind === "routes"),
+    );
+    expect(sharedBad.map(fmt)).toEqual([]);
+  });
+
+  it("R-377 / §3.4.1: ONE conflict-session implementation - features/archive uses shared/conflict-session, and file-ops re-exports it", () => {
+    expect(
+      archiveEdges.some((e) => e.spec === "$lib/shared/conflict-session" || /conflict-session$/.test(e.spec)),
+    ).toBe(true);
+    const flow = edges.filter((e) => e.from === "lib/features/file-ops/conflict-flow.ts".split("/").join(sep));
+    expect(flow.some((e) => /shared\/conflict-session$/.test(e.spec))).toBe(true);
+  });
+
+  it("§3.4.6 / R-386: features/archive reaches the backend only through injection (no direct import of shared/ipc/archive's wrappers is required; if imported it is shared/, never Tauri directly)", () => {
+    const tauriDirect = readdirSync(join(SRC, "lib", "features", "archive"), { withFileTypes: true })
+      .filter((d) => d.isFile() && /\.ts$/.test(d.name) && !/\.test\.ts$/.test(d.name))
+      .filter((d) => /@tauri-apps\//.test(readFileSync(join(SRC, "lib", "features", "archive", d.name), "utf-8")));
+    expect(tauriDirect.map((d) => d.name)).toEqual([]);
+  });
+
+  it("§3.4.7: routes/list-action-wiring.ts imports no feature module (SPEC-0300-0010 R-17)", () => {
+    const bad = edges.filter((e) => e.from === "routes" + sep + "list-action-wiring.ts" && e.toLayer.kind === "feature");
+    expect(bad.map(fmt)).toEqual([]);
+  });
+});
+
 describe("scanner self-check (specifier extraction)", () => {
   it("extracts static, type-only, re-export, side-effect and dynamic imports; ignores comments", () => {
     const code = [

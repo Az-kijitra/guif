@@ -46,8 +46,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -57,54 +56,7 @@ use super::delete;
 use super::preflight::MutatePreflightError;
 use super::rename;
 use super::transfer::{self, ConflictResolution, OpSummary, ProgressEvent};
-
-/// R-42/R-43 (ISS-0052): per-operation-id cancellation-flag registry, keyed
-/// by the caller-supplied `operation_id` so that multiple concurrent
-/// copy/move batches (each with its own progress dialog) can be canceled
-/// independently. Managed as ordinary Tauri `State` (`app/`'s `.manage()`
-/// call in `lib.rs`).
-///
-/// This is a plain lookup table, *not* a Storage Provider abstraction
-/// (SPEC-0400-0001 §4.1): no trait, no `dyn`, no generic backend parameter
-/// — it only ever stores `Arc<AtomicBool>` cancellation flags.
-#[derive(Default)]
-pub struct CancelRegistry(Mutex<HashMap<String, Arc<AtomicBool>>>);
-
-impl CancelRegistry {
-    /// Registers `operation_id` and returns its cancellation flag. An
-    /// existing flag (e.g. one a `request_cancel` that arrived earlier
-    /// already raised, R-43-2) is kept and shared rather than replaced.
-    fn register(&self, operation_id: &str) -> Arc<AtomicBool> {
-        self.0
-            .lock()
-            .expect("cancel registry mutex poisoned")
-            .entry(operation_id.to_string())
-            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
-            .clone()
-    }
-
-    /// Removes `operation_id`'s entry once its batch has finished (whether
-    /// it completed normally or was canceled), so `fs_ops_cancel` calls
-    /// against a stale id are harmless no-ops rather than leaking flags.
-    fn unregister(&self, operation_id: &str) {
-        self.0.lock().expect("cancel registry mutex poisoned").remove(operation_id);
-    }
-
-    /// R-43/R-43-2 (MUST-58): raises the cancellation flag for
-    /// `operation_id`. For an id that is not registered yet, a raised flag is
-    /// pre-recorded and consumed by the next `register` of that id, so a
-    /// cancel that beats the batch's registration is not lost. (An entry
-    /// pre-recorded for an id that never registers stays: one `AtomicBool`
-    /// per id, bounded.)
-    fn request_cancel(&self, operation_id: &str) {
-        self.0
-            .lock()
-            .expect("cancel registry mutex poisoned")
-            .entry(operation_id.to_string())
-            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
-            .store(true, Ordering::Relaxed);
-    }
-}
+use crate::shared::cancel::CancelRegistry;
 
 /// Serializable counterpart of `transfer::Failure` for the IPC boundary.
 #[derive(Debug, Clone, Serialize)]

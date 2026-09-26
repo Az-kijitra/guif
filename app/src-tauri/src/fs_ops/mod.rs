@@ -33,7 +33,6 @@ pub mod commands;
 pub mod create;
 pub mod delete;
 pub mod error;
-pub(crate) mod identity;
 pub mod name_validation;
 pub mod preflight;
 pub mod rename;

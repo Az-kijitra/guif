@@ -27,6 +27,27 @@ tauri = { version = "2", features = [] }
 # (SPEC-0400-0001 §4.1) — there is no trait, no generic backend parameter,
 # and no runtime backend switching anywhere in fs_ops.
 trash = "3"
+# SPEC-0300-0014 (Phase 5, SPEC-0200-0001 §3.4.2 / §3.4.14 C1+C5): ZIP
+# reading/writing. Only the deflate and time features are enabled (the crate's
+# other default features -- every optional codec and any encryption support --
+# are intentionally left off, R-390-1 / AC-361). `time` is for R-327-11 /
+# R-346-2 (modification-time preserve/restore). No CRC crate is added: the
+# zip crate's own CRC verification is relied on (§3.4.14 C4, AC-373-1).
+zip = { version = "7", default-features = false, features = ["deflate", "time"] }
+# Direct dependency on `time` (already locked through zip): `local-offset` is
+# needed so the ZIP DOS date/time is written and read as LOCAL civil time, the
+# way Explorer / 7-Zip do (archive/zip_time.rs). Offset lookup can fail (thread
+# restrictions), in which case zip_time falls back to UTC.
+time = { version = "0.3", default-features = false, features = ["std", "local-offset"] }
+# `encoding_rs` (CP932 entry names, R-347): approved after the CP932 experiment
+# (archive/cp932_experiment_tests.rs) selected design branch 1 (raw name bytes
+# are readable, decoding is ours).
+encoding_rs = "0.8"
+
+# SPEC-0200-0001 §3.4.13-7 / §3.4.14 C2: the only `unsafe` in the crate lives
+# in archive/win_fs.rs (MoveFileExW without replace, GetDiskFreeSpaceExW).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

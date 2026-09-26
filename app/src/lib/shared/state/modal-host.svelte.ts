@@ -22,6 +22,8 @@ export type FormField = { id: string; label: string } & (
 
 export interface FormSpec {
   title: string;
+  // Display-only rows above the fields (SPEC-0200-0001 §3.4.11-D); not form values.
+  lines?: string[];
   fields: FormField[];
   submitLabel: string;
   cancelLabel: string;
