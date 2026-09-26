@@ -6,8 +6,8 @@
 
 use crate::shared::schema::keymap::KeymapConfig;
 
-/// SPEC-0300-0010 R-20/R-41: the default keymap configuration (profile =
-/// windows, no custom overrides). Delegates to `KeymapConfig::default()` so
+/// SPEC-0300-0010 R-20/R-41: the default keymap configuration (a single
+/// default keymap, no custom overrides). Delegates to `KeymapConfig::default()` so
 /// there is a single source of truth for the default value.
 pub fn default_keymap_config() -> KeymapConfig {
     KeymapConfig::default()
@@ -16,16 +16,16 @@ pub fn default_keymap_config() -> KeymapConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::schema::keymap::{KeymapConfig, KeymapProfile};
+    use crate::shared::schema::keymap::KeymapConfig;
 
-    // SPEC-0300-0010 R-20, R-41: the keymap module's default matches the
-    // schema type's own Default impl (single source of truth for defaults).
+    // SPEC-0300-0010 R-20/R-41 (6th ed.): the keymap module's default matches
+    // the schema type's own Default impl (single source of truth) and has no
+    // custom overrides. The profile concept was removed (R-20-1, ISS-0105).
     #[test]
     fn default_keymap_config_matches_schema_default() {
         let from_keymap_module = default_keymap_config();
         let from_schema_default = KeymapConfig::default();
         assert_eq!(from_keymap_module, from_schema_default);
-        assert_eq!(from_keymap_module.profile, KeymapProfile::Windows);
         assert!(from_keymap_module.custom.is_empty());
     }
 }

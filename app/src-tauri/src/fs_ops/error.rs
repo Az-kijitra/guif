@@ -30,6 +30,9 @@ pub fn translate_error_code(code: &str) -> Option<&'static str> {
         "destination_inside_source" => "宛先がコピー元の内部にあります。",
         // runtime (R-80, R-85, R-86)
         "permission_denied" => "権限がないため操作を実行できませんでした。",
+        // R-85-1 (MUST-59): the copy/move source lies beneath the existing
+        // destination item, so overwriting it would destroy the source.
+        "overwrite_ancestor" => "コピー元が上書き対象の内部にあるため、上書きできません。",
         "conflict" => "同名の項目がすでに存在するため処理を中止しました。",
         "io_error" => "入出力エラーが発生しました。",
         "unknown" => "不明なエラーが発生しました。",
@@ -90,6 +93,8 @@ mod tests {
             "io_error",
             "unknown",
             "canceled",
+            // 4th edition (R-85-1, MUST-59)
+            "overwrite_ancestor",
         ];
         for code in documented_codes {
             assert!(
@@ -97,6 +102,18 @@ mod tests {
                 "expected a translation for documented error code '{code}'"
             );
         }
+    }
+
+    // SPEC-0300-0011 R-85-1 / R-84 / AC-81 (4th ed.): `overwrite_ancestor` is a
+    // documented code with its OWN message (not the generic conflict/io_error
+    // ones), so the UI can explain why overwrite was refused.
+    #[test]
+    fn r85_1_overwrite_ancestor_has_a_dedicated_translation() {
+        let message = translate_error_code("overwrite_ancestor");
+
+        assert!(message.is_some(), "R-85-1: overwrite_ancestor must be translatable");
+        assert_ne!(message, translate_error_code("conflict"));
+        assert_ne!(message, translate_error_code("io_error"));
     }
 
     // SPEC-0300-0011 AC-74 (R-88): the source tree must contain no

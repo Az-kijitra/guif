@@ -8,6 +8,14 @@
     "allow-fs-list-dir",
     "allow-config-load-navigation",
     "allow-config-save-navigation",
+    "allow-fs-ops-copy",
+    "allow-fs-ops-move",
+    "allow-fs-ops-cancel",
+    "allow-fs-ops-delete-trash",
+    "allow-fs-ops-delete-permanently",
+    "allow-fs-ops-rename",
+    "allow-fs-ops-create",
+    "allow-fs-ops-detect-conflicts",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

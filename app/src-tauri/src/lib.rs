@@ -21,6 +21,10 @@ pub mod fs_ops;
 pub mod keymap;
 pub mod shared;
 
+// MUST-64: generate_handler! / build.rs / capabilities 3-way consistency check.
+#[cfg(test)]
+mod acl_consistency;
+
 /// Builds and runs the Tauri application. This is the sole place in the
 /// backend that `use`s more than one feature module's public command
 /// surface at once (SPEC-0200-0001 §4.2: `app/(bootstrap) -> <feature>/`),
@@ -42,6 +46,7 @@ pub fn run() {
             fs_ops::commands::fs_ops_delete_permanently,
             fs_ops::commands::fs_ops_rename,
             fs_ops::commands::fs_ops_create,
+            fs_ops::commands::fs_ops_detect_conflicts,
             config::commands::config_load_navigation,
             config::commands::config_save_navigation,
         ])

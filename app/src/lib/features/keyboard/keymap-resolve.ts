@@ -1,5 +1,5 @@
 // SPEC-0300-0010 §5 (R-30~R-34): keymap resolution — combining custom
-// overrides with profile defaults, normalizing key-binding strings, and
+// overrides with the default keymap, normalizing key-binding strings, and
 // matching a keydown event against a resolved list of bindings.
 
 import { validateCustomOverride } from "./keymap-validate";
@@ -33,28 +33,27 @@ export function normalizeKeyString(binding: string): string {
 }
 
 export interface ResolveBindingInput {
-  profile: "windows" | "vim";
   customOverrides: Record<string, string>;
   actionId: string;
-  profileDefault: string;
+  defaultBinding: string;
 }
 
-// R-30/R-31/R-32: a custom override (if present) replaces the profile
-// default entirely. An empty-string override disables the action (no
+// R-30/R-31/R-32: a custom override (if present) replaces the default
+// binding entirely. An empty-string override disables the action (no
 // bindings). Multiple bindings may be comma-separated.
 //
 // R-18-2/R-56-4-2-1: before a custom override is accepted, each of its
 // comma-separated bindings is validated via `validateCustomOverride` (this
 // currently only restricts Shift on the `delete` action). Any invalid
 // binding causes the whole override to be discarded in favor of the
-// profile default, rather than silently dropping just that one binding.
+// default binding, rather than silently dropping just that one binding.
 export function resolveBinding(input: ResolveBindingInput): string[] {
-  let raw = input.profileDefault;
+  let raw = input.defaultBinding;
   if (input.actionId in input.customOverrides) {
     const candidate = input.customOverrides[input.actionId];
     const bindings = candidate === "" ? [] : candidate.split(",").map((s) => s.trim());
     const allValid = bindings.every((binding) => validateCustomOverride(input.actionId, binding) !== null);
-    raw = allValid ? candidate : input.profileDefault;
+    raw = allValid ? candidate : input.defaultBinding;
   }
 
   if (raw === "") {

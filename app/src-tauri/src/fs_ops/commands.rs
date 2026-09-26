@@ -25,12 +25,24 @@
 //! it can be reconciled with the spec/architecture docs in a follow-up
 //! pass rather than silently treated as settled.
 //!
-//! `fs_ops_copy`/`fs_ops_move` remain plain (non-`async fn`) `#[tauri::command]`
-//! functions: Tauri already dispatches synchronous commands like these onto
-//! its own worker thread pool rather than the main event loop, so the
-//! blocking filesystem work they do does not stall the UI — this is the
-//! sense in which they are "async-friendly" without needing `async fn` or
-//! an app-level async runtime.
+//! **Threading (MUST-58, SPEC-0200-0001 §3.3.13-1):** a plain synchronous
+//! Tauri command is executed on the WebView2 *main thread* on Windows, so a
+//! long copy would freeze the UI (no progress rendering, and `fs_ops_cancel`
+//! would only be handled after the batch ended). Every blocking command in
+//! this module is therefore declared with the `async` command option
+//! (a synchronous fn that Tauri runs on its async runtime instead of the main
+//! thread). `fs_list_dir`/`config_*` still have the old behavior; that is
+//! recorded as a follow-up in SPEC-0200-0001 §3.3.12 and out of scope here.
+//!
+//! **R-43-2 (MUST-58):** `CancelRegistry::request_cancel` records a
+//! "canceled" flag even for an id that is not registered yet, and `register`
+//! keeps an existing flag, so an Escape pressed right after the progress
+//! modal opened (before the batch registered) is not lost.
+//!
+//! **R-34-2 / SHOULD-82:** `fs_ops_copy`/`fs_ops_move` take an optional
+//! `itemResolutions` map (key = source path string, exact match; value =
+//! "overwrite" | "skip" | "reject"). Unknown values are `reject`; keys that
+//! are not in `items` are ignored (`resolve_item_resolution`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -59,16 +71,16 @@ use super::transfer::{self, ConflictResolution, OpSummary, ProgressEvent};
 pub struct CancelRegistry(Mutex<HashMap<String, Arc<AtomicBool>>>);
 
 impl CancelRegistry {
-    /// Registers a fresh, unset cancellation flag for `operation_id`,
-    /// replacing any prior (necessarily already-finished) entry with the
-    /// same id.
+    /// Registers `operation_id` and returns its cancellation flag. An
+    /// existing flag (e.g. one a `request_cancel` that arrived earlier
+    /// already raised, R-43-2) is kept and shared rather than replaced.
     fn register(&self, operation_id: &str) -> Arc<AtomicBool> {
-        let flag = Arc::new(AtomicBool::new(false));
         self.0
             .lock()
             .expect("cancel registry mutex poisoned")
-            .insert(operation_id.to_string(), flag.clone());
-        flag
+            .entry(operation_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone()
     }
 
     /// Removes `operation_id`'s entry once its batch has finished (whether
@@ -78,12 +90,19 @@ impl CancelRegistry {
         self.0.lock().expect("cancel registry mutex poisoned").remove(operation_id);
     }
 
-    /// R-43: raises the cancellation flag for `operation_id`, if it is
-    /// currently registered. A no-op for an unknown/already-finished id.
+    /// R-43/R-43-2 (MUST-58): raises the cancellation flag for
+    /// `operation_id`. For an id that is not registered yet, a raised flag is
+    /// pre-recorded and consumed by the next `register` of that id, so a
+    /// cancel that beats the batch's registration is not lost. (An entry
+    /// pre-recorded for an id that never registers stays: one `AtomicBool`
+    /// per id, bounded.)
     fn request_cancel(&self, operation_id: &str) {
-        if let Some(flag) = self.0.lock().expect("cancel registry mutex poisoned").get(operation_id) {
-            flag.store(true, Ordering::Relaxed);
-        }
+        self.0
+            .lock()
+            .expect("cancel registry mutex poisoned")
+            .entry(operation_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .store(true, Ordering::Relaxed);
     }
 }
 
@@ -138,6 +157,23 @@ fn resolution_from_str(value: &str) -> ConflictResolution {
     }
 }
 
+/// SPEC-0200-0001 §3.3.13-7 (SHOULD-82) / SPEC-0300-0011 R-30-2/R-34-2.
+/// Effective resolution for one `item`: exact-string key lookup in
+/// `item_resolutions` (no case folding or separator normalization); a value
+/// that is not "overwrite"/"skip" is `Reject`; no entry (or no map) ->
+/// `default`. Keys that are not among the batch's `items` are simply never
+/// looked up.
+pub(crate) fn resolve_item_resolution(
+    item: &str,
+    default: ConflictResolution,
+    item_resolutions: Option<&HashMap<String, String>>,
+) -> ConflictResolution {
+    match item_resolutions.and_then(|map| map.get(item)) {
+        Some(value) => resolution_from_str(value),
+        None => default,
+    }
+}
+
 fn mutate_error_code(err: MutatePreflightError) -> String {
     match err {
         MutatePreflightError::Required => "invalid_name".to_string(),
@@ -186,12 +222,51 @@ impl ProgressEventDto {
     }
 }
 
+/// One top-level name conflict for the IPC boundary (`transfer::Conflict`).
+/// `kind` is `"overwritable"` or `"overwrite_ancestor"` (R-37-4: the UI must
+/// not offer "overwrite" for the latter).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictDto {
+    /// The copy/move source item's path.
+    pub path: String,
+    /// The conflicting name.
+    pub name: String,
+    pub kind: String,
+}
+
+impl From<transfer::Conflict> for ConflictDto {
+    fn from(conflict: transfer::Conflict) -> Self {
+        ConflictDto {
+            path: conflict.path.to_string_lossy().into_owned(),
+            name: conflict.name,
+            kind: match conflict.kind {
+                transfer::ConflictKind::Overwritable => "overwritable",
+                transfer::ConflictKind::OverwriteAncestor => "overwrite_ancestor",
+            }
+            .to_string(),
+        }
+    }
+}
+
+/// R-31-3/R-32/R-37: side-effect-free detection of top-level name conflicts
+/// between `items` and `destination` (see `transfer::detect_conflicts`). The
+/// error value is the preflight code (e.g. `destination_not_found`).
+#[tauri::command(async)]
+pub fn fs_ops_detect_conflicts(items: Vec<String>, destination: String) -> Result<Vec<ConflictDto>, String> {
+    transfer::detect_conflicts(&to_path_bufs(items), &PathBuf::from(destination))
+        .map(|conflicts| conflicts.into_iter().map(ConflictDto::from).collect())
+        .map_err(|err| transfer::preflight_error_code(err).to_string())
+}
+
 /// R-21/R-40~R-44: batch copy (`items` into `destination`), broadcasting
 /// one `fs_ops://progress` event per item boundary and honoring a
 /// cancellation request raised against `operation_id` via `fs_ops_cancel`
 /// (R-42/R-43). `operation_id` is minted by the caller (the frontend ipc
 /// wrapper, via `crypto.randomUUID()`) before invoking this command.
-#[tauri::command]
+/// `resolution` is the batch default; `item_resolutions` (`itemResolutions`
+/// on the wire) overrides it per source path (R-34-2, SHOULD-82).
+#[tauri::command(async)]
 pub fn fs_ops_copy(
     app: AppHandle,
     cancel_registry: State<CancelRegistry>,
@@ -199,13 +274,15 @@ pub fn fs_ops_copy(
     items: Vec<String>,
     destination: String,
     resolution: String,
+    item_resolutions: Option<HashMap<String, String>>,
 ) -> OpSummaryDto {
     let cancel_flag = cancel_registry.register(&operation_id);
     let event_operation_id = operation_id.clone();
-    let summary = transfer::copy_batch_with_progress(
+    let default_resolution = resolution_from_str(&resolution);
+    let summary = transfer::copy_batch_with_resolver(
         &to_path_bufs(items),
         &PathBuf::from(destination),
-        resolution_from_str(&resolution),
+        |item| resolve_item_resolution(&item.to_string_lossy(), default_resolution, item_resolutions.as_ref()),
         move || cancel_flag.load(Ordering::Relaxed),
         move |event| {
             // R-40: best-effort broadcast — a failed emit (e.g. no window
@@ -218,8 +295,9 @@ pub fn fs_ops_copy(
 }
 
 /// R-21/R-23/R-40~R-44: batch move (`items` into `destination`). See
-/// `fs_ops_copy`'s doc comment for the progress/cancellation contract.
-#[tauri::command]
+/// `fs_ops_copy`'s doc comment for the progress/cancellation/resolution
+/// contract.
+#[tauri::command(async)]
 pub fn fs_ops_move(
     app: AppHandle,
     cancel_registry: State<CancelRegistry>,
@@ -227,13 +305,15 @@ pub fn fs_ops_move(
     items: Vec<String>,
     destination: String,
     resolution: String,
+    item_resolutions: Option<HashMap<String, String>>,
 ) -> OpSummaryDto {
     let cancel_flag = cancel_registry.register(&operation_id);
     let event_operation_id = operation_id.clone();
-    let summary = transfer::move_batch_with_progress(
+    let default_resolution = resolution_from_str(&resolution);
+    let summary = transfer::move_batch_with_resolver(
         &to_path_bufs(items),
         &PathBuf::from(destination),
-        resolution_from_str(&resolution),
+        |item| resolve_item_resolution(&item.to_string_lossy(), default_resolution, item_resolutions.as_ref()),
         move || cancel_flag.load(Ordering::Relaxed),
         move |event| {
             let _ = app.emit(PROGRESS_EVENT_NAME, ProgressEventDto::from_event(&event_operation_id, event));
@@ -243,37 +323,42 @@ pub fn fs_ops_move(
     summary.into()
 }
 
-/// R-42/R-43: request cancellation of a previously-started copy/move batch
-/// identified by `operation_id` (the same id passed into `fs_ops_copy`/
-/// `fs_ops_move`). A no-op if the operation has already finished or the id
-/// is unknown — the frontend cancel button/Escape handler (R-42-2,
-/// `features/file-ops/progress-modal.ts`) does not need to guard against
-/// double-cancel or late cancellation itself.
-#[tauri::command]
+/// R-42/R-43/R-43-2: request cancellation of a copy/move batch identified by
+/// `operation_id` (the same id passed into `fs_ops_copy`/`fs_ops_move`). If
+/// the batch has not registered yet, the request is remembered and applies
+/// as soon as it does. Runs on a worker thread (R-48) so it is handled while
+/// the batch is still running.
+#[tauri::command(async)]
 pub fn fs_ops_cancel(cancel_registry: State<CancelRegistry>, operation_id: String) {
     cancel_registry.request_cancel(&operation_id);
 }
 
 /// R-50/R-51: batch delete to the OS-standard trash bin.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn fs_ops_delete_trash(paths: Vec<String>) -> OpSummaryDto {
     delete::delete_to_trash(&to_path_bufs(paths)).into()
 }
 
 /// R-56/R-56-3: batch permanent delete.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn fs_ops_delete_permanently(paths: Vec<String>) -> OpSummaryDto {
     delete::delete_permanently(&to_path_bufs(paths)).into()
 }
 
-/// R-64: rename a single entry.
-#[tauri::command]
-pub fn fs_ops_rename(path: String, new_name: String) -> Result<(), String> {
-    rename::rename_entry(&PathBuf::from(path), &new_name).map_err(mutate_error_code)
+/// R-64: rename a single entry; returns the entry's new full path.
+#[tauri::command(async)]
+pub fn fs_ops_rename(path: String, new_name: String) -> Result<String, String> {
+    rename::rename_entry(&PathBuf::from(path), &new_name)
+        .map(|new_path| new_path.to_string_lossy().into_owned())
+        .map_err(mutate_error_code)
 }
 
 /// R-78: create a single new entry.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn fs_ops_create(parent: String, name: String, kind: String) -> Result<(), String> {
     create::create_entry(&PathBuf::from(parent), &name, &kind).map_err(mutate_error_code)
 }
+
+#[cfg(test)]
+#[path = "commands_tests.rs"]
+mod tests;

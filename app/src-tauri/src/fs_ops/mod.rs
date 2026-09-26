@@ -33,7 +33,18 @@ pub mod commands;
 pub mod create;
 pub mod delete;
 pub mod error;
+pub(crate) mod identity;
 pub mod name_validation;
 pub mod preflight;
 pub mod rename;
 pub mod transfer;
+
+// TDD (unit-test-writer, 2026-09-26): Phase 2 wiring tests (SPEC-0300-0011 4th ed.)
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod detect_conflicts_tests;
+#[cfg(test)]
+mod overwrite_merge_tests;
+#[cfg(test)]
+mod data_safety_tests;

@@ -42,7 +42,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::identity::{is_strictly_within, same_entity};
 use super::preflight::{self, TransferPreflightError};
 
 /// R-22: a single failed item within a batch result.
@@ -131,24 +133,223 @@ enum TransferKind {
     Move,
 }
 
-fn run_transfer_item(kind: TransferKind, source: &Path, target: &Path) -> Result<(), String> {
+fn run_transfer_item(kind: TransferKind, source: &Path, target: &Path) -> Result<(), ItemError> {
     match kind {
-        TransferKind::Copy => copy_recursively(source, target),
+        TransferKind::Copy => copy_recursively(source, target).map_err(io_item_error),
         TransferKind::Move => {
-            let rename_result = fs::rename(source, target).map_err(|e| e.to_string());
-            let fallback_result = if rename_result.is_err() {
-                Some(copy_recursively(source, target).and_then(|_| remove_recursively(source)))
-            } else {
-                None
-            };
-            resolve_move_item_outcome(rename_result, fallback_result)
+            if fs::rename(source, target).is_ok() {
+                return Ok(());
+            }
+            move_fallback(source, target)
         }
+    }
+}
+
+/// R-23 fallback for a failed rename: copy then remove. The destination is
+/// re-checked first: `fs::copy` overwrites, so a destination that appeared
+/// after the conflict decision must fail with `conflict`, not be clobbered.
+pub(crate) fn move_fallback(source: &Path, target: &Path) -> Result<(), ItemError> {
+    if entry_exists(target) {
+        return Err(ItemError {
+            code: "conflict",
+            message: "destination already exists".to_string(),
+        });
+    }
+    resolve_move_item_outcome(
+        Err("rename failed".to_string()),
+        Some(copy_recursively(source, target).and_then(|_| remove_recursively(source))),
+    )
+    .map_err(io_item_error)
+}
+
+// ---------------------------------------------------------------------------
+// Overwrite = file replace + folder merge (R-31, R-31-2~R-31-7, R-80;
+// SPEC-0200-0001 §3.3.14-2). The destination is never deleted up front.
+// ---------------------------------------------------------------------------
+
+/// One failure found while overwriting/merging a single top-level item.
+pub(crate) struct ItemError {
+    pub(crate) code: &'static str,
+    pub(crate) message: String,
+}
+
+fn io_item_error(err: impl ToString) -> ItemError {
+    ItemError {
+        code: "io_error",
+        message: err.to_string(),
+    }
+}
+
+/// Existence test that also sees dangling symlinks/junctions. The name
+/// comparison itself follows the OS (case-insensitive on NTFS, R-32-2).
+fn entry_exists(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// A not-yet-existing sibling name of `target` used as the staging file for
+/// an atomic replace (R-31-5).
+fn temp_sibling(target: &Path) -> PathBuf {
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let parent = target.parent().unwrap_or_else(|| Path::new(""));
+    loop {
+        let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let candidate = parent.join(format!(".{name}.{}-{n}.rftmp", std::process::id()));
+        if !entry_exists(&candidate) {
+            return candidate;
+        }
+    }
+}
+
+/// Removes a staging file, clearing a read-only bit copied from the source
+/// if that is what blocks the removal.
+fn remove_temp(path: &Path) {
+    if fs::remove_file(path).is_err() {
+        if let Ok(meta) = fs::metadata(path) {
+            let mut perms = meta.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+/// R-31-5: replaces the file `target` with the content of `source` by
+/// copying to a temporary sibling first and renaming it over `target`, so a
+/// failure at any point leaves the original `target` intact (and no
+/// temporary file behind).
+fn replace_file(source: &Path, target: &Path) -> Result<(), String> {
+    let temp = temp_sibling(target);
+    if let Err(err) = fs::copy(source, &temp) {
+        remove_temp(&temp);
+        return Err(err.to_string());
+    }
+    if let Err(err) = fs::rename(&temp, target) {
+        remove_temp(&temp);
+        return Err(err.to_string());
+    }
+    Ok(())
+}
+
+/// Move of a file onto an existing file: an atomic rename over the target,
+/// falling back to staged replace + source removal when rename is not
+/// possible (e.g. cross-volume). On any failure the source is kept.
+fn move_replace_file(source: &Path, target: &Path) -> Result<(), String> {
+    if fs::rename(source, target).is_ok() {
+        return Ok(());
+    }
+    replace_file(source, target)?;
+    fs::remove_file(source).map_err(|e| e.to_string())
+}
+
+/// Overwrites the existing `target` with `source` (both exist). Files are
+/// replaced, folders are merged recursively, a kind mismatch fails with
+/// `conflict` without touching either side (R-31-4). Failures are collected
+/// into `errors` and processing of the remaining entries continues (R-80).
+fn overwrite_entry(
+    kind: TransferKind,
+    source: &Path,
+    source_is_dir: bool,
+    target: &Path,
+    errors: &mut Vec<ItemError>,
+) {
+    if source_is_dir != target.is_dir() {
+        errors.push(ItemError {
+            code: "conflict",
+            message: format!(
+                "cannot overwrite: `{}` and `{}` are not both files or both folders",
+                source.display(),
+                target.display()
+            ),
+        });
+        return;
+    }
+
+    // MUST-59: never write over (or into) the source itself.
+    match same_entity(source, target) {
+        // The same entity: there is nothing to overwrite; leave it alone.
+        Some(true) => return,
+        Some(false) => {}
+        None => {
+            errors.push(ItemError {
+                code: "io_error",
+                message: format!("cannot verify that `{}` is a different item; not overwritten", target.display()),
+            });
+            return;
+        }
+    }
+    if source_is_dir {
+        let target_inside_source = is_strictly_within(source, target);
+        let source_inside_target = is_strictly_within(target, source);
+        if target_inside_source != Some(false) || source_inside_target != Some(false) {
+            errors.push(ItemError {
+                code: "overwrite_ancestor",
+                message: format!("`{}` and `{}` are nested; not merged", source.display(), target.display()),
+            });
+            return;
+        }
+        merge_dir(kind, source, target, errors);
+    } else {
+        let result = match kind {
+            TransferKind::Copy => replace_file(source, target),
+            TransferKind::Move => move_replace_file(source, target),
+        };
+        if let Err(message) = result {
+            errors.push(io_item_error(message));
+        }
+    }
+}
+
+/// Merges the folder `source` into the existing folder `target`: entries
+/// only in `target` stay, missing entries are transferred, same-named
+/// entries are overwritten recursively (R-31-2, R-31-3). For a move, the
+/// source folder is removed afterwards only when every entry was transferred
+/// and it is empty (R-31-7).
+fn merge_dir(kind: TransferKind, source: &Path, target: &Path, errors: &mut Vec<ItemError>) {
+    let errors_before = errors.len();
+    match fs::read_dir(source) {
+        Err(err) => errors.push(io_item_error(err)),
+        Ok(entries) => {
+            for entry in entries {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(err) => {
+                        errors.push(io_item_error(err));
+                        continue;
+                    }
+                };
+                let is_dir = match entry.file_type() {
+                    Ok(file_type) => file_type.is_dir(),
+                    Err(err) => {
+                        errors.push(io_item_error(err));
+                        continue;
+                    }
+                };
+                let child_source = entry.path();
+                let child_target = target.join(entry.file_name());
+                if entry_exists(&child_target) {
+                    overwrite_entry(kind, &child_source, is_dir, &child_target, errors);
+                } else if let Err(item_error) = run_transfer_item(kind, &child_source, &child_target) {
+                    errors.push(item_error);
+                }
+            }
+        }
+    }
+    if matches!(kind, TransferKind::Move) && errors.len() == errors_before {
+        // `remove_dir` fails on a non-empty folder, which is exactly the
+        // "keep it if anything is left" rule; the failure is not an error.
+        let _ = fs::remove_dir(source);
     }
 }
 
 /// R-24: error code reported for the whole batch when `preflight::preflight_transfer`
 /// rejects it upfront (AC-72: zero side effects — no item is touched).
-fn preflight_error_code(err: TransferPreflightError) -> &'static str {
+pub(crate) fn preflight_error_code(err: TransferPreflightError) -> &'static str {
     match err {
         TransferPreflightError::NoItems => "no_items",
         TransferPreflightError::SamePath => "same_path",
@@ -209,8 +410,8 @@ pub struct ProgressEvent {
     pub total: u32,
     /// R-44: `Some("canceled")` for a canceled item; also carries the
     /// ordinary failure code (`"not_found"`, `"conflict"`, `"io_error"`,
-    /// `"invalid_path"`) for other `Fail` events. Always `None` for
-    /// `Start`/`Done`.
+    /// `"invalid_path"`, `"overwrite_ancestor"`) for other `Fail` events.
+    /// Always `None` for `Start`/`Done`.
     pub code: Option<String>,
 }
 
@@ -220,23 +421,70 @@ fn item_display_name(item: &Path) -> String {
         .unwrap_or_else(|| item.to_string_lossy().into_owned())
 }
 
+/// Records one failed item in `summary` and emits its `Fail` event.
+fn record_failure(
+    summary: &mut OpSummary,
+    on_event: &mut impl FnMut(ProgressEvent),
+    item: &Path,
+    name: String,
+    index: u32,
+    code: &str,
+    message: String,
+) {
+    summary.failed += 1;
+    summary.failures.push(Failure {
+        path: item.to_path_buf(),
+        code: code.to_string(),
+        message,
+    });
+    on_event(ProgressEvent {
+        kind: ProgressEventKind::Fail,
+        name,
+        index,
+        total: summary.total,
+        code: Some(code.to_string()),
+    });
+}
+
+/// MUST-59 (R-37-2): why the existing `target` must not be overwritten by
+/// `item`, if at all. Pure/non-destructive. `None` = an ordinary conflict.
+fn overwrite_refusal(
+    target: &Path,
+    item: &Path,
+    same_entity_result: Option<bool>,
+) -> Option<(&'static str, &'static str)> {
+    if same_entity_result.is_none() {
+        return Some(("io_error", "cannot verify that the destination is a different item; not overwritten"));
+    }
+    match is_strictly_within(target, item) {
+        Some(false) => None,
+        Some(true) => Some((
+            "overwrite_ancestor",
+            "the source is inside the item to be overwritten; not overwritten",
+        )),
+        None => Some(("io_error", "cannot verify the overwrite target; not overwritten")),
+    }
+}
+
 /// R-20~R-25/R-30~R-32/R-40~R-44: shared batch loop for both copy and move,
 /// with per-item progress notification (`on_event`) and cooperative
 /// cancellation (`should_cancel`, checked at each item boundary, R-43). For
 /// each item: reject missing sources (`not_found`), exclude
-/// same-directory pastes (R-25, `skipped`), resolve destination-name
-/// conflicts (R-30~R-32, evaluated against real filesystem state at the
-/// time each item is processed — never a precomputed listing), then
-/// perform the transfer.
+/// same-item pastes (R-25, `skipped`, decided by canonical identity, R-37-1),
+/// resolve destination-name conflicts (R-30~R-32, evaluated against real
+/// filesystem state at the time each item is processed — never a
+/// precomputed listing) using the per-item `resolver` (R-34-2), then perform
+/// the transfer (overwrite = file replace + folder merge, R-31-2~R-31-7).
 ///
-/// `run_transfer_batch`/`copy_batch`/`move_batch` call this with a no-op
-/// `on_event` and a `should_cancel` that always returns `false`, so their
-/// behavior (and every pre-existing test in this module) is unchanged.
+/// `run_transfer_batch`/`copy_batch`/`move_batch` call this with a constant
+/// resolver, a no-op `on_event` and a `should_cancel` that always returns
+/// `false`, so their behavior (and every pre-existing test in this module)
+/// is unchanged.
 fn run_transfer_batch_with_progress(
     kind: TransferKind,
     items: &[PathBuf],
     destination: &Path,
-    resolution: ConflictResolution,
+    resolver: impl Fn(&Path) -> ConflictResolution,
     mut should_cancel: impl FnMut() -> bool,
     mut on_event: impl FnMut(ProgressEvent),
 ) -> OpSummary {
@@ -293,31 +541,21 @@ fn run_transfer_batch_with_progress(
         // reported with the dedicated `canceled` code so the UI can
         // distinguish it from an ordinary failure.
         if should_cancel() {
-            summary.failed += 1;
-            summary.failures.push(Failure {
-                path: item.clone(),
-                code: "canceled".to_string(),
-                message: "canceled by user".to_string(),
-            });
-            on_event(ProgressEvent {
-                kind: ProgressEventKind::Fail,
-                name: item_display_name(item),
+            record_failure(
+                &mut summary,
+                &mut on_event,
+                item,
+                item_display_name(item),
                 index,
-                total,
-                code: Some("canceled".to_string()),
-            });
+                "canceled",
+                "canceled by user".to_string(),
+            );
             continue;
         }
 
         let file_name = match item.file_name() {
             Some(name) => name,
             None => {
-                summary.failed += 1;
-                summary.failures.push(Failure {
-                    path: item.clone(),
-                    code: "invalid_path".to_string(),
-                    message: "invalid source path".to_string(),
-                });
                 let name = item_display_name(item);
                 on_event(ProgressEvent {
                     kind: ProgressEventKind::Start,
@@ -326,28 +564,35 @@ fn run_transfer_batch_with_progress(
                     total,
                     code: None,
                 });
-                on_event(ProgressEvent {
-                    kind: ProgressEventKind::Fail,
+                record_failure(
+                    &mut summary,
+                    &mut on_event,
+                    item,
                     name,
                     index,
-                    total,
-                    code: Some("invalid_path".to_string()),
-                });
+                    "invalid_path",
+                    "invalid source path".to_string(),
+                );
                 continue;
             }
         };
         let target = destination.join(file_name);
         let name = file_name.to_string_lossy().into_owned();
+        let target_exists = entry_exists(&target);
 
-        // R-25: source and destination resolve to the same item — exclude,
-        // do not attempt (no progress event, see struct doc), do not count
-        // as a failure.
-        if &target == item {
+        // R-25/R-37-1 (MUST-59): source and destination are the same entity
+        // (decided by canonical identity, so letter case, junctions and
+        // `\\?\` spellings all count) — exclude, do not attempt (no
+        // progress event, see struct doc), do not count as a failure, and
+        // above all never delete/overwrite it. `None` = identity could not
+        // be determined; that only blocks the destructive `Overwrite` below.
+        let same_entity_result = if target_exists { same_entity(item, &target) } else { Some(false) };
+        if same_entity_result == Some(true) {
             summary.skipped += 1;
             continue;
         }
 
-        let target_exists = target.exists();
+        let resolution = resolver(item);
 
         // R-31 "skip": excluded, not attempted (no progress event) — this
         // must be decided *before* the `Start` event below, unlike Reject/
@@ -366,66 +611,54 @@ fn run_transfer_batch_with_progress(
             code: None,
         });
 
-        if !item.exists() {
-            summary.failed += 1;
-            summary.failures.push(Failure {
-                path: item.clone(),
-                code: "not_found".to_string(),
-                message: "source not found".to_string(),
-            });
-            on_event(ProgressEvent {
-                kind: ProgressEventKind::Fail,
-                name,
-                index,
-                total,
-                code: Some("not_found".to_string()),
-            });
+        if !entry_exists(item) {
+            record_failure(&mut summary, &mut on_event, item, name, index, "not_found", "source not found".to_string());
             continue;
         }
 
         if target_exists {
             match resolution {
                 ConflictResolution::Reject => {
-                    summary.failed += 1;
-                    summary.failures.push(Failure {
-                        path: item.clone(),
-                        code: "conflict".to_string(),
-                        message: "destination already exists".to_string(),
-                    });
-                    on_event(ProgressEvent {
-                        kind: ProgressEventKind::Fail,
-                        name,
-                        index,
-                        total,
-                        code: Some("conflict".to_string()),
-                    });
+                    // The UI sends `Reject` for an ancestor conflict: report
+                    // that real reason (non-destructive check) before the
+                    // generic `conflict`.
+                    let (code, message) = overwrite_refusal(&target, item, same_entity_result)
+                        .unwrap_or(("conflict", "destination already exists"));
+                    record_failure(&mut summary, &mut on_event, item, name, index, code, message.to_string());
                     continue;
                 }
                 ConflictResolution::Skip => {
                     unreachable!("Skip is excluded above, before the Start event")
                 }
                 ConflictResolution::Overwrite => {
-                    let remove_result = if target.is_dir() {
-                        fs::remove_dir_all(&target)
-                    } else {
-                        fs::remove_file(&target)
-                    };
-                    if let Err(err) = remove_result {
-                        summary.failed += 1;
-                        summary.failures.push(Failure {
-                            path: item.clone(),
-                            code: "io_error".to_string(),
-                            message: err.to_string(),
-                        });
-                        on_event(ProgressEvent {
-                            kind: ProgressEventKind::Fail,
-                            name,
-                            index,
-                            total,
-                            code: Some("io_error".to_string()),
-                        });
+                    // MUST-59 (R-37-2): right before touching the existing
+                    // destination item, refuse when the source lies beneath
+                    // it (overwriting would destroy the source) — and when
+                    // identity cannot be established, do not overwrite.
+                    let refusal = overwrite_refusal(&target, item, same_entity_result);
+                    if let Some((code, message)) = refusal {
+                        record_failure(&mut summary, &mut on_event, item, name, index, code, message.to_string());
                         continue;
                     }
+
+                    let mut errors = Vec::new();
+                    overwrite_entry(kind, item, item.is_dir(), &target, &mut errors);
+                    match errors.into_iter().next() {
+                        None => {
+                            summary.ok += 1;
+                            on_event(ProgressEvent {
+                                kind: ProgressEventKind::Done,
+                                name,
+                                index,
+                                total,
+                                code: None,
+                            });
+                        }
+                        Some(first) => {
+                            record_failure(&mut summary, &mut on_event, item, name, index, first.code, first.message);
+                        }
+                    }
+                    continue;
                 }
             }
         }
@@ -441,20 +674,8 @@ fn run_transfer_batch_with_progress(
                     code: None,
                 });
             }
-            Err(message) => {
-                summary.failed += 1;
-                summary.failures.push(Failure {
-                    path: item.clone(),
-                    code: "io_error".to_string(),
-                    message,
-                });
-                on_event(ProgressEvent {
-                    kind: ProgressEventKind::Fail,
-                    name,
-                    index,
-                    total,
-                    code: Some("io_error".to_string()),
-                });
+            Err(item_error) => {
+                record_failure(&mut summary, &mut on_event, item, name, index, item_error.code, item_error.message);
             }
         }
     }
@@ -474,7 +695,7 @@ pub fn copy_batch_with_progress(
     should_cancel: impl FnMut() -> bool,
     on_event: impl FnMut(ProgressEvent),
 ) -> OpSummary {
-    run_transfer_batch_with_progress(TransferKind::Copy, items, destination, resolution, should_cancel, on_event)
+    run_transfer_batch_with_progress(TransferKind::Copy, items, destination, |_| resolution, should_cancel, on_event)
 }
 
 /// R-21/R-23/R-40~R-44: batch move into `destination` — rename first,
@@ -488,7 +709,32 @@ pub fn move_batch_with_progress(
     should_cancel: impl FnMut() -> bool,
     on_event: impl FnMut(ProgressEvent),
 ) -> OpSummary {
-    run_transfer_batch_with_progress(TransferKind::Move, items, destination, resolution, should_cancel, on_event)
+    run_transfer_batch_with_progress(TransferKind::Move, items, destination, |_| resolution, should_cancel, on_event)
+}
+
+/// R-34-2: like `copy_batch_with_progress`, but each top-level item gets its
+/// own resolution from `resolver` (called once per item with the item path
+/// exactly as given in `items`). `fs_ops::commands` builds `resolver` from
+/// the IPC `itemResolutions` map via `resolve_item_resolution`.
+pub fn copy_batch_with_resolver(
+    items: &[PathBuf],
+    destination: &Path,
+    resolver: impl Fn(&Path) -> ConflictResolution,
+    should_cancel: impl FnMut() -> bool,
+    on_event: impl FnMut(ProgressEvent),
+) -> OpSummary {
+    run_transfer_batch_with_progress(TransferKind::Copy, items, destination, resolver, should_cancel, on_event)
+}
+
+/// R-34-2: the move counterpart of `copy_batch_with_resolver`.
+pub fn move_batch_with_resolver(
+    items: &[PathBuf],
+    destination: &Path,
+    resolver: impl Fn(&Path) -> ConflictResolution,
+    should_cancel: impl FnMut() -> bool,
+    on_event: impl FnMut(ProgressEvent),
+) -> OpSummary {
+    run_transfer_batch_with_progress(TransferKind::Move, items, destination, resolver, should_cancel, on_event)
 }
 
 /// R-21: batch copy into `destination` (recursive for directories, R-20).
@@ -500,6 +746,90 @@ pub fn copy_batch(items: &[PathBuf], destination: &Path, resolution: ConflictRes
 /// recursive-copy-then-remove on failure (e.g. a cross-device move).
 pub fn move_batch(items: &[PathBuf], destination: &Path, resolution: ConflictResolution) -> OpSummary {
     move_batch_with_progress(items, destination, resolution, || false, |_| {})
+}
+
+/// R-31-3 / R-37-2 / SPEC-0200-0001 §3.3.13-2. `Overwritable` = ordinary
+/// top-level name conflict; `OverwriteAncestor` = the source lives beneath
+/// the existing destination item (R-37-2) — or its identity could not be
+/// established — so overwrite must not be offered (R-37-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictKind {
+    Overwritable,
+    OverwriteAncestor,
+}
+
+/// One top-level conflict reported by `detect_conflicts` (`path` = the
+/// source item, `name` = its file name).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conflict {
+    pub path: PathBuf,
+    pub name: String,
+    pub kind: ConflictKind,
+}
+
+/// SPEC-0300-0011 R-31-3/R-32/R-37-1/R-37-2, SPEC-0200-0001 §3.3.7/§3.3.13-2/
+/// §3.3.14-2. Side-effect-free detection of TOP-LEVEL name conflicts, in the
+/// order of `items`. The same item (R-25, by canonical identity) is not a
+/// conflict; a source beneath the existing destination item is
+/// `OverwriteAncestor` (which takes precedence over a plain kind mismatch).
+/// Items that do not exist are not reported (the transfer itself reports
+/// `not_found`). Destination problems are reported with the preflight codes.
+pub fn detect_conflicts(items: &[PathBuf], destination: &Path) -> Result<Vec<Conflict>, TransferPreflightError> {
+    if items.is_empty() {
+        return Err(TransferPreflightError::NoItems);
+    }
+    if destination.to_str().is_none() || items.iter().any(|item| item.to_str().is_none()) {
+        return Err(TransferPreflightError::InvalidPath);
+    }
+    if !destination.exists() {
+        return Err(TransferPreflightError::DestinationNotFound);
+    }
+    if !destination.is_dir() {
+        return Err(TransferPreflightError::DestinationNotDir);
+    }
+
+    let mut conflicts = Vec::new();
+    for item in items {
+        let Some(file_name) = item.file_name() else { continue };
+        let target = destination.join(file_name);
+        if !entry_exists(&target) || !entry_exists(item) {
+            continue;
+        }
+        let kind = match same_entity(item, &target) {
+            Some(true) => continue,
+            Some(false) => match is_strictly_within(&target, item) {
+                Some(false) => ConflictKind::Overwritable,
+                // Beneath the target, or undeterminable: never offer overwrite.
+                Some(true) | None => ConflictKind::OverwriteAncestor,
+            },
+            None => ConflictKind::OverwriteAncestor,
+        };
+        conflicts.push(Conflict {
+            path: item.clone(),
+            name: file_name.to_string_lossy().into_owned(),
+            kind,
+        });
+    }
+    Ok(conflicts)
+}
+
+/// R-30-2/R-34-2, SPEC-0200-0001 §3.3.7: copy batch where each top-level
+/// item may have its own resolution (keyed by the exact source path),
+/// falling back to `default_resolution`. Keys that are not among `items` are
+/// ignored.
+pub fn copy_batch_with_item_resolutions(
+    items: &[PathBuf],
+    destination: &Path,
+    default_resolution: ConflictResolution,
+    item_resolutions: &std::collections::HashMap<PathBuf, ConflictResolution>,
+) -> OpSummary {
+    copy_batch_with_resolver(
+        items,
+        destination,
+        |item| item_resolutions.get(item).copied().unwrap_or(default_resolution),
+        || false,
+        |_| {},
+    )
 }
 
 #[cfg(test)]

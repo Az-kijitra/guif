@@ -41,7 +41,7 @@ describe("attachGlobalKeydownListener (SPEC-0300-0010 R-10, AC-01)", () => {
   });
 });
 
-describe("resolveActionForKey (SPEC-0300-0010 §4.2, windows profile)", () => {
+describe("resolveActionForKey (SPEC-0300-0010 第8版 §4.2, single default keymap, R-20-1)", () => {
   it.each([
     ["ArrowUp", {}, "move_up"], // AC-06
     ["ArrowDown", {}, "move_down"], // AC-06
@@ -62,25 +62,34 @@ describe("resolveActionForKey (SPEC-0300-0010 §4.2, windows profile)", () => {
     ["q", { ctrlKey: true }, "exit"], // AC-26
   ] as const)("%s with mods %o resolves to action '%s'", (k, mods, expectedAction) => {
     const event = key(k, mods);
-    expect(resolveActionForKey(event, "windows", {})).toBe(expectedAction);
+    expect(resolveActionForKey(event, {})).toBe(expectedAction);
   });
 
   it("AC-16: Shift+ArrowUp/Down/Left/Right still resolve to the base move_* action", () => {
-    expect(resolveActionForKey(key("ArrowUp", { shiftKey: true }), "windows", {})).toBe("move_up");
-    expect(resolveActionForKey(key("ArrowDown", { shiftKey: true }), "windows", {})).toBe("move_down");
-    expect(resolveActionForKey(key("ArrowLeft", { shiftKey: true }), "windows", {})).toBe("move_left");
-    expect(resolveActionForKey(key("ArrowRight", { shiftKey: true }), "windows", {})).toBe("move_right");
+    expect(resolveActionForKey(key("ArrowUp", { shiftKey: true }), {})).toBe("move_up");
+    expect(resolveActionForKey(key("ArrowDown", { shiftKey: true }), {})).toBe("move_down");
+    expect(resolveActionForKey(key("ArrowLeft", { shiftKey: true }), {})).toBe("move_left");
+    expect(resolveActionForKey(key("ArrowRight", { shiftKey: true }), {})).toBe("move_right");
   });
 });
 
-describe("resolveActionForKey (SPEC-0300-0010 §4.2/§4.1, vim profile, AC-27)", () => {
-  it.each([
-    ["h", {}, "move_left"],
-    ["l", {}, "move_right"],
-    ["k", {}, "move_up"],
-    ["j", {}, "move_down"],
-  ] as const)("vim '%s' resolves to '%s' (ISS-0020/ISS-0031 resolved)", (k, mods, expectedAction) => {
-    expect(resolveActionForKey(key(k, mods), "vim", {})).toBe(expectedAction);
+// AC-55 (SPEC-0300-0010 第8版, ISS-0102/ISS-0103): the former vim keys are not
+// bound by default; movement is by the arrow keys only. (AC-27, which
+// verified the vim keys, was deleted and its number retired.)
+describe("resolveActionForKey AC-55 (H/J/K/L do not move by default, R-20-1)", () => {
+  it.each(["h", "j", "k", "l", "H", "J", "K", "L"])("plain '%s' resolves to no action", (k) => {
+    expect(resolveActionForKey(key(k), {})).toBeNull();
+  });
+
+  it("a stale legacy-profile setting cannot alter resolution: resolveActionForKey takes only (event, customOverrides)", () => {
+    expect(resolveActionForKey.length).toBe(2);
+    expect(resolveActionForKey(key("j"), {})).toBeNull();
+    expect(resolveActionForKey(key("ArrowDown"), {})).toBe("move_down");
+  });
+
+  it("R-30: the custom-override route still works — move_down='J' makes J resolve to move_down (replaces the old vim-default test data)", () => {
+    expect(resolveActionForKey(key("j"), { move_down: "J" })).toBe("move_down");
+    expect(resolveActionForKey(key("k"), { move_up: "K" })).toBe("move_up");
   });
 });
 
@@ -134,7 +143,6 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
       isMenuBarActive: false,
       isTreeFocused: false,
       isSearchInputFocused: false,
-      profile: "windows" as const,
       customOverrides: {},
       onHardcodedShortcut: vi.fn().mockReturnValue(false),
       onExitAction: vi.fn().mockReturnValue(false),
@@ -244,7 +252,6 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
       isMenuBarActive: false,
       isTreeFocused: false,
       isSearchInputFocused: false,
-      profile: "windows" as const,
       customOverrides: {},
       onHardcodedShortcut: vi.fn().mockReturnValue(false),
       onExitAction: vi.fn().mockReturnValue(false),
@@ -326,10 +333,10 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
     expect(ctx.onSearchAction).toHaveBeenCalledWith("query_clear");
   });
 
-  it("AC-123: a key outside the 4 recognized search keys stops the chain WITHOUT being treated as handled, so the <input> keeps it as ordinary text entry (e.g. vim 'j' must not move list focus while typing in the search box)", () => {
+  it("AC-123: a key outside the 4 recognized search keys stops the chain WITHOUT being treated as handled, so the <input> keeps it as ordinary text entry (e.g. a custom move_down='J' must not move list focus while typing 'j' in the search box; the vim profile that used to supply this key is abolished, R-20-1)", () => {
     const ctx = makeContext({
       isSearchInputFocused: true,
-      profile: "vim",
+      customOverrides: { move_down: "J" },
       onListAction: vi.fn().mockReturnValue(true),
     });
     const handled = dispatchKeydown(key("j"), ctx);
@@ -373,5 +380,114 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
     const handled = dispatchKeydown(key("x"), ctx);
     expect(handled).toBe(false);
     expect(ctx.onExitAction).not.toHaveBeenCalled();
+  });
+});
+
+// SPEC-0300-0010 第8版 R-14-3 / R-14-3-1..3 / AC-57 (ISS-0107 案2, 発注者決定
+// 2026-09-26), SPEC-0200-0001 §3.3.14-3: while an overlay (modal or history/
+// jump list, i.e. ctx.isOverlayOpen) is displayed, the keymap-routed `exit`
+// (R-12 priority 2) is NOT evaluated; dispatch is not aborted but proceeds to
+// priority 3 (the overlay handler). Priority 1 (Ctrl+Q / Ctrl+,) is always
+// active. R-12's numbered table is unchanged.
+describe("dispatchKeydown R-14-3 (exit is not evaluated while an overlay is open)", () => {
+  function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      isSettingsOpen: false,
+      isOverlayOpen: false,
+      isMenuBarActive: false,
+      isTreeFocused: false,
+      isSearchInputFocused: false,
+      customOverrides: { exit: "Q" },
+      onHardcodedShortcut: vi.fn().mockReturnValue(false),
+      onExitAction: vi.fn().mockReturnValue(true),
+      onOverlayKey: vi.fn().mockReturnValue(false),
+      onMenuBarKey: vi.fn().mockReturnValue(false),
+      onTreeAction: vi.fn().mockReturnValue(false),
+      onListAction: vi.fn().mockReturnValue(false),
+      onSearchAction: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it("(1) isOverlayOpen=true + custom exit='Q': 'Q' does not call onExitAction and is routed to onOverlayKey (AC-57 (1)(2))", () => {
+    const ctx = makeContext({ isOverlayOpen: true, onOverlayKey: vi.fn().mockReturnValue(false) });
+    const handled = dispatchKeydown(key("q"), ctx);
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
+    expect(ctx.onOverlayKey).toHaveBeenCalledTimes(1);
+    // R-14-3-1: the chain is not aborted before priority 3; the overlay
+    // handler receives the resolved action ("exit") and the event.
+    expect(ctx.onOverlayKey).toHaveBeenCalledWith("exit", expect.objectContaining({ key: "q" }));
+    // Overlay returned false (text-entry key): chain stops, no preventDefault.
+    expect(handled).toBe(false);
+    expect(ctx.onListAction).not.toHaveBeenCalled();
+  });
+
+  it("(1b) R-14-3-1: the overlay handler consuming the key returns true", () => {
+    const ctx = makeContext({ isOverlayOpen: true, onOverlayKey: vi.fn().mockReturnValue(true) });
+    expect(dispatchKeydown(key("q"), ctx)).toBe(true);
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
+  });
+
+  it("(2) isOverlayOpen=false: 'Q' still reaches onExitAction as before (AC-57 (4))", () => {
+    const ctx = makeContext({ isOverlayOpen: false });
+    const handled = dispatchKeydown(key("q"), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onExitAction).toHaveBeenCalledWith("exit");
+    expect(ctx.onOverlayKey).not.toHaveBeenCalled();
+  });
+
+  it("(3) R-14-3-2: Ctrl+Q reaches onHardcodedShortcut even while an overlay is open (AC-57 (3))", () => {
+    const ctx = makeContext({
+      isOverlayOpen: true,
+      onHardcodedShortcut: vi.fn().mockReturnValue(true),
+    });
+    const handled = dispatchKeydown(key("q", { ctrlKey: true }), ctx);
+    expect(handled).toBe(true);
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onOverlayKey).not.toHaveBeenCalled();
+  });
+
+  it("(4) R-14-2 unchanged: isOverlayOpen=false + isSearchInputFocused=true still swallows a custom exit key without calling onExitAction", () => {
+    const ctx = makeContext({ isOverlayOpen: false, isSearchInputFocused: true });
+    const handled = dispatchKeydown(key("q"), ctx);
+    expect(handled).toBe(false);
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+  });
+
+  it("R-14 order: settings open still suppresses everything (exit key and overlay handler both untouched)", () => {
+    const ctx = makeContext({ isSettingsOpen: true, isOverlayOpen: true });
+    expect(dispatchKeydown(key("q"), ctx)).toBe(false);
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
+    expect(ctx.onOverlayKey).not.toHaveBeenCalled();
+  });
+
+  it("a non-exit key while an overlay is open is unaffected (still goes to onOverlayKey with its own action)", () => {
+    const ctx = makeContext({ isOverlayOpen: true, onOverlayKey: vi.fn().mockReturnValue(true) });
+    expect(dispatchKeydown(key("ArrowDown"), ctx)).toBe(true);
+    expect(ctx.onOverlayKey).toHaveBeenCalledWith("move_down", expect.anything());
+  });
+});
+
+// R-42-1 / DispatchContext: the profile field no longer exists (ISS-0105).
+describe("DispatchContext (ISS-0105): no profile input", () => {
+  it("dispatch works with a context that has no profile field and customOverrides only", () => {
+    const ctx = {
+      isSettingsOpen: false,
+      isOverlayOpen: false,
+      isMenuBarActive: false,
+      isTreeFocused: false,
+      isSearchInputFocused: false,
+      customOverrides: {},
+      onHardcodedShortcut: vi.fn().mockReturnValue(false),
+      onExitAction: vi.fn().mockReturnValue(false),
+      onOverlayKey: vi.fn().mockReturnValue(false),
+      onMenuBarKey: vi.fn().mockReturnValue(false),
+      onTreeAction: vi.fn().mockReturnValue(false),
+      onListAction: vi.fn().mockReturnValue(true),
+      onSearchAction: vi.fn(),
+    };
+    expect(dispatchKeydown(key("ArrowDown"), ctx)).toBe(true);
+    expect(ctx.onListAction).toHaveBeenCalledWith("move_down", expect.anything());
   });
 });

@@ -1,5 +1,5 @@
-// SPEC-0300-0010 §4 (R-20~R-27): default keymap data (action id set, both
-// profiles' default bindings). This module owns *data only* — key-event
+// SPEC-0300-0010 §4 (R-20~R-27): default keymap data (action id set, the
+// default binding table). This module owns *data only* — key-event
 // resolution/dispatch logic lives in ./keymap-resolve.ts and
 // ./key-dispatch.ts (SPEC-0200-0001 §4.3: keyboard only owns the
 // key-to-command-id mapping, never the command implementations themselves).
@@ -63,8 +63,10 @@ export const EXCLUDED_ACTION_IDS = [
   "jump_add_url", // SPEC-0300-0013 R-256 / SPEC-0300-0010 5th edition 4.4
 ] as const;
 
-// §4.2: windows profile defaults (all 34 actions).
-export const WINDOWS_DEFAULTS: Record<string, string> = {
+// §4.2 (8th ed., R-20-1): the single default keymap (all 34 actions). The
+// profile concept is abolished; users change bindings only via custom
+// overrides (R-30~R-32).
+export const DEFAULT_KEYMAP: Record<string, string> = {
   move_up: "ArrowUp",
   move_down: "ArrowDown",
   move_left: "ArrowLeft",
@@ -100,68 +102,6 @@ export const WINDOWS_DEFAULTS: Record<string, string> = {
   zip_create: "Ctrl+Alt+Z",
   zip_extract: "Ctrl+Alt+X",
 };
-
-// §4.2/R-22: vim profile defaults (all 34 actions, ISS-0020 resolved).
-export const VIM_DEFAULTS: Record<string, string> = {
-  move_up: "K",
-  move_down: "J",
-  move_left: "H",
-  move_right: "L",
-  page_up: "Ctrl+U",
-  page_down: "Ctrl+D",
-  select_toggle: "Space",
-  select_all: "Ctrl+A",
-  clear_selection: "Escape",
-  open: "Enter",
-  go_parent: "Backspace",
-  exit: "Ctrl+Q",
-  settings: "Ctrl+,",
-  help_keymap: "F1",
-  focus_path: ":",
-  toggle_hidden: "Ctrl+H",
-  toggle_tree: "Ctrl+Shift+B",
-  copy: "Y",
-  cut: "X",
-  paste: "P",
-  delete: "D",
-  rename: "F2",
-  new_file: "Ctrl+N",
-  refresh: "R",
-  search: "/",
-  sort_menu: "S",
-  history_jump_list: "Ctrl+J",
-  jump_add: "Ctrl+Shift+J",
-  new_folder: "Ctrl+Shift+N",
-  history: "Ctrl+Y",
-  toggle_size: "Ctrl+Shift+S",
-  toggle_time: "Ctrl+Shift+T",
-  zip_create: "Z",
-  zip_extract: "Shift+Z",
-};
-
-// R-23: actions whose windows/vim bindings are identical (20 entries).
-export const SAME_ACROSS_PROFILES_ACTION_IDS = [
-  "select_toggle",
-  "select_all",
-  "clear_selection",
-  "open",
-  "go_parent",
-  "exit",
-  "settings",
-  "help_keymap",
-  "toggle_hidden",
-  "toggle_tree",
-  "rename",
-  "new_file",
-  "search",
-  "sort_menu",
-  "history_jump_list",
-  "jump_add",
-  "new_folder",
-  "history",
-  "toggle_size",
-  "toggle_time",
-] as const;
 
 // R-26/§4.2: actions implemented/verified in Phase 1 (SPEC-0300-0009 /
 // SPEC-0300-0010). All other actions are defined but no-op until their

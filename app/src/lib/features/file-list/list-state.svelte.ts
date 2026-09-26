@@ -23,7 +23,7 @@
 
 import { fsListDir, type FsEntry } from "$lib/shared/ipc/fs";
 import { DEFAULT_SORT_STATE, type SortState } from "./sort";
-import { resetListStateOnDirChange, computeGoParentTarget } from "./dir-load";
+import { resetListStateOnDirChange, computeGoParentTarget, reconcileAfterReload } from "./dir-load";
 import {
   selectSingle,
   applySelectToggle,
@@ -75,6 +75,45 @@ export function createFileListState() {
       selected = reset.selected;
       focusedIndex = reset.focusedIndex;
       anchor = reset.anchor;
+      return path;
+    } catch (e) {
+      if (mySequence === loadSequence) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+      return null;
+    } finally {
+      if (mySequence === loadSequence) loading = false;
+    }
+  }
+
+  // SPEC-0200-0001 §3.3.6: re-list the CURRENT path without discarding
+  // selection/focus (unlike loadDirectory, R-72). Shares loadSequence's
+  // outrun guard. Returns the path on success, null on failure/stale. Not a
+  // navigation (R-209): callers must not record a visit.
+  async function reload(opts?: { focusPath?: string; clearSelection?: boolean }): Promise<string | null> {
+    const mySequence = ++loadSequence;
+    const path = currentPath;
+    try {
+      const result = await fsListDir({
+        path,
+        showHidden,
+        sortKey: sort.key,
+        sortOrder: sort.order,
+      });
+      if (mySequence !== loadSequence) return null;
+      const reconciled = reconcileAfterReload({
+        prevEntries: entries,
+        prevSelected: selected,
+        prevFocusedPath: entries[focusedIndex]?.path ?? null,
+        nextEntries: result,
+        focusPath: opts?.focusPath,
+        clearSelection: opts?.clearSelection,
+      });
+      entries = result;
+      selected = reconciled.selected;
+      focusedIndex = reconciled.focusedIndex;
+      if (anchor !== null && !reconciled.selected.has(anchor)) anchor = null;
+      error = null;
       return path;
     } catch (e) {
       if (mySequence === loadSequence) {
@@ -218,6 +257,7 @@ export function createFileListState() {
       return error;
     },
     loadDirectory,
+    reload,
     moveRow,
     moveColumn,
     selectFocused,

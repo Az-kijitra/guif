@@ -67,3 +67,35 @@ export function runConflictSession(items: readonly string[], decide: ConflictDec
 
   return { canceled: false, resolutions };
 }
+
+export type AsyncConflictDecider = (item: string) => Promise<ConflictDecision>;
+
+// Async twin of runConflictSession (SPEC-0200-0001 §3.3.4): a synchronous
+// decider cannot wait for a dialog. Items are asked one at a time, awaiting
+// each answer (R-34-2). A decide rejection propagates to the caller.
+export async function runConflictSessionAsync(
+  items: readonly string[],
+  decide: AsyncConflictDecider,
+): Promise<ConflictSessionResult> {
+  const resolutions: Record<string, "overwrite" | "skip"> = {};
+  let appliedChoice: "overwrite" | "skip" | null = null;
+
+  for (const item of items) {
+    let choice: ConflictChoice;
+    if (appliedChoice !== null) {
+      choice = appliedChoice;
+    } else {
+      const decision = await decide(item);
+      choice = decision.choice;
+      if (choice === "cancel") {
+        return { canceled: true, resolutions: {} };
+      }
+      if (decision.applyToAll) {
+        appliedChoice = choice;
+      }
+    }
+    resolutions[item] = choice;
+  }
+
+  return { canceled: false, resolutions };
+}

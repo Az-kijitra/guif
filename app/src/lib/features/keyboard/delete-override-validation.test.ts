@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { matchesAction, normalizeKeyString, resolveBinding } from "./keymap-resolve";
 import { validateCustomOverride } from "./keymap-validate";
 
-// Spec: SPEC-0300-0010 (keyboard navigation / default keymap detail), 4th
-// edition + addendum 2 (2026-09-23), as referenced by SPEC-0300-0011
+// Spec: SPEC-0300-0010 (keyboard navigation / default keymap detail), 第8版
+// (originally 4th edition + addendum 2, 2026-09-23; updated for ISS-0105:
+// the `profile` input was removed and `profileDefault` renamed
+// `defaultBinding`, R-20-1/R-30), as referenced by SPEC-0300-0011
 // (file operations detail) for the `delete` action's Phase 2 behavior.
 //
 // This file is intentionally *new* (it does not modify the existing,
@@ -19,7 +21,7 @@ import { validateCustomOverride } from "./keymap-validate";
 //   which `./keymap-resolve.ts` already does via `eventKeyToken`).
 // R-18-2 (mirrored in SPEC-0300-0011 R-56-4-2-1): a custom override for the
 //   `delete` action containing a Shift modifier is invalid and must be
-//   rejected (falling back to the profile default), because Shift is
+//   rejected (falling back to the default binding), because Shift is
 //   permanently reserved as the "permanent delete" modifier for `delete`.
 //   AC-53 (the "does the wrong key fire" half) belongs to SPEC-0300-0010;
 //   this suite only exercises the validation function itself.
@@ -32,9 +34,9 @@ describe("normalizeKeyString / matchesAction case-insensitivity (SPEC-0300-0010 
   });
 
   it("R-33-1: a lowercase custom override for 'delete' matches the same keydown event as the uppercase default", () => {
+    // R-33-1 (第6版以降の例示): a custom override such as `sort_menu = "s"`
+    // (lowercase) must match the same physical key as the uppercase form "S".
     const eventForUppercaseD = { key: "D", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
-    // vim profile default for `delete` is "D"; a custom override of "d"
-    // must still match the same physical key.
     expect(matchesAction(eventForUppercaseD, ["d"])).toBe(true);
   });
 
@@ -64,6 +66,19 @@ describe("validateCustomOverride (SPEC-0300-0010 R-18-2, SPEC-0300-0011 R-56-4-2
     expect(validateCustomOverride("delete", "F8")).toBe("F8");
   });
 
+  // SPEC-0200-0001 §3.3.8-(d) (MIN-1, ISS-0052 residual): the Shift check is
+  // case-insensitive on the modifier token. Otherwise "shift+F8" slips past
+  // the check while normalizeKeyString silently drops the unknown token,
+  // yielding a plain "F8" binding that is not what the user wrote.
+  it("§3.3.8-d: rejects lowercase 'shift+F8' (modifier token compared case-insensitively)", () => {
+    expect(validateCustomOverride("delete", "shift+F8")).toBeNull();
+  });
+
+  it("§3.3.8-d: rejects uppercase 'SHIFT+F8' and mixed-case 'Ctrl+sHiFt+F8'", () => {
+    expect(validateCustomOverride("delete", "SHIFT+F8")).toBeNull();
+    expect(validateCustomOverride("delete", "Ctrl+sHiFt+F8")).toBeNull();
+  });
+
   it("does not restrict Shift on any action other than 'delete'", () => {
     expect(validateCustomOverride("sort_menu", "Shift+S")).toBe("Shift+S");
   });
@@ -73,33 +88,39 @@ describe("resolveBinding wires validateCustomOverride in (integration regression
   // code-reviewer found that `validateCustomOverride` was implemented and
   // unit-tested in isolation but never called from `resolveBinding`, so a
   // Shift-containing custom override for `delete` was accepted as-is
-  // instead of falling back to the profile default (ISS-0048).
-  it("falls back to the profile default when the custom override for 'delete' contains Shift", () => {
+  // instead of falling back to the default binding (ISS-0048).
+  it("falls back to the default binding when the custom override for 'delete' contains Shift", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { delete: "Shift+F8" },
       actionId: "delete",
-      profileDefault: "Delete",
+      defaultBinding: "Delete",
     });
     expect(bindings).toEqual(["Delete"]);
   });
 
   it("accepts a Shift-free custom override for 'delete'", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { delete: "F8" },
       actionId: "delete",
-      profileDefault: "Delete",
+      defaultBinding: "Delete",
     });
     expect(bindings).toEqual(["F8"]);
   });
 
+  it("§3.3.8-d: falls back to the default binding for a lowercase 'shift+F8' delete override too", () => {
+    const bindings = resolveBinding({
+      customOverrides: { delete: "shift+F8" },
+      actionId: "delete",
+      defaultBinding: "Delete",
+    });
+    expect(bindings).toEqual(["Delete"]);
+  });
+
   it("does not apply the delete-only Shift restriction to other actions", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { sort_menu: "Shift+S" },
       actionId: "sort_menu",
-      profileDefault: "S",
+      defaultBinding: "S",
     });
     expect(bindings).toEqual(["Shift+S"]);
   });

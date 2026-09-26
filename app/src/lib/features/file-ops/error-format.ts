@@ -17,6 +17,7 @@ const ERROR_TRANSLATIONS: Record<string, string> = {
   destination_not_found: "宛先フォルダが見つかりません。",
   destination_not_dir: "宛先がフォルダではありません。",
   destination_inside_source: "宛先がコピー元の内部にあります。",
+  overwrite_ancestor: "コピー先の上位フォルダを上書きすることはできません。",
   permission_denied: "権限がないため操作を実行できませんでした。",
   conflict: "同名の項目がすでに存在するため処理を中止しました。",
   io_error: "入出力エラーが発生しました。",

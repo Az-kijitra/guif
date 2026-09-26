@@ -5,10 +5,8 @@
 // into the dispatch context by the caller (R-17: no central action
 // dispatcher/store).
 
-import { ACTION_IDS, VIM_DEFAULTS, WINDOWS_DEFAULTS } from "./keymap-defaults";
+import { ACTION_IDS, DEFAULT_KEYMAP } from "./keymap-defaults";
 import { matchesAction, resolveBinding, type KeydownLikeEvent } from "./keymap-resolve";
-
-export type Profile = "windows" | "vim";
 
 // R-10: a single capture-phase `keydown` listener on the given target
 // (normally `window`), per R-10/AC-01. Individual components never register
@@ -21,20 +19,18 @@ export function attachGlobalKeydownListener(
 }
 
 // §4.2: resolve which action id (if any) a keydown event maps to, honoring
-// the given profile and custom overrides (R-30~R-34 via keymap-resolve.ts).
+// the custom overrides on top of the single default keymap (R-20-1) (R-30~R-34 via keymap-resolve.ts).
 export function resolveActionForKey(
   event: KeydownLikeEvent,
-  profile: Profile,
   customOverrides: Record<string, string>,
 ): string | null {
-  const defaults = profile === "vim" ? VIM_DEFAULTS : WINDOWS_DEFAULTS;
 
   for (const actionId of ACTION_IDS) {
-    const profileDefault = defaults[actionId];
-    if (profileDefault === undefined) {
+    const defaultBinding = DEFAULT_KEYMAP[actionId];
+    if (defaultBinding === undefined) {
       continue;
     }
-    const bindings = resolveBinding({ profile, customOverrides, actionId, profileDefault });
+    const bindings = resolveBinding({ customOverrides, actionId, defaultBinding });
     if (bindings.length === 0) {
       continue;
     }
@@ -88,7 +84,6 @@ export interface DispatchContext {
   isSearchInputFocused: boolean;
   // true while the search bar is open, regardless of where focus is.
   isSearchActive?: boolean;
-  profile: Profile;
   customOverrides: Record<string, string>;
   onHardcodedShortcut: (action: "exit" | "settings") => boolean;
   onExitAction: (action: string) => boolean;
@@ -173,9 +168,12 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
     return true;
   }
 
-  const action = resolveActionForKey(event, ctx.profile, ctx.customOverrides);
+  const action = resolveActionForKey(event, ctx.customOverrides);
 
-  if (action === "exit") {
+  // R-14-3: while an overlay is open the keymap-routed `exit` is not
+  // evaluated; dispatch falls through to the overlay handler. Ctrl+Q
+  // (priority 1 above) stays always active.
+  if (action === "exit" && !ctx.isOverlayOpen) {
     if (ctx.onExitAction(action)) {
       return true;
     }

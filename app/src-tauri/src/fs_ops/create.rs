@@ -25,8 +25,19 @@ pub fn create_entry(parent: &Path, name: &str, kind: &str) -> Result<(), MutateP
     let target = parent.join(name.trim());
     match kind {
         "folder" => fs::create_dir(&target).map_err(preflight::map_io_error),
-        _ => fs::File::create(&target).map(|_| ()).map_err(preflight::map_io_error),
+        _ => create_new_file(&target),
     }
+}
+
+/// Creates an empty file only if nothing exists at `target` (`create_new`), so
+/// an entry that appeared after preflight is never truncated (TOCTOU-safe).
+pub(crate) fn create_new_file(target: &Path) -> Result<(), MutatePreflightError> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+        .map(|_| ())
+        .map_err(preflight::map_io_error)
 }
 
 #[cfg(test)]

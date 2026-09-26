@@ -63,3 +63,46 @@ export function resolveOpenTarget(entry: { type: "dir" | "file"; path: string })
   }
   return { action: "noop" };
 }
+
+export interface ReconcileInput {
+  prevEntries: readonly { path: string }[];
+  prevSelected: ReadonlySet<string>;
+  prevFocusedPath: string | null;
+  nextEntries: readonly { path: string }[];
+  focusPath?: string;
+  clearSelection?: boolean;
+}
+
+export interface ReconcileResult {
+  selected: Set<string>;
+  focusedIndex: number;
+}
+
+// SPEC-0200-0001 §3.3.6: state adjustment after a *reload* (not a directory
+// change, R-72): the selection is limited to paths that still exist (or
+// emptied by clearSelection, MUST-60); focus = focusPath, else the previous
+// focused path, else the previous index clamped into range.
+export function reconcileAfterReload(input: ReconcileInput): ReconcileResult {
+  const { prevEntries, prevSelected, prevFocusedPath, nextEntries } = input;
+  const nextPaths = new Set(nextEntries.map((e) => e.path));
+
+  const selected = new Set<string>();
+  if (input.clearSelection !== true) {
+    for (const path of prevSelected) {
+      if (nextPaths.has(path)) selected.add(path);
+    }
+  }
+
+  if (nextEntries.length === 0) return { selected, focusedIndex: 0 };
+
+  const indexOf = (path: string | null | undefined): number =>
+    path === null || path === undefined ? -1 : nextEntries.findIndex((e) => e.path === path);
+
+  let focusedIndex = indexOf(input.focusPath);
+  if (focusedIndex < 0) focusedIndex = indexOf(prevFocusedPath);
+  if (focusedIndex < 0) {
+    const prevIndex = prevFocusedPath === null ? 0 : Math.max(prevEntries.findIndex((e) => e.path === prevFocusedPath), 0);
+    focusedIndex = Math.min(prevIndex, nextEntries.length - 1);
+  }
+  return { selected, focusedIndex };
+}

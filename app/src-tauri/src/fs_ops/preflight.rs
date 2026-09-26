@@ -23,6 +23,7 @@
 
 use std::path::{Path, PathBuf};
 
+use super::identity::{is_strictly_within, same_entity};
 use super::name_validation::{self, NameError};
 
 /// R-24: preflight rejection codes for a copy/move batch.
@@ -75,12 +76,22 @@ pub fn preflight_transfer(items: &[PathBuf], destination: &Path) -> Result<(), T
     // reported only `NotFound` and let the dangerous item through
     // untouched). Scanning all items for the structural hazards first closes
     // that gap regardless of item order.
+    //
+    // MUST-59 / R-37-1 (SPEC-0200-0001 §3.3.13-2): both structural checks use
+    // the canonical identity (`identity`), not string comparison, so letter
+    // case, junctions/symlinks and `\\?\` spellings cannot defeat them. Only
+    // when identity cannot be determined at all does it fall back to the
+    // string comparison (the pre-existing behavior).
     for item in items {
-        if item == destination {
+        let same = same_entity(item, destination).unwrap_or(item == destination);
+        if same {
             return Err(TransferPreflightError::SamePath);
         }
-        if item.is_dir() && destination.starts_with(item) {
-            return Err(TransferPreflightError::DestinationInsideSource);
+        if item.is_dir() {
+            let inside = is_strictly_within(item, destination).unwrap_or_else(|| destination.starts_with(item));
+            if inside {
+                return Err(TransferPreflightError::DestinationInsideSource);
+            }
         }
     }
 
@@ -135,7 +146,12 @@ pub fn preflight_rename(path: &Path, new_name: &str) -> Result<(), MutatePreflig
     let parent = path.parent().ok_or(MutatePreflightError::ParentNotFound)?;
     let candidate = parent.join(new_name.trim());
     if candidate.exists() {
-        return Err(MutatePreflightError::AlreadyExists);
+        // A case-only rename (`a.txt` -> `A.txt`) resolves to the entry itself
+        // on case-insensitive filesystems: that is not a conflict.
+        let is_self = candidate.file_name() != path.file_name() && same_entity(path, &candidate) == Some(true);
+        if !is_self {
+            return Err(MutatePreflightError::AlreadyExists);
+        }
     }
 
     Ok(())

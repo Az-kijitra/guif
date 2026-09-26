@@ -7,6 +7,15 @@
 | 2026-09-23 | 未採番(SPEC-0300-0011) | PASS(フロント・バック双方) | 以下「## 2026-09-23 MVP Phase 2」セクション参照 | unit-test-writer → code-generator → code-reviewer(4回) → オーケストレーター(blocker修正・回帰テスト追加) → 最終判定「PR作成可」 |
 | 2026-09-24 | 未採番(SPEC-0300-0012) | PASS(フロントのみ。Rust変更なし) | 以下「## 2026-09-24 MVP Phase 3」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(IME/修飾キー/空選択の修正・回帰テスト追加) → 判定「PR作成可」 |
 | 2026-09-26 | 未採番(SPEC-0300-0013) | PASS(フロント・バック双方) | 以下「## 2026-09-26 MVP Phase 4」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(flush並行呼び出しの修正・回帰テスト、ヘッドレスブラウザでの動作確認) → 判定「PR作成可」 |
+| 2026-09-27 | 未採番(SPEC-0300-0011 第4版 画面配線 + ISS-0105 vim削除) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 2 画面配線」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行) → code-reviewer → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
+
+## 2026-09-27 Phase 2 画面配線(SPEC-0300-0011 第4版)+ ISS-0105 テスト実行結果
+
+- `cd app && npx vitest run`: 42ファイル/787件全成功。`cargo test --lib`: 187件全成功。`npx tsc --noEmit`エラー0、`npx vite build`成功。
+- 検出・修正した主な問題: (設計監査で)コピー/移動がメインスレッドで動き進捗・キャンセルが機能しない件→`#[tauri::command(async)]`、上書き選択でコピー元自身を削除しうる件→canonicalize同一性判定・祖先拒否(`overwrite_ancestor`)、`fs_ops_*`がTauri ACLに未登録で画面から全て拒否される件→3者(generate_handler/build.rs/capabilities)登録+整合テスト、検索で非表示の項目が操作対象になる件→表示中のみ。(レビューで)`Reject`時に祖先の失敗理由が出ない件、`create`の既存ファイル切り詰め(TOCTOU)→`create_new`、大文字小文字のみのrename不可、移動フォールバックの競合迂回、cut部分失敗時のクリップボード、paste失敗時の再読込。
+- 動作確認(Tauri IPCモックのヘッドレスEdge): Deleteで確認ダイアログ(既定フォーカス=キャンセル、背景inert)→Escapeで閉じて一覧へフォーカス復帰・削除IPC未呼出、Ctrl+C→Ctrl+Vで衝突ダイアログ(フォルダはマージの文言、既定=キャンセル)、F2で名前入力欄にフォーカス、Tabでボタン移動→Enterで削除実行(ごみ箱)。
+- 未実施: 実Tauriでの手動確認(`tests/manual/phase2-file-ops-checklist.md`。実ファイルのコピー/移動/削除/上書きマージ、進捗・キャンセル、実ごみ箱)。OSクリップボード連携(R-15〜R-18、AC-04〜06)はGAP(発注者決定で次段階)。
+- 残課題(非blocker): code-reviewer minor 3,4,7,8,9,10,12,13,14,15(reloadの進行中ナビ破棄、Ctrl+Q実行中の中断、CancelRegistryの先置きリーク等)。
 
 ## 2026-09-26 MVP Phase 4(SPEC-0300-0013 ジャンプリスト・訪問履歴・検索履歴永続化) テスト実行結果
 

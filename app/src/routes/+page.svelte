@@ -1,27 +1,14 @@
 <script lang="ts">
-  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2: composition layer only —
-  // no state, no business logic of its own beyond decision-free DOM-focus
-  // sequencing, §3.1.5). It wires three features together:
-  // - features/file-list/list-state.svelte.ts owns the directory listing,
-  //   selection and focus state and exposes action functions.
-  // - features/search/search-state.svelte.ts owns the search bar's UI state
-  //   (active/query/regexMode/history, SPEC-0300-0012 §3.1.2).
-  // - features/keyboard/key-dispatch.ts owns "which key maps to which
-  //   action id"; this file only forwards resolved action ids to the
-  //   owning feature's own action functions (§4.3: keyboard never
-  //   implements the actions themselves).
-  //
-  // `filteredEntries` (SPEC-0300-0012 R-115~R-118) is computed here as a
-  // `$derived` from both features' public values, calling
-  // features/search/matching.ts's pure `computeFilteredEntries` — this is
-  // the only feature-to-feature bridge (§3.1.2 path ②; neither feature
-  // directly imports the other, R-129/AC-128).
-  import { onMount, onDestroy, tick } from "svelte";
+  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2): composition layer only —
+  // it instantiates/injects the features' state and controllers and renders
+  // them; all decision logic lives in features/ and routes/*-wiring.ts.
+  // `filteredEntries` (SPEC-0300-0012 R-115~R-118) is the sole feature-to-
+  // feature bridge (§3.1.2 path 2; R-129/AC-128).
+  import { onMount, onDestroy, tick, untrack } from "svelte";
   import {
     attachGlobalKeydownListener,
     dispatchKeydown,
     type DispatchContext,
-    type SearchAction,
   } from "$lib/features/keyboard/key-dispatch";
   import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
@@ -33,6 +20,10 @@
   import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
   import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
   import NavigationHistoryList from "$lib/features/navigation-history/NavigationHistoryList.svelte";
+  import { createFileOpsController } from "$lib/features/file-ops/file-ops-controller";
+  import { createInternalClipboard } from "$lib/features/file-ops/clipboard-port";
+  import { modalHost } from "$lib/shared/state/modal-host.svelte";
+  import ModalHost from "./_components/modal/ModalHost.svelte";
   import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
   import { statusMessage } from "$lib/shared/state/status-message.svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -43,22 +34,28 @@
     createOverlayController,
     loadInitialDirectory,
   } from "./navigation-wiring";
+  import { createListActionHandler, createFileOpsContext } from "./list-action-wiring";
+  import { createSearchActionHandler } from "./search-wiring";
+  import { fileOpsIpc } from "./file-ops-ipc";
+  import {
+    computeDispatchOverlayFlags,
+    createModalFocusController,
+    createModalKeyHandler,
+    syncHistoryWithModal,
+  } from "./overlay-wiring";
 
   let containerEl: HTMLDivElement | undefined = $state();
   let containerWidth = $state(0);
   let containerHeight = $state(0);
-  // §3.1.5 (MUST-39): a DOM element reference exposed by <SearchBar>, used
-  // only to sequence `.focus()` calls — not a domain state value (SHOULD-54).
+  // DOM references used only to sequence `.focus()` calls (§3.1.5, §3.2.9-1,
+  // §3.3.2) — not domain state.
   let searchInputEl: HTMLInputElement | undefined = $state();
-  // §3.2.9-1 (MUST-45): the history list listbox element, same purpose.
   let historyListEl: HTMLDivElement | undefined = $state();
+  let dialogEl: HTMLDivElement | undefined = $state();
 
   let layout = $derived(fileListState.layout(containerWidth || 800, containerHeight || 400));
 
-  // SPEC-0300-0012 §3.1.2: the sole feature-to-feature bridge. Reads both
-  // features' public values and delegates the actual matching algorithm to
-  // features/search/matching.ts's pure function (R-116: recomputes whenever
-  // entries/active/query/regexMode change, via Svelte reactivity).
+  // R-116: recomputed via Svelte reactivity (matching.ts is pure).
   let filterResult = $derived(
     computeFilteredEntries(fileListState.entries, {
       active: searchState.active,
@@ -92,10 +89,9 @@
     nextTick: tick,
     navigate: (path) => void afterUserNavigation(fileListState.loadDirectory(path)),
   });
-  const { closeOverlayList, activateSearch, openHistoryList } = overlay;
+  const { activateSearch, openHistoryList } = overlay;
 
-  // §3.2.6 (MUST-52): both exit routes (hardcoded Ctrl+Q and a keymap-bound
-  // "exit") converge here; onCloseRequested performs the flush.
+  // §3.2.6 (MUST-52): onCloseRequested performs the flush.
   function requestAppExit(): void {
     try {
       getCurrentWindow()
@@ -104,6 +100,13 @@
     } catch {
       // Not running inside Tauri (plain browser dev): nothing to close.
     }
+  }
+
+  // Both exit routes (hardcoded Ctrl+Q and a keymap-bound "exit") converge here.
+  function exitOnly(action: string): boolean {
+    if (action !== "exit") return false;
+    requestAppExit();
+    return true;
   }
 
   function focusedPath(): string {
@@ -115,51 +118,66 @@
     return path !== "" && filteredEntries.some((e) => e.path === path);
   }
 
-  // R-105/R-105-1/R-105-2, R-107/R-107-1, R-109-2-1 (SPEC-0200-0001 §3.1.5):
-  // the 4 search-bar actions resolved by key-dispatch's R-14-2 guard (or, in
-  // the future, non-keyboard triggers) land here. Only DOM-focus sequencing
-  // lives in this file; all decision logic (which real index to land on,
-  // whether the bar stays open) is delegated to the owning features' pure
-  // functions/state methods.
-  function handleSearchAction(action: SearchAction): void {
-    switch (action) {
-      case "cancel":
-        // R-108/R-106 #1,#2: Escape / Clear button.
-        searchState.cancel();
-        // R-107/R-107-1: explicitly restore focus to the file list.
-        containerEl?.focus();
-        break;
-      case "confirm": {
-        // R-109-1/R-109-2/R-106 #3: Enter / Apply.
-        searchState.confirm();
-        if (!searchState.active) {
-          // R-109-1: empty (trimmed) query closed the bar; restore focus to
-          // the file list (R-107).
-          containerEl?.focus();
-        } else {
-          // R-109-2-1: move focus into the list at the resolved real index,
-          // if any (rule 3: filteredEntries empty -> leave focus in the
-          // search input).
-          const resolved = resolveFocusIndexForVisibleSet(
-            fileListState.entries,
-            filteredEntries,
-            fileListState.focusedIndex,
-          );
-          if (resolved !== null) {
-            fileListState.focusIndex(resolved);
-            containerEl?.focus();
-          }
-        }
-        break;
-      }
-      case "history_prev":
-        searchState.historyPrev();
-        break;
-      case "query_clear":
-        searchState.queryClear();
-        break;
-    }
-  }
+  // §3.3.5: the search-bar action switch lives in search-wiring.ts (R-105~R-109).
+  const handleSearchAction = createSearchActionHandler({
+    search: searchState,
+    focusContainer: () => containerEl?.focus(),
+    entries: () => fileListState.entries,
+    filteredEntries: () => filteredEntries,
+    focusedIndex: () => fileListState.focusedIndex,
+    resolveFocusIndex: resolveFocusIndexForVisibleSet,
+    focusIndex: (index) => fileListState.focusIndex(index),
+  });
+
+  // Phase 2 (SPEC-0300-0011): screen-level file operations. Operation targets
+  // are limited to the displayed entries (MUST-61); reloads after an
+  // operation are not navigation, so no visit is recorded (R-208/R-209).
+  const fileOps = createFileOpsController({
+    ipc: fileOpsIpc,
+    modal: modalHost,
+    status: statusMessage,
+    clipboard: createInternalClipboard(),
+    context: createFileOpsContext({
+      currentPath: () => fileListState.currentPath,
+      entries: () => fileListState.entries,
+      filteredEntries: () => filteredEntries,
+      selected: () => fileListState.selected,
+      focusedPath: () => focusedPath(),
+    }),
+    reload: (opts) => fileListState.reload(opts),
+  });
+
+  const onListAction = createListActionHandler({
+    fileList: fileListState,
+    filteredEntries: () => filteredEntries,
+    rowsPerColumn: () => layout.rows,
+    afterUserNavigation,
+    activateSearch,
+    openHistoryList,
+    addJump: (path) => navigationHistoryState.addJump(path),
+    currentPath: () => fileListState.currentPath,
+    fileOps,
+  });
+
+  // §3.3.2: modal keys (Escape/Enter/Tab...) are fixed, keymap-independent.
+  const modalFocus = createModalFocusController({
+    getDialogEl: () => dialogEl,
+    focusContainer: () => containerEl?.focus(),
+    nextTick: tick,
+    getActiveElement: () => document.activeElement,
+  });
+  const handleModalKey = createModalKeyHandler({ modal: modalHost, focus: modalFocus });
+
+  // §3.3.13-6: focus control runs in $effect (after the DOM update, so the
+  // background is no longer inert when the container is refocused).
+  $effect(() => {
+    const topId = modalHost.topId;
+    untrack(() => void modalFocus.onTopIdChange(topId));
+  });
+  // §3.3.2 exclusion invariant (SHOULD-85).
+  $effect(() => {
+    syncHistoryWithModal({ modalOpen: modalHost.isOpen, history: navigationHistoryState });
+  });
 
   onMount(() => {
     void bootstrap();
@@ -184,86 +202,28 @@
 
       const ctx: DispatchContext = {
         isSettingsOpen: false,
-        isOverlayOpen: navigationHistoryState.isOpen,
         isMenuBarActive: false,
         isTreeFocused: false,
-        isSearchInputFocused: searchState.inputFocused,
-        isSearchActive: searchState.active,
-        profile: "windows",
+        // §3.3.2: modal + history list = overlay; search flags masked while a modal is shown.
+        ...computeDispatchOverlayFlags({
+          modalOpen: modalHost.isOpen,
+          historyOpen: navigationHistoryState.isOpen,
+          searchActive: searchState.active,
+          searchInputFocused: searchState.inputFocused,
+        }),
         customOverrides: {},
-        onHardcodedShortcut: (action) => {
-          if (action === "exit") {
-            requestAppExit();
-            return true;
-          }
-          return false;
-        },
-        onExitAction: (action) => {
-          if (action === "exit") {
-            requestAppExit();
-            return true;
-          }
-          return false;
-        },
+        onHardcodedShortcut: exitOnly,
+        onExitAction: exitOnly,
         // §3.2.8: the history/jump list rides on the existing overlay slot.
         onOverlayKey: (action, overlayEvent) => {
+          if (modalHost.isOpen) return handleModalKey(overlayEvent);
           if (!navigationHistoryState.isOpen) return false;
           return overlay.handleIntent(resolveListKeyIntent(overlayEvent, action));
         },
         onMenuBarKey: () => false,
         onTreeAction: () => false,
+        onListAction,
         onSearchAction: handleSearchAction,
-        onListAction: (action) => {
-          if (action === null) return false;
-          switch (action) {
-            case "move_up":
-              fileListState.moveRow(filteredEntries, "up");
-              return true;
-            case "move_down":
-              fileListState.moveRow(filteredEntries, "down");
-              return true;
-            case "move_left":
-              fileListState.moveColumn(filteredEntries, "left", Math.max(layout.rows, 1));
-              return true;
-            case "move_right":
-              fileListState.moveColumn(filteredEntries, "right", Math.max(layout.rows, 1));
-              return true;
-            case "open":
-              void afterUserNavigation(fileListState.openFocused());
-              return true;
-            case "go_parent":
-              void afterUserNavigation(fileListState.goParent());
-              return true;
-            case "select_toggle":
-              fileListState.toggleFocused(filteredEntries);
-              return true;
-            case "select_all":
-              // R-123/SPEC-0300-0009 R-55: select_all targets the visible
-              // (filtered) entries only.
-              fileListState.selectAll(filteredEntries);
-              return true;
-            case "search":
-              // R-105/R-105-1/R-105-2: activate (or re-affirm) the search
-              // bar and move DOM focus into its <input> once it has
-              // rendered.
-              activateSearch();
-              return true;
-            // R-222/R-223: no entries.length guards here on purpose.
-            case "history":
-              openHistoryList("history");
-              return true;
-            case "history_jump_list":
-              openHistoryList("jump");
-              return true;
-            case "jump_add":
-              // R-212-1: nothing to register while the current directory is
-              // undetermined.
-              if (fileListState.currentPath) navigationHistoryState.addJump(fileListState.currentPath);
-              return true;
-            default:
-              return false;
-          }
-        },
       };
 
       const handled = dispatchKeydown(keydownLike, ctx);
@@ -302,15 +262,15 @@
   });
 </script>
 
-<main>
+<!-- §3.3.2: the background is inert while a modal is shown; <ModalHost> is
+     rendered outside <main>. -->
+<main inert={modalHost.isOpen}>
   <h1>ReflexFiles Successor — Phase 1</h1>
 
   <p class="current-path">Current directory: {fileListState.currentPath}</p>
 
-  <!-- R-104 (2nd ed.) / R-216: the search bar and the history/jump list share
-       one overlay region directly BELOW the path bar (the current-path line
-       stands in for the path bar in this slice). They are mutually exclusive
-       (§3.2.9-1). -->
+  <!-- R-104/R-216: search bar and history/jump list share one region below
+       the path bar; mutually exclusive (§3.2.9-1). -->
   {#if searchState.active}
     <SearchBar
       bind:inputEl={searchInputEl}
@@ -386,6 +346,14 @@
     {/each}
   </div>
 </main>
+
+<ModalHost
+  top={modalHost.top}
+  bind:dialogEl
+  dispatch={(intent) => modalHost.dispatch(intent)}
+  setFieldValue={(id, value) => modalHost.setFieldValue(id, value)}
+  setChecked={(checked) => modalHost.setChecked(checked)}
+/>
 
 <style>
   main {

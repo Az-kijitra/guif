@@ -3,15 +3,15 @@
 //!
 //! ```ignore
 //! pub fn rename_entry(path: &Path, new_name: &str)
-//!     -> Result<(), super::preflight::MutatePreflightError>;
+//!     -> Result<PathBuf, super::preflight::MutatePreflightError>;
 //! ```
 //!
-//! R-64: this command takes `(path, new_name)` and reports success/failure
-//! only (not a batch result — renaming is always a single-entry operation,
+//! R-64: this command takes `(path, new_name)` and returns the new full path (SHOULD-80) or the failure
+//! (not a batch result — renaming is always a single-entry operation,
 //! R-12).
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::preflight::{self, MutatePreflightError};
 
@@ -19,12 +19,13 @@ use super::preflight::{self, MutatePreflightError};
 /// Delegates all validation (empty/forbidden-character/already_exists) to
 /// `preflight::preflight_rename` (AC-66: shared identically with create) —
 /// on any rejection, the original entry is left completely untouched.
-pub fn rename_entry(path: &Path, new_name: &str) -> Result<(), MutatePreflightError> {
+pub fn rename_entry(path: &Path, new_name: &str) -> Result<PathBuf, MutatePreflightError> {
     preflight::preflight_rename(path, new_name)?;
 
     let parent = path.parent().ok_or(MutatePreflightError::ParentNotFound)?;
     let target = parent.join(new_name.trim());
-    fs::rename(path, &target).map_err(preflight::map_io_error)
+    fs::rename(path, &target).map_err(preflight::map_io_error)?;
+    Ok(target)
 }
 
 #[cfg(test)]

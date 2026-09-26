@@ -4,7 +4,7 @@ import { matchesAction, normalizeKeyString, resolveBinding } from "./keymap-reso
 // Spec: SPEC-0300-0010 (keyboard navigation / default keymap detail) §5
 // Module under test (not yet implemented): ./keymap-resolve.ts
 //
-// R-30: custom override (input_keymap_custom) takes precedence over the profile default
+// R-30: custom override (input_keymap_custom) takes precedence over the default binding
 // R-31: an empty-string custom override disables the action
 // R-32: a single action may be bound to multiple comma-separated keys
 // R-33: modifier order is normalized to Ctrl -> Alt -> Shift -> Meta, then the key
@@ -27,42 +27,38 @@ describe("normalizeKeyString (SPEC-0300-0010 R-33, AC-31)", () => {
 });
 
 describe("resolveBinding (SPEC-0300-0010 R-30, R-31, R-32)", () => {
-  it("AC-28: a custom override takes precedence over the profile default", () => {
+  it("AC-28: a custom override takes precedence over the default binding", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { toggle_hidden: "Ctrl+Alt+H" },
       actionId: "toggle_hidden",
-      profileDefault: "Ctrl+H",
+      defaultBinding: "Ctrl+H",
     });
     expect(bindings).toEqual(["Ctrl+Alt+H"]);
   });
 
-  it("falls back to the profile default when no custom override exists", () => {
+  it("falls back to the default binding when no custom override exists", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: {},
       actionId: "toggle_hidden",
-      profileDefault: "Ctrl+H",
+      defaultBinding: "Ctrl+H",
     });
     expect(bindings).toEqual(["Ctrl+H"]);
   });
 
   it("AC-29: an empty-string custom override disables the action (no bindings)", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { exit: "" },
       actionId: "exit",
-      profileDefault: "Ctrl+Q",
+      defaultBinding: "Ctrl+Q",
     });
     expect(bindings).toEqual([]);
   });
 
   it("AC-30: a comma-separated custom override resolves to multiple usable bindings", () => {
     const bindings = resolveBinding({
-      profile: "windows",
       customOverrides: { sort_menu: "S,Ctrl+Alt+S" },
       actionId: "sort_menu",
-      profileDefault: "S",
+      defaultBinding: "S",
     });
     expect(bindings).toEqual(["S", "Ctrl+Alt+S"]);
   });

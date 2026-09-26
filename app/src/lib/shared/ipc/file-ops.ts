@@ -67,13 +67,39 @@ export function createFileOpsOperationId(): string {
   return crypto.randomUUID();
 }
 
+// R-34/R-34-2: per-item decisions keyed by SOURCE path. "reject" fails the item. Items without an
+// entry fall back to `resolution` (the backend default is "reject").
+export type FileOpsItemResolutions = Record<string, FileOpsConflictResolution>;
+
+// Mirrors fs_ops/commands.rs::ConflictDto (camelCase on the wire).
+// R-31-2: only top-level conflicts are reported. `path` is the SOURCE item's
+// path, `name` the conflicting name at the destination.
+export interface FileOpsConflict {
+  path: string;
+  name: string;
+  kind?: "overwritable" | "overwrite_ancestor";
+}
+
+// R-32/R-32-1: conflict detection is decided by the backend (filesystem
+// existence), never by the frontend.
+export function fsOpsDetectConflicts(items: string[], destination: string): Promise<FileOpsConflict[]> {
+  return invoke<FileOpsConflict[]>("fs_ops_detect_conflicts", { items, destination });
+}
+
 export function fsOpsCopy(
   operationId: string,
   items: string[],
   destination: string,
   resolution: FileOpsConflictResolution = "reject",
+  itemResolutions?: FileOpsItemResolutions,
 ): Promise<FileOpsSummary> {
-  return invoke<FileOpsSummary>("fs_ops_copy", { operationId, items, destination, resolution });
+  return invoke<FileOpsSummary>("fs_ops_copy", {
+    operationId,
+    items,
+    destination,
+    resolution,
+    ...(itemResolutions !== undefined ? { itemResolutions } : {}),
+  });
 }
 
 export function fsOpsMove(
@@ -81,8 +107,15 @@ export function fsOpsMove(
   items: string[],
   destination: string,
   resolution: FileOpsConflictResolution = "reject",
+  itemResolutions?: FileOpsItemResolutions,
 ): Promise<FileOpsSummary> {
-  return invoke<FileOpsSummary>("fs_ops_move", { operationId, items, destination, resolution });
+  return invoke<FileOpsSummary>("fs_ops_move", {
+    operationId,
+    items,
+    destination,
+    resolution,
+    ...(itemResolutions !== undefined ? { itemResolutions } : {}),
+  });
 }
 
 // R-40/R-41: subscribe to progress events for one specific copy/move
@@ -115,8 +148,9 @@ export function fsOpsDeletePermanently(paths: string[]): Promise<FileOpsSummary>
   return invoke<FileOpsSummary>("fs_ops_delete_permanently", { paths });
 }
 
-export function fsOpsRename(path: string, newName: string): Promise<void> {
-  return invoke<void>("fs_ops_rename", { path, newName });
+// SHOULD-80: resolves with the new FULL path so the caller can move focus.
+export function fsOpsRename(path: string, newName: string): Promise<string> {
+  return invoke<string>("fs_ops_rename", { path, newName });
 }
 
 export type CreateKind = "file" | "folder";
