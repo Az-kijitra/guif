@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use crate::shared::schema::viewer_window::ViewerWindowData;
 
 use super::geometry::{self, Rect};
+use super::nav_guard;
 use super::pending::PendingOpenSlot;
 use super::session::{self, GenerationState, RequestKey, ViewerSession};
 
@@ -161,6 +162,8 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
         drop(io);
 
         let app_for_events = app.clone();
+        // R-434: the dev server origin (debug builds only) counts as the app.
+        let dev_url = if cfg!(debug_assertions) { app.config().build.dev_url.clone() } else { None };
         let build_result = WebviewWindowBuilder::new(&app, VIEWER_WINDOW_LABEL, WebviewUrl::App("viewer".into()))
             .title(title)
             // R-424-2: default 1024x768 (logical) centered; a saved geometry
@@ -169,9 +172,10 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
             .min_inner_size(geometry::MIN_WIDTH as f64, geometry::MIN_HEIGHT as f64)
             .center()
             .visible(false)
-            // R-434/§17: never navigate away from the app's own pages, never
-            // spawn a second window from within the viewer webview.
-            .on_navigation(|_url| false)
+            // R-434/§17: never navigate away from the app's own pages (the
+            // initial load of `/viewer` itself must pass), never spawn a
+            // second window from within the viewer webview.
+            .on_navigation(move |url| nav_guard::is_app_origin(url, dev_url.as_ref()))
             .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
             // R-502: the WebView's own Ctrl+wheel/accelerator zoom is not used
             // (R-471/R-481-1 implement zoom in-app instead).

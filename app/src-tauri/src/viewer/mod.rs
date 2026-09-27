@@ -46,6 +46,7 @@ pub mod commands;
 pub mod error;
 pub mod geometry;
 pub mod image;
+pub mod nav_guard;
 pub mod os_open;
 pub mod pending;
 pub mod session;
@@ -66,6 +67,8 @@ mod error_tests;
 mod geometry_tests;
 #[cfg(test)]
 mod image_tests;
+#[cfg(test)]
+mod nav_guard_tests;
 #[cfg(test)]
 mod os_open_tests;
 #[cfg(test)]

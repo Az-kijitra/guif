@@ -19,6 +19,7 @@
 - 依存: tauri-plugin-opener 2.5.5(プラグイン未登録、自由関数open_pathのみ。tauri 2.11.6のまま)、markdown-it 15.0.2。
 - 動作確認(Tauri IPCモックのヘッドレスEdge): ビューアでテキスト表示(文字コード名・切り詰め通知・行番号)、listen→takeの順、Alt+→で画像(Blob URL)へ切替、Escでclose。メインで/viewerは/へリダイレクト、Enterでclassify→viewer_open(seq付き)、Shift+Enterでviewer_os_open_path。
 - 未実施: 実Tauriでの手動確認(`tests/manual/phase6-viewer-checklist.md`)。code-reviewerの再レビュー報告は受信できず、再レビュー観点(複数モニタ座標・Blob URL解放・生バイト受信・ロック)はオーケストレーターが直接確認。
+- 2026-09-27 実機報告「画像を選ぶとウィンドウだけ出て何も表示されない」: `on_navigation(|_| false)`がビューア自身の初回読込(/viewer)まで拒否しwebviewがabout:blankのまま(テキストも同様)。アプリのオリジン(tauri://localhost、tauri.localhost、デバッグ時のdevUrl)のみ許可する`viewer/nav_guard.rs`に修正(テスト3件、cargo test 670件成功)。実Tauri(WebView2リモートデバッグ)でPNGがBlob URLで表示されること、テキストがUTF-8判定で表示されることを確認。IPCモックのヘッドレス確認では検出できない種類の不具合。
 - 残課題(非blocker): ISS-0126(b) 画素数上限は未決(上限なしで実装)、ISS-0135 ユーザー文書の置き場所なし、右クリックメニューは後続フェーズ。
 
 ## 2026-09-27 Phase 5 ZIP作成/展開(SPEC-0300-0014 第3版)テスト実行結果
