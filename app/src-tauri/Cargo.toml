@@ -43,6 +43,7 @@ time = { version = "0.3", default-features = false, features = ["std", "local-of
 # (archive/cp932_experiment_tests.rs) selected design branch 1 (raw name bytes
 # are readable, decoding is ours).
 encoding_rs = "0.8"
+tauri-plugin-opener = "~2.5"
 
 # SPEC-0200-0001 §3.4.13-7 / §3.4.14 C2: the only `unsafe` in the crate lives
 # in archive/win_fs.rs (MoveFileExW without replace, GetDiskFreeSpaceExW).

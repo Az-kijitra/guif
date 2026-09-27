@@ -24,6 +24,13 @@ fn main() {
                 "archive_detect_conflicts",
                 "archive_extract",
                 "archive_cancel",
+                "viewer_classify_path",
+                "viewer_open",
+                "viewer_os_open_path",
+                "viewer_take_pending",
+                "viewer_read_text",
+                "viewer_read_image",
+                "viewer_navigate",
             ])),
     )
     .expect("failed to run tauri-build");

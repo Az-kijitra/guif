@@ -2,9 +2,22 @@
 // (SPEC-0200-0001 §3.3.5): every dependency is injected; this module imports
 // no feature module (SPEC-0300-0010 R-17: the keyboard layer only resolves
 // action ids, each feature implements its own action).
+//
+import { decideOpen } from "$lib/features/viewer/open-decision";
+
+// SPEC-0300-0015 §3.5.3: `case "open"` no longer unconditionally calls
+// `fileList.openFocused()`. It branches on the focused entry's `entryType`
+// and `event.shiftKey` via `open-decision.ts`'s pure judgment
+// (navigate-dir/open-file/os-open/noop) so the keyboard path and the file
+// list's double-click handler share one decision (SHOULD-110).
 
 interface EntryLike {
   name: string;
+  path: string;
+}
+
+interface OpenTargetEntry {
+  entryType: "file" | "dir";
   path: string;
 }
 
@@ -26,6 +39,12 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   currentPath: () => string;
   fileOps: { handleAction(action: string, event: { shiftKey: boolean }): boolean };
   archive: { handleAction(action: string): boolean };
+  // SPEC-0300-0015 §3.5.3: the focused entry (for the "open" case's R-402/
+  // R-402-1 target decision) and the viewer's open entry points (R-404,
+  // R-401-2). `null` covers R-402-1 (no focus, or the focused entry is not
+  // currently displayed).
+  focusedEntry: () => OpenTargetEntry | null;
+  viewer: { openFile(path: string): void | Promise<unknown>; openWithOsAssociation(path: string): void | Promise<unknown> };
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
@@ -53,9 +72,25 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
       case "move_right":
         deps.fileList.moveColumn(deps.filteredEntries(), "right", Math.max(deps.rowsPerColumn(), 1));
         return true;
-      case "open":
-        void deps.afterUserNavigation(deps.fileList.openFocused());
+      case "open": {
+        const focused = deps.focusedEntry();
+        const decision = decideOpen(focused, event.shiftKey);
+        switch (decision) {
+          case "navigate-dir":
+            void deps.afterUserNavigation(deps.fileList.openFocused());
+            return true;
+          case "open-file":
+            // R-408: fire-and-forget -- must not block the UI thread.
+            void deps.viewer.openFile((focused as OpenTargetEntry).path);
+            return true;
+          case "os-open":
+            void deps.viewer.openWithOsAssociation((focused as OpenTargetEntry).path);
+            return true;
+          case "noop":
+            return true;
+        }
         return true;
+      }
       case "go_parent":
         void deps.afterUserNavigation(deps.fileList.goParent());
         return true;

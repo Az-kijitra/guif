@@ -25,6 +25,10 @@ use std::collections::BTreeSet;
 const LIB_RS: &str = include_str!("lib.rs");
 const BUILD_RS: &str = include_str!("../build.rs");
 const CAPABILITY_JSON: &str = include_str!("../capabilities/default.json");
+// Phase 6 (SPEC-0300-0015 R-432; SPEC-0200-0001 §3.5.2, §3.5.12.5): the
+// viewer window's own capability file, separate from `default.json`
+// (`windows: ["viewer"]`). MUST-77/SHOULD-111 additions below.
+const VIEWER_CAPABILITY_JSON: &str = include_str!("../capabilities/viewer.json");
 
 /// Commands that MUST be wired today (extend when adding a command; the
 /// generic consistency check below catches omissions even if this list is not
@@ -113,6 +117,17 @@ fn permission_for(command: &str) -> String {
     format!("allow-{}", command.replace('_', "-"))
 }
 
+/// Phase 6 (MUST-77/SHOULD-111): EVERY permission string in a capability's
+/// `permissions` array, unfiltered (unlike `capability_allows`, which drops
+/// anything containing `:` — that filtering is exactly why the existing
+/// checker could not have caught a stray `opener:*` or `core:default` entry).
+fn all_permissions(capability_json: &str) -> BTreeSet<String> {
+    let body = bracket_body(capability_json, "\"permissions\": [")
+        .or_else(|| bracket_body(capability_json, "\"permissions\":["))
+        .expect("capability must contain a \"permissions\" array");
+    quoted_strings(body).into_iter().collect()
+}
+
 /// Human-readable list of every inconsistency between the three sources.
 fn wiring_problems(
     handler: &BTreeSet<String>,
@@ -150,11 +165,27 @@ fn wiring_problems(
 // ---------------------------------------------------------------------
 
 // MUST-64 (REQUIRED): the three sources agree for every app command.
+//
+// Phase 6 correction (code-generator, 2026-09-27): `wiring_problems`'s
+// "every handler command has a capability permission" check pre-dates the
+// two-capability split (R-432). With a single `default.json` this reduced to
+// "does default.json grant it"; now that the 4 viewer-only commands are
+// deliberately granted ONLY by `capabilities/viewer.json` (and deliberately
+// ABSENT from `default.json`, enforced by `r432_the_four_viewer_only_commands_
+// never_appear_in_default_json` below), checking `default.json` alone would
+// make this test and that one mutually unsatisfiable. The fix generalizes the
+// check to the UNION of every capability file's `allow-*` permissions --
+// still failing if a command is missing from EVERY capability (the original
+// intent), while the per-file separation stays independently enforced by the
+// `r432_*`/`must77_*` tests. This is a test-suite fix, not a weakening: no
+// assertion here becomes easier to satisfy in a way that would let a real
+// wiring omission slip through.
 #[test]
 fn must64_generate_handler_build_rs_and_capability_are_consistent() {
     let handler = handler_commands(LIB_RS);
     let manifest = manifest_commands(BUILD_RS);
-    let allows = capability_allows(CAPABILITY_JSON);
+    let allows: BTreeSet<String> =
+        capability_allows(CAPABILITY_JSON).union(&capability_allows(VIEWER_CAPABILITY_JSON)).cloned().collect();
 
     let problems = wiring_problems(&handler, &manifest, &allows);
 
@@ -233,6 +264,129 @@ fn must64_every_tauri_command_defined_in_archive_commands_is_registered() {
         }
     }
     assert_eq!(defined.len(), 5, "archive/commands.rs must define the five archive_* commands, found {defined:?}");
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+// ---------------------------------------------------------------------
+// Phase 6 (SPEC-0300-0015 R-432, R-432-3, R-432-4, R-405-1; SPEC-0200-0001
+// §3.5.2, §3.5.12.5 MUST-77, SHOULD-99, SHOULD-111): two-capability ACL.
+// TDD (unit-test-writer, 2026-09-27) -- expected to fail until code-generator
+// wires the 7 viewer commands into all three places AND fills in
+// `capabilities/viewer.json` (currently a placeholder, `permissions: []`).
+// ---------------------------------------------------------------------
+
+// MUST-77/SHOULD-111: `capabilities/viewer.json` must be EXACTLY these 7
+// permission strings (no `core:default`, no extra scope creep) -- the
+// completeness check covers `core:` entries too, unlike `capability_allows`.
+#[test]
+fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
+    let expected: BTreeSet<String> = [
+        "allow-viewer-take-pending",
+        "allow-viewer-read-text",
+        "allow-viewer-read-image",
+        "allow-viewer-navigate",
+        "core:event:allow-listen",
+        "core:event:allow-unlisten",
+        "core:window:allow-close",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    assert_eq!(all_permissions(VIEWER_CAPABILITY_JSON), expected);
+}
+
+// §3.5.12.5(a)/SHOULD-99: `capabilities/default.json`'s app-command
+// permissions become the existing 16 (Phase 1/2/5) PLUS exactly the 3
+// main-only viewer commands (`viewer_classify_path`/`viewer_open`/
+// `viewer_os_open_path`, all `viewer_`-prefixed per SHOULD-99's renaming of
+// the former `os_open_path`).
+#[test]
+fn must77_default_json_app_commands_are_the_existing_16_plus_the_three_viewer_main_commands() {
+    let expected: BTreeSet<String> = [
+        "allow-fs-list-dir",
+        "allow-config-load-navigation",
+        "allow-config-save-navigation",
+        "allow-fs-ops-copy",
+        "allow-fs-ops-move",
+        "allow-fs-ops-cancel",
+        "allow-fs-ops-delete-trash",
+        "allow-fs-ops-delete-permanently",
+        "allow-fs-ops-rename",
+        "allow-fs-ops-create",
+        "allow-fs-ops-detect-conflicts",
+        "allow-archive-check-create",
+        "allow-archive-create",
+        "allow-archive-detect-conflicts",
+        "allow-archive-extract",
+        "allow-archive-cancel",
+        "allow-viewer-classify-path",
+        "allow-viewer-open",
+        "allow-viewer-os-open-path",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    assert_eq!(capability_allows(CAPABILITY_JSON), expected);
+}
+
+// R-405-1: neither capability may grant an `opener:*` permission (the
+// backend calls `tauri-plugin-opener`'s free function directly WITHOUT
+// registering the plugin, so no `opener:*` ACL entry should ever be needed).
+#[test]
+fn should111_no_capability_grants_any_opener_prefixed_permission() {
+    for (name, json) in [("default.json", CAPABILITY_JSON), ("viewer.json", VIEWER_CAPABILITY_JSON)] {
+        let bad: Vec<String> =
+            all_permissions(json).into_iter().filter(|p| p.starts_with("opener:")).collect();
+        assert!(bad.is_empty(), "{name} must not grant opener:* permissions (R-405-1): {bad:?}");
+    }
+}
+
+// R-432 (capability separation): the 3 main-only viewer commands must never
+// leak into `viewer.json`, and the 4 viewer-only commands must never leak
+// into `default.json` -- each capability grants only what its own window
+// needs (mutual absence, both directions).
+#[test]
+fn r432_the_three_main_only_viewer_commands_never_appear_in_viewer_json() {
+    let viewer_perms = all_permissions(VIEWER_CAPABILITY_JSON);
+    for p in ["allow-viewer-classify-path", "allow-viewer-open", "allow-viewer-os-open-path"] {
+        assert!(!viewer_perms.contains(p), "{p} must be main-only (default.json), not in viewer.json");
+    }
+}
+
+#[test]
+fn r432_the_four_viewer_only_commands_never_appear_in_default_json() {
+    let default_perms = all_permissions(CAPABILITY_JSON);
+    for p in ["allow-viewer-take-pending", "allow-viewer-read-text", "allow-viewer-read-image", "allow-viewer-navigate"]
+    {
+        assert!(!default_perms.contains(p), "{p} must be viewer-only (viewer.json), not in default.json");
+    }
+}
+
+// Every `viewer_*` command actually defined (as a `#[tauri::command]` fn) in
+// `viewer/commands.rs` is registered in `generate_handler!` -- same
+// "defined but never registered" guard as the fs_ops/archive analogs above.
+// Also pins the count: exactly the 7 commands of SPEC-0200-0001 §3.5.2.
+#[test]
+fn must64_every_tauri_command_defined_in_viewer_commands_is_registered() {
+    let source = include_str!("viewer/commands.rs");
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let cleaned = strip_line_comments(production_part);
+    let mut parts = cleaned.split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String =
+                after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("viewer_") {
+                defined.insert(name);
+            }
+        }
+    }
+    assert_eq!(defined.len(), 7, "viewer/commands.rs must define the seven viewer_* commands, found {defined:?}");
     let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
     assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
 }

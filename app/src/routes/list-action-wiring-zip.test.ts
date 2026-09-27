@@ -33,7 +33,7 @@ const ev = (over: Partial<{ shiftKey: boolean }> = {}) => ({
 });
 
 function makeDeps(over: Record<string, unknown> = {}) {
-  const filtered = [{ name: "a", path: "C:\\d\\a" }];
+  const filtered = [{ name: "a", path: "C:\\d\\a", entryType: "file" as "file" | "dir" }];
   const deps = {
     fileList: {
       moveRow: vi.fn(),
@@ -52,6 +52,11 @@ function makeDeps(over: Record<string, unknown> = {}) {
     currentPath: () => "C:\\d",
     fileOps: { handleAction: vi.fn(() => true) },
     archive: { handleAction: vi.fn(() => true) },
+    // SPEC-0300-0015 §3.5.3: the "open" case's new dependencies (see
+    // list-action-wiring.test.ts for the full entryType x shiftKey matrix;
+    // this file only needs "open" to keep working alongside `archive`).
+    focusedEntry: () => filtered[0] ?? null,
+    viewer: { openFile: vi.fn(), openWithOsAssociation: vi.fn() },
     ...over,
   };
   return { deps, filtered };
@@ -97,11 +102,12 @@ describe("createListActionHandler: zip_create / zip_extract (SPEC-0200-0001 §3.
     expect(deps.archive.handleAction).not.toHaveBeenCalled();
   });
 
-  it("existing cases keep working with the archive dependency present (open => afterUserNavigation)", () => {
+  it("existing cases keep working with the archive dependency present (open on a FILE => viewer.openFile, per SPEC-0300-0015 §3.5.3)", () => {
     const { deps } = makeDeps();
     const handler = createListActionHandler(deps as never);
     expect(handler("open", ev())).toBe(true);
-    expect(deps.afterUserNavigation).toHaveBeenCalledTimes(1);
+    expect(deps.viewer.openFile).toHaveBeenCalledWith("C:\\d\\a");
+    expect(deps.afterUserNavigation).not.toHaveBeenCalled();
     expect(deps.archive.handleAction).not.toHaveBeenCalled();
   });
 });

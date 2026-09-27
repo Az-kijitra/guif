@@ -12,6 +12,8 @@
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
 //! - `archive` (SPEC-0300-0014 ZIP create/extract — Phase 5; see
 //!   `archive/mod.rs`)
+//! - `viewer` (SPEC-0300-0015 ReflexViewer integration — Phase 6, not yet
+//!   implemented; see `viewer/mod.rs`)
 //!
 //! `main.rs` is a thin entry point that calls `run()` below (the standard
 //! Tauri 2 desktop template split, so `lib.rs` stays the single source of
@@ -26,6 +28,12 @@ pub mod fs;
 pub mod fs_ops;
 pub mod keymap;
 pub mod shared;
+// SPEC-0300-0015 (Phase 6, ReflexViewer): not implemented yet (TDD). See
+// `viewer/mod.rs` for the planned submodule list; this declaration alone is
+// enough for `viewer/*_tests.rs` to be picked up by `cargo test`, and is
+// expected to make the WHOLE crate fail to compile until code-generator fills
+// in the bodies (same "red" state Phase 2's `fs_ops/` TDD pass produced).
+pub mod viewer;
 
 // MUST-64: generate_handler! / build.rs / capabilities 3-way consistency check.
 #[cfg(test)]
@@ -37,12 +45,55 @@ mod acl_consistency;
 /// consistent with feature modules never `use`-ing each other directly.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use std::sync::Arc;
+    use tauri::Manager;
+
+    // §3.5.12.1 MUST-73: `viewer::window` never imports `crate::config`
+    // directly; `lib.rs` (the one place allowed to use both) injects
+    // `config::viewer_window::load`/`save` as CLOSURES that close over a
+    // shared `config::viewer_window::ViewerWindowIoLock` (SHOULD-104/112,
+    // the same serialization `config::commands::NavigationIoLock` gives
+    // `navigation.toml`), plus `config::paths::viewer_window_path`.
+    let viewer_window_io_lock = Arc::new(config::viewer_window::ViewerWindowIoLock::default());
+    let load_lock = viewer_window_io_lock.clone();
+    let save_lock = viewer_window_io_lock.clone();
+    let viewer_window_io = viewer::window::ViewerWindowIo {
+        load: Box::new(move |path| {
+            let _guard = load_lock.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            config::viewer_window::load(path)
+        }),
+        save: Box::new(move |path, data| {
+            let _guard = save_lock.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            config::viewer_window::save(path, data)
+        }),
+        path: config::paths::viewer_window_path,
+    };
+
     tauri::Builder::default()
         // R-42/R-43 (ISS-0052): per-operation-id cancellation flags for
         // in-flight copy/move/ZIP operations (ONE instance shared by fs_ops and archive, §3.4.1).
         .manage(shared::cancel::CancelRegistry::default())
         // MUST-48(c): serializes navigation.toml load/save.
         .manage(config::commands::NavigationIoLock::default())
+        // R-441/R-491/R-492/R-430: the viewer's session (allow-set + sibling
+        // snapshot) and pending-open handoff slot (single instance, R-421).
+        .manage(viewer::window::ViewerRuntime::default())
+        // R-425: `viewer-window.toml` load/save fn-value injection.
+        .manage(viewer_window_io)
+        .setup(|app| {
+            // R-428: closing the MAIN window also closes the viewer window,
+            // so it never outlives the app (best-effort; does not block the
+            // main window's own close).
+            if let Some(main) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                main.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
+                        viewer::window::close_viewer_on_main_exit(&handle);
+                    }
+                });
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             fs::commands::fs_list_dir,
             fs_ops::commands::fs_ops_copy,
@@ -60,6 +111,13 @@ pub fn run() {
             archive::commands::archive_detect_conflicts,
             archive::commands::archive_extract,
             archive::commands::archive_cancel,
+            viewer::commands::viewer_classify_path,
+            viewer::commands::viewer_open,
+            viewer::commands::viewer_os_open_path,
+            viewer::commands::viewer_take_pending,
+            viewer::commands::viewer_read_text,
+            viewer::commands::viewer_read_image,
+            viewer::commands::viewer_navigate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

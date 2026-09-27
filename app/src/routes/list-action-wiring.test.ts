@@ -18,11 +18,22 @@ import { describe, expect, it, vi } from "vitest";
 //   createListActionHandler({ fileList, filteredEntries: () => [...],
 //     rowsPerColumn: () => number, afterUserNavigation, activateSearch,
 //     openHistoryList(mode), addJump(path), currentPath: () => string,
-//     fileOps: { handleAction(action, event): boolean } })
+//     fileOps: { handleAction(action, event): boolean },
+//     focusedEntry: () => { entryType: "file" | "dir"; path: string } | null,
+//     viewer: { openFile(path): void; openWithOsAssociation(path): void } })
 //     -> (action: string | null, event) => boolean
 //   createFileOpsContext({ currentPath, entries, filteredEntries, selected,
 //     focusedPath }) -> () => { currentPath, entries, selected: string[],
 //     focusedPath: string | null }   (all inputs are getters)
+//
+// SPEC-0300-0015 R-401-2/R-401-3/R-402-2/R-404/R-407; SPEC-0200-0001 §3.5.3:
+// `case "open"` no longer unconditionally calls `fileList.openFocused()` --
+// it branches on `deps.focusedEntry()`'s `entryType` and `event.shiftKey`,
+// using `open-decision.ts`'s judgment (navigate-dir/open-file/os-open/noop).
+// This REPLACES the single pre-Phase-6 "open / go_parent" test below with the
+// finer-grained cases the new branching requires (a deliberate, spec-driven
+// test update, not a regression -- `go_parent`'s own case is unchanged and
+// kept as its own test).
 
 import { createFileOpsController } from "$lib/features/file-ops/file-ops-controller";
 import { createAfterUserNavigation } from "./navigation-wiring";
@@ -38,7 +49,7 @@ const ev = (over: Partial<{ shiftKey: boolean }> = {}) => ({
 });
 
 function makeDeps(over: Record<string, unknown> = {}) {
-  const filtered = [{ name: "a", path: "C:\\d\\a" }];
+  const filtered = [{ name: "a", path: "C:\\d\\a", entryType: "file" as "file" | "dir" }];
   const deps = {
     fileList: {
       moveRow: vi.fn(),
@@ -56,6 +67,9 @@ function makeDeps(over: Record<string, unknown> = {}) {
     addJump: vi.fn(),
     currentPath: () => "C:\\d",
     fileOps: { handleAction: vi.fn(() => true) },
+    // SPEC-0300-0015 §3.5.3: the "open" case's new dependencies.
+    focusedEntry: () => filtered[0] ?? null,
+    viewer: { openFile: vi.fn(), openWithOsAssociation: vi.fn() },
     ...over,
   };
   return { deps, filtered };
@@ -129,14 +143,12 @@ describe("createListActionHandler: existing cases keep working (regression of th
     expect(deps.fileList.moveColumn).toHaveBeenNthCalledWith(2, filtered, "right", 1);
   });
 
-  it("open / go_parent => navigation goes through afterUserNavigation (R-208)", () => {
+  it("go_parent => navigation goes through afterUserNavigation (R-208)", () => {
     const { deps } = makeDeps();
     const handler = createListActionHandler(deps as never);
-    expect(handler("open", ev())).toBe(true);
     expect(handler("go_parent", ev())).toBe(true);
-    expect(deps.fileList.openFocused).toHaveBeenCalledTimes(1);
     expect(deps.fileList.goParent).toHaveBeenCalledTimes(1);
-    expect(deps.afterUserNavigation).toHaveBeenCalledTimes(2);
+    expect(deps.afterUserNavigation).toHaveBeenCalledTimes(1);
   });
 
   it("select_toggle / select_all act on the FILTERED entries (R-123)", () => {
@@ -169,6 +181,76 @@ describe("createListActionHandler: existing cases keep working (regression of th
     const h2 = createListActionHandler(empty as never);
     expect(h2("jump_add", ev())).toBe(true);
     expect(empty.addJump).not.toHaveBeenCalled();
+  });
+});
+
+describe('createListActionHandler: "open" branches on entryType x shiftKey (SPEC-0300-0015 R-401-2/R-401-3/R-402-2/R-404/R-407, §3.5.3)', () => {
+  it("AC-400/R-404: a FILE focused, no Shift => viewer.openFile(path); no afterUserNavigation, no fileList.openFocused", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev())).toBe(true);
+    expect(deps.viewer.openFile).toHaveBeenCalledWith("C:\\d\\a");
+    expect(deps.viewer.openWithOsAssociation).not.toHaveBeenCalled();
+    expect(deps.fileList.openFocused).not.toHaveBeenCalled();
+    expect(deps.afterUserNavigation).not.toHaveBeenCalled();
+  });
+
+  it("AC-401/R-403: a DIRECTORY focused, no Shift => unchanged behavior (fileList.openFocused via afterUserNavigation); no viewer call", () => {
+    const dirEntry = { name: "sub", path: "C:\\d\\sub", entryType: "dir" as const };
+    const { deps } = makeDeps({ filteredEntries: () => [dirEntry], focusedEntry: () => dirEntry });
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev())).toBe(true);
+    expect(deps.fileList.openFocused).toHaveBeenCalledTimes(1);
+    expect(deps.afterUserNavigation).toHaveBeenCalledTimes(1);
+    expect(deps.viewer.openFile).not.toHaveBeenCalled();
+    expect(deps.viewer.openWithOsAssociation).not.toHaveBeenCalled();
+  });
+
+  it("AC-407/R-402-1: no focused entry, no Shift => the existing openFocused/afterUserNavigation fallback runs (its own no-op behavior applies), no viewer call", () => {
+    const { deps } = makeDeps({ focusedEntry: () => null });
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev())).toBe(true);
+    expect(deps.viewer.openFile).not.toHaveBeenCalled();
+    expect(deps.viewer.openWithOsAssociation).not.toHaveBeenCalled();
+  });
+
+  it("AC-405/R-401-2: a FILE focused, Shift+Enter => viewer.openWithOsAssociation(path); no viewer.openFile, no fileList.openFocused", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev({ shiftKey: true }))).toBe(true);
+    expect(deps.viewer.openWithOsAssociation).toHaveBeenCalledWith("C:\\d\\a");
+    expect(deps.viewer.openFile).not.toHaveBeenCalled();
+    expect(deps.fileList.openFocused).not.toHaveBeenCalled();
+    expect(deps.afterUserNavigation).not.toHaveBeenCalled();
+  });
+
+  it("AC-405-1/R-401-3: a DIRECTORY focused, Shift+Enter => nothing happens (no folder move, no OS launch)", () => {
+    const dirEntry = { name: "sub", path: "C:\\d\\sub", entryType: "dir" as const };
+    const { deps } = makeDeps({ filteredEntries: () => [dirEntry], focusedEntry: () => dirEntry });
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev({ shiftKey: true }))).toBe(true);
+    expect(deps.fileList.openFocused).not.toHaveBeenCalled();
+    expect(deps.afterUserNavigation).not.toHaveBeenCalled();
+    expect(deps.viewer.openFile).not.toHaveBeenCalled();
+    expect(deps.viewer.openWithOsAssociation).not.toHaveBeenCalled();
+  });
+
+  it("R-401-4/R-402-1: no focused entry, Shift+Enter => nothing happens at all (no folder move either)", () => {
+    const { deps } = makeDeps({ focusedEntry: () => null });
+    const handler = createListActionHandler(deps as never);
+    expect(handler("open", ev({ shiftKey: true }))).toBe(true);
+    expect(deps.viewer.openFile).not.toHaveBeenCalled();
+    expect(deps.viewer.openWithOsAssociation).not.toHaveBeenCalled();
+    expect(deps.fileList.openFocused).not.toHaveBeenCalled();
+    expect(deps.afterUserNavigation).not.toHaveBeenCalled();
+  });
+
+  it("R-408: the viewer call is fire-and-forget (the handler returns synchronously, not awaiting the viewer promise)", () => {
+    const { deps } = makeDeps({ viewer: { openFile: vi.fn(() => new Promise(() => {})), openWithOsAssociation: vi.fn() } });
+    const handler = createListActionHandler(deps as never);
+    // Must not hang / must return true synchronously even though openFile's
+    // promise never resolves.
+    expect(handler("open", ev())).toBe(true);
   });
 });
 

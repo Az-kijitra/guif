@@ -231,8 +231,92 @@ describe("Phase 5 archive boundaries (SPEC-0300-0014 R-310, SPEC-0200-0001 §3.4
     expect(tauriDirect.map((d) => d.name)).toEqual([]);
   });
 
-  it("§3.4.7: routes/list-action-wiring.ts imports no feature module (SPEC-0300-0010 R-17)", () => {
-    const bad = edges.filter((e) => e.from === "routes" + sep + "list-action-wiring.ts" && e.toLayer.kind === "feature");
+  // Test fix (code-generator, 2026-09-27, SPEC-0300-0015 §3.5.3/§3.5.7): this
+  // Phase 5 assertion pre-dates Phase 6's `open-decision.ts` judgment, which
+  // `list-action-wiring.ts`'s "open" case now deliberately imports (the
+  // keyboard `open`/`Shift+Enter` path and the file list's double-click
+  // handler must share ONE decision, SHOULD-110). The "Phase 6 viewer
+  // boundaries" describe block below documents and enforces this exact
+  // exception ("only routes/ ... may import BOTH features/viewer and another
+  // feature"). Narrowing this check to exclude `features/viewer` keeps its
+  // original intent (SPEC-0300-0010 R-17: no OTHER feature's logic leaks into
+  // the generic action switch) fully enforced.
+  it("§3.4.7: routes/list-action-wiring.ts imports no feature module other than features/viewer (SPEC-0300-0010 R-17, SPEC-0300-0015 §3.5.3)", () => {
+    const bad = edges.filter(
+      (e) =>
+        e.from === "routes" + sep + "list-action-wiring.ts" && e.toLayer.kind === "feature" && e.toLayer.name !== "viewer",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+});
+
+// SPEC-0300-0015 (Phase 6, ReflexViewer): `features/viewer/` must depend on
+// `shared/` only (never on `file-list`/`keyboard`/`search`/`file-ops`/
+// `archive`/`navigation-history`, and never on `routes/`); only `routes/`
+// (list-action-wiring.ts + the file-list row's dblclick handler + the
+// `/viewer` route itself) may import BOTH `features/viewer` and another
+// feature, per §4.1 path 2 (the same pattern as `operations-wiring.ts`
+// composing `file-ops`/`archive`). SPEC-0200-0001 §3.5.7.
+describe("Phase 6 viewer boundaries (SPEC-0300-0015, SPEC-0200-0001 §3.5.7)", () => {
+  const edges = collectEdges();
+  const viewerEdges = edges.filter(
+    (e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "viewer" && !/\.test\.ts$/.test(e.from),
+  );
+  const exists = (rel: string): boolean => {
+    try {
+      return statSync(join(SRC, rel)).isFile();
+    } catch {
+      return false;
+    }
+  };
+
+  it("§3.5.7: the planned modules exist (feature files, shared/ipc, the /viewer route)", () => {
+    const planned = [
+      "lib/features/viewer/open-decision.ts",
+      "lib/features/viewer/viewer-controller.ts",
+      "lib/features/viewer/viewer-keys.ts",
+      "lib/features/viewer/error-format.ts",
+      "lib/features/viewer/markdown-render.ts",
+      "lib/features/viewer/request-sequencer.ts",
+      "lib/features/viewer/window-guard.ts",
+      "lib/shared/ipc/viewer.ts",
+      "routes/viewer/+page.svelte",
+      "routes/viewer/viewer-wiring.ts",
+      "routes/+layout.svelte",
+    ];
+    expect(planned.filter((f) => !exists(f))).toEqual([]);
+  });
+
+  it("the scanner sees features/viewer PRODUCTION modules at all (guards against an empty scan)", () => {
+    expect(viewerEdges.length).toBeGreaterThan(0);
+  });
+
+  it("features/viewer never imports another feature module, type imports and relative escapes included", () => {
+    const bad = edges.filter(
+      (e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "viewer" && e.toLayer.kind === "feature" && e.toLayer.name !== "viewer",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("no other feature imports features/viewer (only routes/ composition, §4.1 path 2)", () => {
+    const bad = edges.filter(
+      (e) => e.fromLayer.kind === "feature" && e.toLayer.kind === "feature" && e.toLayer.name === "viewer" && e.fromLayer.name !== "viewer",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("features/viewer never imports routes/", () => {
+    expect(viewerEdges.filter((e) => e.toLayer.kind === "routes").map(fmt)).toEqual([]);
+  });
+
+  it("§3.5.8: features/viewer never imports features/keyboard (R-500, the fixed key table is not keymap-driven)", () => {
+    const bad = edges.filter(
+      (e) =>
+        e.fromLayer.kind === "feature" &&
+        e.fromLayer.name === "viewer" &&
+        e.toLayer.kind === "feature" &&
+        e.toLayer.name === "keyboard",
+    );
     expect(bad.map(fmt)).toEqual([]);
   });
 });

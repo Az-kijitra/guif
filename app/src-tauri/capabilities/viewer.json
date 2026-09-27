@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "viewer",
+  "description": "Capability for the viewer window (SPEC-0300-0015 R-432/R-432-4; SPEC-0200-0001 §3.5.2/§3.5.12.5): only the four viewer-only commands plus the minimal core permissions the viewer route needs (listening for the pending-open-changed event, and closing itself on Esc/Ctrl+Q). No `core:default`, no `opener:*` permission (R-405-1) — the backend calls tauri-plugin-opener's free function directly, without registering the plugin.",
+  "windows": ["viewer"],
+  "permissions": [
+    "allow-viewer-take-pending",
+    "allow-viewer-read-text",
+    "allow-viewer-read-image",
+    "allow-viewer-navigate",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-close"
+  ]
+}

@@ -30,6 +30,7 @@ import {
   selectAllVisible,
   invertSelectionVisible,
 } from "./selection";
+import { resolveRowClick } from "./click";
 import {
   moveFocusRow,
   moveFocusColumn,
@@ -186,6 +187,28 @@ export function createFileListState() {
     }
   }
 
+  // SPEC-0300-0009 R-50~R-52 (SPEC-0300-0015 R-401-5/ISS-0132): mouse click
+  // selection, delegated to the pure `click.ts` (§3.5.3). `visible` is in
+  // display order (routes' `filteredEntries`); `focusedIndex` is converted
+  // back to real-entry space like every other movement/selection wrapper.
+  function clickRow(
+    visible: readonly FsEntry[],
+    path: string,
+    modifiers: { shiftKey: boolean; ctrlKey: boolean },
+  ): void {
+    if (visible.length === 0) return;
+    const result = resolveRowClick(
+      visible.map((e) => e.path),
+      { selected, anchor },
+      path,
+      modifiers,
+    );
+    selected = result.selected;
+    anchor = result.anchor;
+    const nextReal = toRealIndex(result.focusedIndex, entries, visible);
+    if (nextReal !== -1) focusedIndex = nextReal;
+  }
+
   // SHOULD-37(a)/SPEC-0300-0009 R-54/R-55/SPEC-0300-0012 R-123: select_all and
   // invert-selection operate on the visible (filtered) entries only. Neither
   // touches `focusedIndex`, so no real<->visual conversion is needed.
@@ -262,6 +285,7 @@ export function createFileListState() {
     moveColumn,
     selectFocused,
     toggleFocused,
+    clickRow,
     selectAll,
     invertSelection,
     focusIndex,

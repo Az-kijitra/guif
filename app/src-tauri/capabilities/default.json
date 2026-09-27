@@ -21,6 +21,9 @@
     "allow-archive-detect-conflicts",
     "allow-archive-extract",
     "allow-archive-cancel",
+    "allow-viewer-classify-path",
+    "allow-viewer-open",
+    "allow-viewer-os-open-path",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

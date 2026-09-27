@@ -9,6 +9,17 @@
 | 2026-09-26 | 未採番(SPEC-0300-0013) | PASS(フロント・バック双方) | 以下「## 2026-09-26 MVP Phase 4」セクション参照 | unit-test-writer → code-generator → code-reviewer → オーケストレーター(flush並行呼び出しの修正・回帰テスト、ヘッドレスブラウザでの動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0011 第4版 画面配線 + ISS-0105 vim削除) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 2 画面配線」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行) → code-reviewer → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0014 第3版 ZIP作成/展開) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 5 ZIP」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行、CP932等の実験含む) → code-reviewer(セキュリティ重点) → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
+| 2026-09-27 | 未採番(SPEC-0300-0015 ReflexViewer統合) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 6 ReflexViewer」セクション参照 | unit-test-writer(Rust/TS) → code-generator → オーケストレーター(設計MUST未達3点を差し戻し) → code-reviewer(差し戻し: DPI単位混在・listen/take順) → code-generator(修正) → オーケストレーター(複数モニタ座標を物理px統一へ修正、ヘッドレスブラウザで動作確認) |
+
+## 2026-09-27 Phase 6 ReflexViewer統合(SPEC-0300-0015)テスト実行結果
+
+- `cd app && npx vitest run`: 62ファイル/1183件全成功。`cd app/src-tauri && cargo test`: 667件全成功。`npx tsc --noEmit`エラー0、`npx vite build`・`cargo build`成功。
+- テストの修正(前提の誤り): CP932未定義バイト例を0x80→0xFD(WHATWG Shift_JISでは0x80はU+0080)、NTFSで大小違い同名ファイルを作れないため統合テストを2件に縮小(タイブレークは純関数テストで検証)、ACL整合テストを複数capabilityの和集合で判定、import境界§3.4.7の例外をfeatures/viewerに限定。
+- 差し戻しで解消した問題: +page.svelte 400行超過(行操作をrow-interaction-wiring.tsへ)、最新要求優先がFEのみ(バックエンドでepoch/seq判定)、世代番号の未配線、ウィンドウ位置の論理/物理px混在(高DPIでサイズがずれる)と複数モニタ(拡大率が異なる)で座標が重なる件(物理px統一・非表示で生成後にset_position/set_size)、listen前にtakeして切替を取りこぼす件、ViewerWindowIoLock未使用、画像のJSON数値配列転送(ipc::Response+Blob URL)。
+- 依存: tauri-plugin-opener 2.5.5(プラグイン未登録、自由関数open_pathのみ。tauri 2.11.6のまま)、markdown-it 15.0.2。
+- 動作確認(Tauri IPCモックのヘッドレスEdge): ビューアでテキスト表示(文字コード名・切り詰め通知・行番号)、listen→takeの順、Alt+→で画像(Blob URL)へ切替、Escでclose。メインで/viewerは/へリダイレクト、Enterでclassify→viewer_open(seq付き)、Shift+Enterでviewer_os_open_path。
+- 未実施: 実Tauriでの手動確認(`tests/manual/phase6-viewer-checklist.md`)。code-reviewerの再レビュー報告は受信できず、再レビュー観点(複数モニタ座標・Blob URL解放・生バイト受信・ロック)はオーケストレーターが直接確認。
+- 残課題(非blocker): ISS-0126(b) 画素数上限は未決(上限なしで実装)、ISS-0135 ユーザー文書の置き場所なし、右クリックメニューは後続フェーズ。
 
 ## 2026-09-27 Phase 5 ZIP作成/展開(SPEC-0300-0014 第3版)テスト実行結果
 

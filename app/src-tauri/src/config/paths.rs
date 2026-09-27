@@ -21,3 +21,9 @@ pub fn app_config_dir(app: &AppHandle) -> io::Result<PathBuf> {
 pub fn navigation_path(app: &AppHandle) -> io::Result<PathBuf> {
     Ok(app_config_dir(app)?.join("navigation.toml"))
 }
+
+/// Full path of `viewer-window.toml` (SPEC-0300-0015 R-425): its own file,
+/// not a key inside `config.toml` (ISS-0118).
+pub fn viewer_window_path(app: &AppHandle) -> io::Result<PathBuf> {
+    Ok(app_config_dir(app)?.join("viewer-window.toml"))
+}

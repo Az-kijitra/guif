@@ -12,7 +12,7 @@
   } from "$lib/features/keyboard/key-dispatch";
   import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
-  import { computeFileListAria, computeRowAria } from "$lib/features/file-list/aria";
+  import { computeFileListAria } from "$lib/features/file-list/aria";
   import { resolveFocusIndexForVisibleSet } from "$lib/features/file-list/navigation";
   import { searchState } from "$lib/features/search/search-state.svelte";
   import { computeFilteredEntries } from "$lib/features/search/matching";
@@ -41,6 +41,9 @@
     createModalKeyHandler,
     syncHistoryWithModal,
   } from "./overlay-wiring";
+  import { createMainViewerOpenController } from "./viewer-open-wiring";
+  import { createRowInteractionHandlers } from "./row-interaction-wiring";
+  import FileListRow from "./_components/FileListRow.svelte";
 
   let containerEl: HTMLDivElement | undefined = $state();
   let containerWidth = $state(0);
@@ -116,6 +119,21 @@
     return path !== "" && filteredEntries.some((e) => e.path === path);
   }
 
+  // §3.5.3/R-408: fire-and-forget from the caller's side; failures are
+  // reported via the shared status line (R-405-5/R-406/R-513).
+  const viewerOpenController = createMainViewerOpenController((message) => statusMessage.show(message));
+
+  // R-401-5/R-402/R-402-1/R-402-2 (SPEC-0300-0009 R-50~R-52, ISS-0132): mouse
+  // click selection and the double-click composition, extracted to
+  // row-interaction-wiring.ts (MUST-80: this file stays ≤400 lines).
+  const { focusedEntry, handleRowClick, handleRowDblClick } = createRowInteractionHandlers({
+    fileList: fileListState,
+    filteredEntries: () => filteredEntries,
+    isFocusedPathVisible,
+    afterUserNavigation,
+    viewer: viewerOpenController,
+  });
+
   // §3.3.5: the search-bar action switch lives in search-wiring.ts (R-105~R-109).
   const handleSearchAction = createSearchActionHandler({
     search: searchState,
@@ -152,6 +170,8 @@
     currentPath: () => fileListState.currentPath,
     fileOps,
     archive,
+    focusedEntry,
+    viewer: viewerOpenController,
   });
 
   // §3.3.2: modal keys (Escape/Enter/Tab...) are fixed, keymap-independent.
@@ -327,17 +347,13 @@
     style="grid-template-rows: repeat({Math.max(layout.rows, 1)}, 2rem); grid-auto-flow: column;"
   >
     {#each filteredEntries as entry (entry.path)}
-      <div
-        id={entry.path}
-        class="file-list-row"
-        class:focused={entry.path === focusedPath()}
-        role={computeRowAria({ selected: fileListState.selected.has(entry.path) }).role}
-        aria-selected={computeRowAria({ selected: fileListState.selected.has(entry.path) })["aria-selected"]}
-      >
-        <span class="name">{entry.entryType === "dir" ? "📁" : "📄"} {entry.name}</span>
-        <span class="size">{entry.entryType === "dir" ? "" : entry.size}</span>
-        <span class="modified">{entry.modified}</span>
-      </div>
+      <FileListRow
+        {entry}
+        focused={entry.path === focusedPath()}
+        selected={fileListState.selected.has(entry.path)}
+        onRowClick={handleRowClick}
+        onRowDblClick={handleRowDblClick}
+      />
     {/each}
   </div>
 </main>
@@ -373,21 +389,5 @@
     border: 1px solid #ccc;
     padding: 0.25rem;
     min-height: 200px;
-  }
-  .file-list-row {
-    display: grid;
-    grid-template-columns: 1fr 72px 140px;
-    align-items: center;
-    padding: 0 0.25rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .file-list-row.focused {
-    outline: 2px solid #2266dd;
-    outline-offset: -2px;
-  }
-  .file-list-row[aria-selected="true"] {
-    background: #dbe9ff;
   }
 </style>
