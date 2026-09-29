@@ -10,16 +10,25 @@ import { nextFocusIndex, resolveModalKeyIntent, type ModalKeyEvent, type ModalKi
 // bar's Escape BEFORE the overlay branch, so while a modal is shown both
 // search flags are masked (otherwise the modal's Escape would cancel the
 // search instead).
+// SPEC-0200-0001 §3.6.11.1 (MUST-84): `sortMenuOpen` is an OPTIONAL new
+// parameter (defaults to false) so every existing call site keeps behaving
+// exactly as before. The sort menu also masks the search flags (Escape must
+// close the menu, not cancel the search, AC-03) but -- unlike a modal --
+// does NOT close the search bar itself (R-34-13/AC-617: the search bar
+// survives a sort change).
 export function computeDispatchOverlayFlags(s: {
   modalOpen: boolean;
   historyOpen: boolean;
   searchActive: boolean;
   searchInputFocused: boolean;
+  sortMenuOpen?: boolean;
 }) {
+  const sortMenuOpen = s.sortMenuOpen ?? false;
+  const masked = s.modalOpen || sortMenuOpen;
   return {
-    isOverlayOpen: s.modalOpen || s.historyOpen,
-    isSearchActive: s.searchActive && !s.modalOpen,
-    isSearchInputFocused: s.searchInputFocused && !s.modalOpen,
+    isOverlayOpen: s.modalOpen || s.historyOpen || sortMenuOpen,
+    isSearchActive: s.searchActive && !masked,
+    isSearchInputFocused: s.searchInputFocused && !masked,
   };
 }
 
@@ -111,4 +120,13 @@ export function createModalFocusController(deps: ModalFocusControllerDeps) {
 // opens is closed (state only; the modal takes the focus).
 export function syncHistoryWithModal(s: { modalOpen: boolean; history: { readonly isOpen: boolean; close(): void } }): void {
   if (s.modalOpen && s.history.isOpen) s.history.close();
+}
+
+// SHOULD-126/MUST-84 (c): a modal opening while the sort menu is shown must
+// close the sort menu (same shape as syncHistoryWithModal/SHOULD-85).
+export function syncSortMenuWithModal(s: {
+  modalOpen: boolean;
+  sortMenu: { readonly isOpen: boolean; close(): void };
+}): void {
+  if (s.modalOpen && s.sortMenu.isOpen) s.sortMenu.close();
 }

@@ -79,7 +79,11 @@ export const DEFAULT_KEYMAP: Record<string, string> = {
   open: "Enter",
   go_parent: "Backspace",
   exit: "Ctrl+Q",
-  settings: "Ctrl+,",
+  // SPEC-0200-0001 §3.6.11.3 (MUST-86, 発注者決定 2026-09-27): the key BODY
+  // is the word "Comma", not the literal "," character (eventKeyToken(",")
+  // now maps to "Comma"; matchesHardcodedShortcut's literal was updated to
+  // match).
+  settings: "Ctrl+Comma",
   help_keymap: "F1",
   focus_path: "Ctrl+L",
   toggle_hidden: "Ctrl+H",

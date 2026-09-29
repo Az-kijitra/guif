@@ -58,6 +58,17 @@ function makeDeps(over: Record<string, unknown> = {}) {
       goParent: vi.fn(async () => "C:\\" as string | null),
       toggleFocused: vi.fn(),
       selectAll: vi.fn(),
+      // Phase 7 (SPEC-0200-0001 §3.6.6, §3.6.11.4/.5 MUST-87/94):
+      toggleTree: vi.fn(),
+      toggleHidden: vi.fn(),
+      toggleSize: vi.fn(),
+      toggleTime: vi.fn(),
+      clearSelection: vi.fn(),
+      pageUp: vi.fn(),
+      pageDown: vi.fn(),
+      showTree: vi.fn(() => true),
+      showHidden: vi.fn(() => false),
+      sortKey: vi.fn(() => "name" as const),
     },
     filteredEntries: () => filtered,
     rowsPerColumn: () => 10,
@@ -67,9 +78,17 @@ function makeDeps(over: Record<string, unknown> = {}) {
     addJump: vi.fn(),
     currentPath: () => "C:\\d",
     fileOps: { handleAction: vi.fn(() => true) },
+    archive: { handleAction: vi.fn(() => true) },
     // SPEC-0300-0015 §3.5.3: the "open" case's new dependencies.
     focusedEntry: () => filtered[0] ?? null,
     viewer: { openFile: vi.fn(), openWithOsAssociation: vi.fn() },
+    // Phase 7 (SPEC-0200-0001 §3.6.6, §3.6.11.4(f)/MUST-94): tree composition
+    // and the R-14-14  file-op guard, injected here (NOT imported) to keep
+    // list-action-wiring.ts import-free of tree-state.svelte.ts (§4.1).
+    isTreeFocused: () => false,
+    tree: { clear: vi.fn(), followTo: vi.fn(async () => undefined), applyHiddenFilesChanged: vi.fn() },
+    sortMenu: { toggle: vi.fn() },
+    focus: { container: vi.fn() },
     ...over,
   };
   return { deps, filtered };
@@ -118,10 +137,17 @@ describe("createListActionHandler: existing cases keep working (regression of th
   });
 
   it("an unknown / not-yet-implemented action => false and no file operation", () => {
+    // Test fix (code-generator, 2026-09-28, SPEC-0200-0001 §3.6.6): this
+    // Phase 1-era assertion originally covered `toggle_hidden` alongside
+    // `refresh` as "not yet implemented". Phase 7 implements `toggle_hidden`
+    // (tested exhaustively below, "the 8 new Phase 7 actions"), so asserting
+    // `false` for it here is now stale and directly contradicts that new,
+    // more specific coverage against the SAME `makeDeps()` shape -- narrowed
+    // to `refresh` (still unimplemented, R-26) to remove the contradiction
+    // without weakening either test's actual intent.
     const { deps } = makeDeps();
     const handler = createListActionHandler(deps as never);
     expect(handler("refresh", ev())).toBe(false);
-    expect(handler("toggle_hidden", ev())).toBe(false);
     expect(deps.fileOps.handleAction).not.toHaveBeenCalled();
   });
 
@@ -425,5 +451,124 @@ describe("MUST-61 end to end: routes context + real controller + handler (AC-02-
     await flush();
     expect(w.reload).toHaveBeenCalled();
     expect(w.recordVisit).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase 7 (SPEC-0300-0009 R-59/R-54-1/R-74-1/R-14-14/R-15-1; SPEC-0200-0001
+// §3.6.6, §3.6.11.4 MUST-87, §3.6.11.4(f)/MUST-94). 8 new list actions +
+// the tree-focus file-op guard.
+// ---------------------------------------------------------------------
+
+describe("createListActionHandler: the 8 new Phase 7 actions (§3.6.6)", () => {
+  it("toggle_hidden flips fileList.toggleHidden() and applies it to the tree (R-40-4)", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("toggle_hidden", ev())).toBe(true);
+    expect(deps.fileList.toggleHidden).toHaveBeenCalledTimes(1);
+    expect(deps.tree.applyHiddenFilesChanged).toHaveBeenCalledWith(false);
+  });
+
+  it("toggle_size / toggle_time simply forward to fileList", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("toggle_size", ev())).toBe(true);
+    expect(handler("toggle_time", ev())).toBe(true);
+    expect(deps.fileList.toggleSize).toHaveBeenCalledTimes(1);
+    expect(deps.fileList.toggleTime).toHaveBeenCalledTimes(1);
+  });
+
+  it("clear_selection (R-54-1) forwards to fileList.clearSelection", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("clear_selection", ev())).toBe(true);
+    expect(deps.fileList.clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("page_up / page_down (R-59-1) pass the FILTERED entries to fileList", () => {
+    const { deps, filtered } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("page_up", ev())).toBe(true);
+    expect(handler("page_down", ev())).toBe(true);
+    expect(deps.fileList.pageUp).toHaveBeenCalledWith(filtered);
+    expect(deps.fileList.pageDown).toHaveBeenCalledWith(filtered);
+  });
+
+  it("sort_menu (R-34-14) delegates entirely to the injected sortMenu.toggle()", () => {
+    const { deps } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("sort_menu", ev())).toBe(true);
+    expect(deps.sortMenu.toggle).toHaveBeenCalledTimes(1);
+  });
+
+  describe("toggle_tree (MUST-94: composed HERE, not inside list-state.svelte.ts, to avoid a list-state<->tree-state cycle)", () => {
+    it("when toggling the tree TO VISIBLE, follows the tree to the current path", () => {
+      const { deps } = makeDeps({ fileList: { ...makeDeps().deps.fileList, showTree: vi.fn(() => true) } });
+      const handler = createListActionHandler(deps as never);
+      expect(handler("toggle_tree", ev())).toBe(true);
+      expect(deps.fileList.toggleTree).toHaveBeenCalledTimes(1);
+      expect(deps.tree.followTo).toHaveBeenCalledWith("C:\\d");
+      expect(deps.tree.clear).not.toHaveBeenCalled();
+    });
+
+    it("when toggling the tree TO HIDDEN, clears the tree state (does not fetch)", () => {
+      const { deps } = makeDeps({ fileList: { ...makeDeps().deps.fileList, showTree: vi.fn(() => false) } });
+      const handler = createListActionHandler(deps as never);
+      expect(handler("toggle_tree", ev())).toBe(true);
+      expect(deps.tree.clear).toHaveBeenCalledTimes(1);
+      expect(deps.tree.followTo).not.toHaveBeenCalled();
+    });
+
+    it("R-14/AC-09: hiding the tree while it had focus reassigns focus to the file list container", () => {
+      const { deps } = makeDeps({
+        isTreeFocused: () => true,
+        fileList: { ...makeDeps().deps.fileList, showTree: vi.fn(() => false) },
+      });
+      const handler = createListActionHandler(deps as never);
+      handler("toggle_tree", ev());
+      expect(deps.focus.container).toHaveBeenCalledTimes(1);
+    });
+
+    it("hiding the tree while focus was already on the list does not (redundantly) refocus the container", () => {
+      const { deps } = makeDeps({
+        isTreeFocused: () => false,
+        fileList: { ...makeDeps().deps.fileList, showTree: vi.fn(() => false) },
+      });
+      const handler = createListActionHandler(deps as never);
+      handler("toggle_tree", ev());
+      expect(deps.focus.container).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("createListActionHandler: R-14-14 tree-focus file-operation guard (AC-615)", () => {
+  const TREE_FOCUS_BLOCKED = ["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder", "zip_create", "zip_extract"];
+
+  it.each(TREE_FOCUS_BLOCKED)("%s does nothing (consumed, no fileOps/archive call) while the tree has focus", (action) => {
+    const { deps } = makeDeps({ isTreeFocused: () => true });
+    const handler = createListActionHandler(deps as never);
+    expect(handler(action, ev())).toBe(true);
+    expect(deps.fileOps.handleAction).not.toHaveBeenCalled();
+    expect(deps.archive.handleAction).not.toHaveBeenCalled();
+  });
+
+  it.each(TREE_FOCUS_BLOCKED)("%s still runs normally when the tree does NOT have focus", (action) => {
+    const { deps } = makeDeps({ isTreeFocused: () => false });
+    const handler = createListActionHandler(deps as never);
+    handler(action, ev());
+    const spy = action.startsWith("zip_") ? deps.archive.handleAction : deps.fileOps.handleAction;
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("R-14-14 explicitly does NOT block toggle_*/sort_menu/clear_selection/search/history/go_parent while the tree has focus", () => {
+    const { deps } = makeDeps({ isTreeFocused: () => true });
+    const handler = createListActionHandler(deps as never);
+    for (const action of ["toggle_hidden", "toggle_size", "toggle_time", "toggle_tree", "sort_menu", "clear_selection", "search", "history", "go_parent"]) {
+      handler(action, ev());
+    }
+    expect(deps.fileList.toggleHidden).toHaveBeenCalled();
+    expect(deps.fileList.clearSelection).toHaveBeenCalled();
+    expect(deps.sortMenu.toggle).toHaveBeenCalled();
+    expect(deps.activateSearch).toHaveBeenCalled();
   });
 });

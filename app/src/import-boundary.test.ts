@@ -241,10 +241,24 @@ describe("Phase 5 archive boundaries (SPEC-0300-0014 R-310, SPEC-0200-0001 §3.4
   // feature"). Narrowing this check to exclude `features/viewer` keeps its
   // original intent (SPEC-0300-0010 R-17: no OTHER feature's logic leaks into
   // the generic action switch) fully enforced.
-  it("§3.4.7: routes/list-action-wiring.ts imports no feature module other than features/viewer (SPEC-0300-0010 R-17, SPEC-0300-0015 §3.5.3)", () => {
+  //
+  // Test fix (code-reviewer minor item, 2026-09-29, SPEC-0200-0001 §3.6.6):
+  // `features/file-list` is ALSO now exempted, for the exact same reason as
+  // `viewer` above (SHOULD-110-style shared judgment, not a new coupling):
+  // `list-action-wiring.ts`'s `toggle_tree` case reuses
+  // `features/file-list/aria.ts::computeTreeFocusReassignment` (R-14/AC-09)
+  // instead of re-implementing the same "hiding the tree while it had focus
+  // reassigns focus to the file list" decision a second time inline. `aria.ts`
+  // is a pure, DOM-independent, dependency-free module (no feature-to-feature
+  // coupling risk); the exempted set stays a explicit, narrow allow-list of
+  // shared PURE judgments, not a general relaxation.
+  it("§3.4.7: routes/list-action-wiring.ts imports no feature module other than features/viewer or features/file-list (SPEC-0300-0010 R-17, SPEC-0300-0015 §3.5.3, SPEC-0200-0001 §3.6.6)", () => {
     const bad = edges.filter(
       (e) =>
-        e.from === "routes" + sep + "list-action-wiring.ts" && e.toLayer.kind === "feature" && e.toLayer.name !== "viewer",
+        e.from === "routes" + sep + "list-action-wiring.ts" &&
+        e.toLayer.kind === "feature" &&
+        e.toLayer.name !== "viewer" &&
+        e.toLayer.name !== "file-list",
     );
     expect(bad.map(fmt)).toEqual([]);
   });
@@ -316,6 +330,77 @@ describe("Phase 6 viewer boundaries (SPEC-0300-0015, SPEC-0200-0001 §3.5.7)", (
         e.fromLayer.name === "viewer" &&
         e.toLayer.kind === "feature" &&
         e.toLayer.name === "keyboard",
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+});
+
+// Phase 7 (SPEC-0300-0009/0010; SPEC-0200-0001 §3.6.11.3/.4/.11 MUST-86/87/
+// 94, SHOULD-123/129/130): new intra-feature and shared-module boundaries
+// the generic cross-feature scans above do not cover (list-state.svelte.ts
+// and tree-state.svelte.ts are BOTH in features/file-list/, so the generic
+// "no feature imports another feature" check cannot see a cycle between
+// them; likewise shared/persistence-coordinator.ts's constraint is
+// shared-to-shared, not shared-to-feature).
+describe("Phase 7 boundaries (SPEC-0200-0001 §3.6.11.4(f) MUST-94, §3.6.11.11 SHOULD-123/130)", () => {
+  const edges = collectEdges();
+  const fileListEdges = edges.filter((e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "file-list" && !/\.test\.ts$/.test(e.from));
+  const exists = (rel: string): boolean => {
+    try {
+      return statSync(join(SRC, rel)).isFile();
+    } catch {
+      return false;
+    }
+  };
+
+  it("§3.6 the planned Phase 7 modules exist (feature files, routes wiring, shared)", () => {
+    const planned = [
+      "lib/features/file-list/tree-state.svelte.ts",
+      "lib/features/file-list/format.ts",
+      "lib/features/file-list/sort-menu-state.svelte.ts",
+      "lib/features/file-list/sort-menu-keys.ts",
+      "lib/features/keyboard/keymap-state.svelte.ts",
+      "routes/startup-wiring.ts",
+      "routes/focus-wiring.ts",
+      "routes/tree-action-wiring.ts",
+      "routes/sort-menu-wiring.ts",
+      "lib/shared/path-key.ts",
+      "lib/shared/persistence-coordinator.ts",
+    ];
+    expect(planned.filter((f) => !exists(f))).toEqual([]);
+  });
+
+  it("MUST-94: list-state.svelte.ts never imports tree-state.svelte.ts", () => {
+    const bad = fileListEdges.filter(
+      (e) => /list-state\.svelte\.ts$/.test(e.from) && /tree-state(\.svelte)?(\.ts)?$/.test(e.spec),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("MUST-94/MUST-87(f): tree-state.svelte.ts never imports list-state.svelte.ts", () => {
+    const bad = fileListEdges.filter(
+      (e) => /tree-state\.svelte\.ts$/.test(e.from) && /list-state(\.svelte)?(\.ts)?$/.test(e.spec),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("SHOULD-123: sort-menu-keys.ts never imports features/keyboard (a local structural event type is used instead)", () => {
+    const bad = edges.filter(
+      (e) => /sort-menu-keys\.ts$/.test(e.from) && (e.toLayer.kind === "feature" ? e.toLayer.name === "keyboard" : /features\/keyboard/.test(e.spec)),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("SHOULD-130 condition 1: shared/persistence-coordinator.ts never imports shared/ipc/config or shared/state/status-message directly (load/save/onSaveError are injected)", () => {
+    const bad = edges.filter(
+      (e) => /lib\/shared\/persistence-coordinator\.ts$/.test(e.from) && (/shared\/ipc\/config/.test(e.spec) || /status-message/.test(e.spec)),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("SHOULD-129 condition 2: shared/path-key.ts stays a leaf -- it imports neither features/ nor routes/", () => {
+    const bad = edges.filter(
+      (e) => /lib\/shared\/path-key\.ts$/.test(e.from) && (e.toLayer.kind === "feature" || e.toLayer.kind === "routes"),
     );
     expect(bad.map(fmt)).toEqual([]);
   });

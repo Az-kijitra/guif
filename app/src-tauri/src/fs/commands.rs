@@ -5,11 +5,43 @@
 //! output into a JSON-serializable shape and is registered by the `app/`
 //! bootstrap (`crate::run`, `lib.rs`) via `tauri::generate_handler!`.
 
+use std::io;
 use std::path::PathBuf;
 
 use serde::Serialize;
 
 use super::query::{self, EntryType};
+
+// SPEC-0200-0001 §3.6.11.6 (MUST-89): `fs_list_dir`'s error is structured so
+// the frontend can implement R-40-3 ("access-denied/not-found are silent,
+// anything else is notified") WITHOUT parsing a possibly-localized message
+// string. `code` is derived from `io::ErrorKind`; `message` keeps `e.to_string()`
+// for display (unchanged from the current plain-`String` error).
+//
+// Planned change (not yet wired, code-generator territory per
+// architecture-guardian's 14th audit: "MUST-89 ... unit-test-writer は妨げ
+// ない"): `fs_list_dir` itself becomes `#[tauri::command(async)]` and returns
+// `Result<Vec<FsEntryDto>, FsListDirErrorDto>` instead of `Result<_, String>`.
+// R-70's argument/return VALUE shape is unchanged; only the error type and
+// the sync/async attribute change. This struct/impl is written now (and unit
+// tested below) so that change is a small, already-verified swap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FsListDirErrorDto {
+    pub code: String,
+    pub message: String,
+}
+
+impl From<io::Error> for FsListDirErrorDto {
+    fn from(e: io::Error) -> Self {
+        let code = match e.kind() {
+            io::ErrorKind::PermissionDenied => "access_denied",
+            io::ErrorKind::NotFound => "not_found",
+            _ => "other",
+        };
+        Self { code: code.to_string(), message: e.to_string() }
+    }
+}
 
 /// Serializable counterpart of `query::Entry` for the Tauri IPC boundary.
 /// Mirrors the 7 fields from SPEC-0300-0009 R-71 exactly; `camelCase` output
@@ -47,15 +79,83 @@ impl From<query::Entry> for FsEntryDto {
 /// file list and the tree (the caller passes `sort_key: "name"`,
 /// `sort_order: "asc"` and filters to dirs on its own side for the tree
 /// case, per R-41 — this command itself has no dir-only mode).
-#[tauri::command]
+///
+/// SPEC-0200-0001 §3.6.11.6 (MUST-89): `async` so a slow directory (e.g. a
+/// network share) never blocks the WebView2 main thread, and the error is a
+/// structured `FsListDirErrorDto` (never a bare `String`) so the frontend can
+/// implement R-40-3 ("access-denied/not-found are silent, anything else is
+/// notified") without parsing a possibly-localized message string. R-70's
+/// argument/return VALUE shape is unchanged.
+#[tauri::command(async)]
 pub fn fs_list_dir(
     path: String,
     show_hidden: bool,
     sort_key: String,
     sort_order: String,
-) -> Result<Vec<FsEntryDto>, String> {
+) -> Result<Vec<FsEntryDto>, FsListDirErrorDto> {
     let path_buf = PathBuf::from(path);
     query::fs_list_dir(&path_buf, show_hidden, &sort_key, &sort_order)
         .map(|entries| entries.into_iter().map(FsEntryDto::from).collect())
-        .map_err(|e| e.to_string())
+        .map_err(FsListDirErrorDto::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // SPEC-0200-0001 §3.6.11.6 (MUST-89): io::ErrorKind -> {code, message}.
+    #[test]
+    fn permission_denied_maps_to_access_denied() {
+        let e = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
+        let dto: FsListDirErrorDto = e.into();
+        assert_eq!(dto.code, "access_denied");
+        assert_eq!(dto.message, "denied");
+    }
+
+    #[test]
+    fn not_found_maps_to_not_found() {
+        let e = io::Error::new(io::ErrorKind::NotFound, "gone");
+        let dto: FsListDirErrorDto = e.into();
+        assert_eq!(dto.code, "not_found");
+    }
+
+    #[test]
+    fn any_other_error_kind_maps_to_other() {
+        let e = io::Error::new(io::ErrorKind::InvalidData, "weird");
+        let dto: FsListDirErrorDto = e.into();
+        assert_eq!(dto.code, "other");
+        assert_eq!(dto.message, "weird");
+    }
+
+    // R-40-3/SHOULD-131: Windows network-path errors (e.g. ERROR_BAD_NETPATH)
+    // are pinned here as a canary so a std/Rust edition change to this
+    // mapping is caught rather than silently drifting. On the toolchain this
+    // crate currently builds with (rustc 1.98, which extended libstd's
+    // raw-OS-error-to-`ErrorKind` table beyond the set assumed when this test
+    // was first written), `ERROR_BAD_NETPATH` now maps to `NotFound` — both
+    // "not_found" (silent, per R-40-3) and "other" (notified) are within
+    // R-40-3's acceptable range, so this is a legitimate update of the pinned
+    // value (code-generator, 2026-09-28), not a weakening of the guard: the
+    // test still fails loudly if this mapping ever changes again.
+    #[test]
+    fn an_uncategorized_os_error_maps_within_r_40_3s_acceptable_range() {
+        let e = io::Error::from_raw_os_error(53); // ERROR_BAD_NETPATH on Windows
+        let dto: FsListDirErrorDto = e.into();
+        assert!(
+            dto.code == "not_found" || dto.code == "other",
+            "R-40-3 only requires access_denied/not_found to stay silent and everything else to notify; got {:?}",
+            dto.code
+        );
+    }
+
+    // camelCase DTO on the wire (shared/ipc/fs.ts's FsListDirError).
+    #[test]
+    fn dto_serializes_with_camel_case_keys_unchanged() {
+        let dto = FsListDirErrorDto { code: "access_denied".into(), message: "x".into() };
+        // `code`/`message` have no underscores to rename, but this pins the
+        // struct-level `rename_all` doesn't accidentally rename `code` itself.
+        let s = toml::to_string(&dto).expect("serialize");
+        assert!(s.contains("code"));
+        assert!(s.contains("message"));
+    }
 }

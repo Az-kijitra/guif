@@ -1,63 +1,66 @@
 <script lang="ts">
-  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2): composition layer only —
-  // it instantiates/injects the features' state and controllers and renders
-  // them; all decision logic lives in features/ and routes/*-wiring.ts.
-  // `filteredEntries` (SPEC-0300-0012 R-115~R-118) is the sole feature-to-
-  // feature bridge (§3.1.2 path 2; R-129/AC-128).
+  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2): composition only -- it
+  // injects state/controllers into routes/_components/; decisions live in
+  // features/ and routes/*-wiring.ts (`filteredEntries`, SPEC-0300-0012
+  // R-115~R-118, is the sole feature-to-feature bridge, §3.1.2 path 2).
   import { onMount, onDestroy, tick, untrack } from "svelte";
-  import {
-    attachGlobalKeydownListener,
-    dispatchKeydown,
-    type DispatchContext,
-  } from "$lib/features/keyboard/key-dispatch";
-  import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
+  import { attachGlobalKeydownListener } from "$lib/features/keyboard/key-dispatch";
+  import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
+  import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
+  import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
+  import { createTreeState } from "$lib/features/file-list/tree-state.svelte";
+  import { getTreeChildQuery, pathsEqual } from "$lib/features/file-list/tree";
+  import { createSortMenuState } from "$lib/features/file-list/sort-menu-state.svelte";
+  import { uiStatePersistence } from "$lib/features/file-list/ui-state-persistence";
   import { computeFileListAria } from "$lib/features/file-list/aria";
   import { resolveFocusIndexForVisibleSet } from "$lib/features/file-list/navigation";
+  import { fsListDir } from "$lib/shared/ipc/fs";
   import { searchState } from "$lib/features/search/search-state.svelte";
   import { computeFilteredEntries } from "$lib/features/search/matching";
-  import SearchBar from "$lib/features/search/SearchBar.svelte";
   import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
   import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
-  import NavigationHistoryList from "$lib/features/navigation-history/NavigationHistoryList.svelte";
   import { modalHost } from "$lib/shared/state/modal-host.svelte";
   import ModalHost from "./_components/modal/ModalHost.svelte";
+  import OverlayRegion from "./_components/OverlayRegion.svelte";
+  import FileListBody from "./_components/FileListBody.svelte";
+  import StatusBar from "./_components/StatusBar.svelte";
   import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
   import { statusMessage } from "$lib/shared/state/status-message.svelte";
+  import { configLoadKeymap } from "$lib/shared/ipc/config";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { homeDir } from "@tauri-apps/api/path";
-  import {
-    createAfterUserNavigation,
-    createCloseRequestHandler,
-    createOverlayController,
-    loadInitialDirectory,
-  } from "./navigation-wiring";
-  import { createListActionHandler } from "./list-action-wiring";
+  import { createAfterUserNavigation, createCloseRequestHandler, createOverlayController, loadInitialDirectory } from "./navigation-wiring";
+  import { createListTreeControllers } from "./list-tree-controllers-wiring";
   import { createOperationControllers } from "./operations-wiring";
   import { createSearchActionHandler } from "./search-wiring";
-  import {
-    computeDispatchOverlayFlags,
-    createModalFocusController,
-    createModalKeyHandler,
-    syncHistoryWithModal,
-  } from "./overlay-wiring";
+  import { createModalFocusController, createModalKeyHandler, syncHistoryWithModal, syncSortMenuWithModal } from "./overlay-wiring";
+  import { closeSortMenu, createSortMenuKeyHandler, createSortMenuToggle } from "./sort-menu-wiring";
+  import { createTabStopController } from "./focus-wiring";
+  import { runStartupHydrate } from "./startup-wiring";
+  import { createMainKeydownHandler } from "./main-keydown-wiring";
   import { createMainViewerOpenController } from "./viewer-open-wiring";
   import { createRowInteractionHandlers } from "./row-interaction-wiring";
-  import FileListRow from "./_components/FileListRow.svelte";
+
+  let ready = $state(false); // SHOULD-120: gate the body until R-77-3-1 applies.
 
   let containerEl: HTMLDivElement | undefined = $state();
+  let treeContainerEl: HTMLDivElement | undefined = $state();
   let containerWidth = $state(0);
   let containerHeight = $state(0);
-  // DOM references used only to sequence `.focus()` calls (§3.1.5, §3.2.9-1,
-  // §3.3.2) — not domain state.
+  let treeFullyVisibleRows = $state(1); // R-59-2: measured by TreePanel itself.
+  // DOM refs used only to sequence `.focus()` (§3.1.5/§3.2.9-1/§3.3.2/§3.6.4).
   let searchInputEl: HTMLInputElement | undefined = $state();
   let historyListEl: HTMLDivElement | undefined = $state();
   let dialogEl: HTMLDivElement | undefined = $state();
 
   let layout = $derived(fileListState.layout(containerWidth || 800, containerHeight || 400));
+  // R-59-1: page_up/page_down move by the SAME "R-16-1 rows" as rowsPerColumn.
+  $effect(() => {
+    fileListState.setPageRows(layout.rows);
+  });
 
-  // R-116: recomputed via Svelte reactivity (matching.ts is pure).
-  let filterResult = $derived(
+  let filterResult = $derived( // R-116: recomputed via Svelte reactivity.
     computeFilteredEntries(fileListState.entries, {
       active: searchState.active,
       query: searchState.query,
@@ -66,66 +69,93 @@
   );
   let filteredEntries = $derived(filterResult.filteredEntries);
 
+  // R-41: dir-only, name/asc, independent of the list's own sort.
+  async function listDirForTree(path: string, showHidden: boolean) {
+    const query = getTreeChildQuery(path);
+    const entries = await fsListDir({ path: query.path, showHidden, sortKey: query.sortKey, sortOrder: query.sortOrder });
+    return entries.filter((e) => e.entryType === "dir").map((e) => ({ path: e.path, name: e.name }));
+  }
+  const treeState = createTreeState({
+    listDir: listDirForTree,
+    isVisible: () => fileListState.showTree(),
+    onLoadFailureNotice: (message) => statusMessage.show(message),
+  });
+  const sortMenuState = createSortMenuState();
+
   let keydownHandler: ((event: Event) => void) | undefined;
   let unlistenClose: (() => void) | undefined;
   let destroyed = false;
 
-  // §3.2.4: the single call-through point for every R-208 user-initiated move
-  // (openFocused / goParent / history+jump confirm / initial path). Reload
-  // paths (F5, toggle_hidden, file watching; R-209) must NOT use this.
-  const afterUserNavigation = createAfterUserNavigation((path) =>
-    navigationHistoryState.recordVisit(path),
+  // §3.2.4/§3.6.11.4(f): the single call-through point for every R-208 move;
+  // also where the tree follows the list (MUST-94: no list<->tree import).
+  const afterUserNavigation = createAfterUserNavigation(
+    (path) => navigationHistoryState.recordVisit(path),
+    (path) => void treeState.followTo(path),
   );
 
-  // §3.2.9-1: mutual exclusion of search bar / history list plus all DOM
-  // focus sequencing.
-  const overlay = createOverlayController({
+  const focus = {
+    container: () => containerEl?.focus(),
+    tree: () => treeContainerEl?.focus(),
+    historyList: () => historyListEl?.focus(),
+    searchInput: () => searchInputEl?.focus(),
+  };
+
+  const overlay = createOverlayController({ // §3.2.9-1: search/history/sort-menu exclusion + focus.
     search: searchState,
     history: navigationHistoryState,
-    focus: {
-      container: () => containerEl?.focus(),
-      historyList: () => historyListEl?.focus(),
-      searchInput: () => searchInputEl?.focus(),
-    },
+    focus,
     nextTick: tick,
     navigate: (path) => void afterUserNavigation(fileListState.loadDirectory(path)),
+    sortMenu: sortMenuState,
   });
   const { activateSearch, openHistoryList } = overlay;
 
-  // §3.2.6 (MUST-52): onCloseRequested performs the flush.
-  function requestAppExit(): void {
-    try {
-      getCurrentWindow()
-        .close()
-        .catch(() => {});
-    } catch {
-      // Not running inside Tauri (plain browser dev): nothing to close.
-    }
-  }
+  const closeSortMenuNow = () => closeSortMenu({ state: sortMenuState, focusContainer: focus.container });
+  const sortMenuToggle = createSortMenuToggle({
+    state: sortMenuState,
+    currentSortKey: () => fileListState.sortKey(),
+    closeSortMenu: closeSortMenuNow,
+  });
+  const handleSortMenuKey = createSortMenuKeyHandler({
+    state: sortMenuState,
+    applySort: (key) => fileListState.applySort(key),
+    closeSortMenu: closeSortMenuNow,
+  });
+
+  const isTreeFocused = () => treeState.hasFocus;
+  // Bug fix (coordinator WebView2 finding): TabStopControllerDeps.focus is
+  // {tree/search/list}, NOT `focus` above's {container/tree/historyList/
+  // searchInput} shape -- passing `focus` directly threw on every Tab press.
+  const onTabStop = createTabStopController({
+    treeVisible: () => fileListState.showTree(),
+    searchVisible: () => searchState.active,
+    currentStop: () => (isTreeFocused() ? "tree" : searchState.inputFocused ? "search" : "list"),
+    focus: { tree: focus.tree, search: focus.searchInput, list: focus.container },
+  });
 
   // Both exit routes (hardcoded Ctrl+Q and a keymap-bound "exit") converge here.
   function exitOnly(action: string): boolean {
     if (action !== "exit") return false;
-    requestAppExit();
+    try {
+      getCurrentWindow().close().catch(() => {});
+    } catch {
+      /* not running inside Tauri (plain browser dev): nothing to close */
+    }
     return true;
   }
 
-  function focusedPath(): string {
-    return fileListState.entries[fileListState.focusedIndex]?.path ?? "";
-  }
-
-  function isFocusedPathVisible(): boolean {
+  const focusedPath = (): string => fileListState.entries[fileListState.focusedIndex]?.path ?? "";
+  const isFocusedPathVisible = (): boolean => {
     const path = focusedPath();
     return path !== "" && filteredEntries.some((e) => e.path === path);
-  }
+  };
 
-  // §3.5.3/R-408: fire-and-forget from the caller's side; failures are
-  // reported via the shared status line (R-405-5/R-406/R-513).
+  let fileListAria = $derived(computeFileListAria({ focusedPath: focusedPath(), isFocusedPathVisible: isFocusedPathVisible() }));
+
+  // §3.5.3/R-408: fire-and-forget; failures go to the shared status line.
   const viewerOpenController = createMainViewerOpenController((message) => statusMessage.show(message));
 
-  // R-401-5/R-402/R-402-1/R-402-2 (SPEC-0300-0009 R-50~R-52, ISS-0132): mouse
-  // click selection and the double-click composition, extracted to
-  // row-interaction-wiring.ts (MUST-80: this file stays ≤400 lines).
+  // R-401-5/R-402 (SPEC-0300-0009 R-50~R-52): click selection + dblclick.
   const { focusedEntry, handleRowClick, handleRowDblClick } = createRowInteractionHandlers({
     fileList: fileListState,
     filteredEntries: () => filteredEntries,
@@ -134,10 +164,9 @@
     viewer: viewerOpenController,
   });
 
-  // §3.3.5: the search-bar action switch lives in search-wiring.ts (R-105~R-109).
   const handleSearchAction = createSearchActionHandler({
     search: searchState,
-    focusContainer: () => containerEl?.focus(),
+    focusContainer: focus.container,
     entries: () => fileListState.entries,
     filteredEntries: () => filteredEntries,
     focusedIndex: () => fileListState.focusedIndex,
@@ -145,9 +174,7 @@
     focusIndex: (index) => fileListState.focusIndex(index),
   });
 
-  // Phase 2 (SPEC-0300-0011) file operations and Phase 5 (SPEC-0300-0014) ZIP
-  // create/extract: both see the displayed entries only (MUST-61) and reload
-  // without recording a visit (R-208/R-209, R-397). Assembly: operations-wiring.
+  // File ops (Phase 2) + ZIP (Phase 5): displayed entries only (MUST-61).
   const { fileOps, archive } = createOperationControllers({
     modal: modalHost,
     status: statusMessage,
@@ -159,8 +186,9 @@
     reload: (opts) => fileListState.reload(opts),
   });
 
-  const onListAction = createListActionHandler({
+  const { onListAction, onTreeAction } = createListTreeControllers({
     fileList: fileListState,
+    treeState,
     filteredEntries: () => filteredEntries,
     rowsPerColumn: () => layout.rows,
     afterUserNavigation,
@@ -172,12 +200,24 @@
     archive,
     focusedEntry,
     viewer: viewerOpenController,
+    isTreeFocused,
+    sortMenuToggle,
+    focusContainer: focus.container,
+    treeFullyVisibleRows: () => treeFullyVisibleRows,
   });
 
-  // §3.3.2: modal keys (Escape/Enter/Tab...) are fixed, keymap-independent.
+  function onTreeSelectPath(path: string): void {
+    // AC-25/R-43: same as the keyboard "open" tree action -- only navigate
+    // (and thereby re-`followTo` the tree) when the path actually differs
+    // from the currently open directory.
+    if (!pathsEqual(path, fileListState.currentPath)) {
+      void afterUserNavigation(fileListState.loadDirectory(path));
+    }
+  }
+
   const modalFocus = createModalFocusController({
     getDialogEl: () => dialogEl,
-    focusContainer: () => containerEl?.focus(),
+    focusContainer: focus.container,
     nextTick: tick,
     getActiveElement: () => document.activeElement,
   });
@@ -189,77 +229,70 @@
     const topId = modalHost.topId;
     untrack(() => void modalFocus.onTopIdChange(topId));
   });
-  // §3.3.2 exclusion invariant (SHOULD-85).
+  // §3.3.2/§3.6.11.1 exclusion invariants (SHOULD-85/MUST-84 (c)).
   $effect(() => {
     syncHistoryWithModal({ modalOpen: modalHost.isOpen, history: navigationHistoryState });
+    syncSortMenuWithModal({ modalOpen: modalHost.isOpen, sortMenu: sortMenuState });
   });
 
   onMount(() => {
     void bootstrap();
   });
 
-  // §3.2.6/§3.2.7: single async IIFE. Only hydrateAll() is awaited before the
-  // key listener is attached; the initial directory load is fire-and-forget.
+  // §3.6.2/§3.6.11.11: startup notices are concatenated (config -> ui-state ->
+  // navigation) and applied (ui-state -> config -> navigation) before the
+  // first fs_list_dir (R-77-3-1), via startup-wiring.ts.
   async function bootstrap(): Promise<void> {
-    await navigationPersistence.hydrateAll();
+    await runStartupHydrate({
+      loadUiState: async () => ({ notice: await uiStatePersistence.hydrateAll() }),
+      loadKeymap: async () => {
+        const raw = await configLoadKeymap();
+        const validated = validateKeymapEntries(raw.entries);
+        keymapState.hydrate(validated.effective);
+        return { notice: buildKeymapLoadNotice(raw.parseError, validated.invalidActions) };
+      },
+      loadNavigation: () => navigationPersistence.hydrateAll(),
+    });
     if (destroyed) return;
+    ready = true;
 
-    keydownHandler = (event: Event) => {
-      const ke = event as KeyboardEvent;
-      const keydownLike: KeydownLikeEvent = {
-        key: ke.key,
-        ctrlKey: ke.ctrlKey,
-        altKey: ke.altKey,
-        shiftKey: ke.shiftKey,
-        metaKey: ke.metaKey,
-        isComposing: ke.isComposing,
-      };
-
-      const ctx: DispatchContext = {
-        isSettingsOpen: false,
-        isMenuBarActive: false,
-        isTreeFocused: false,
-        // §3.3.2: modal + history list = overlay; search flags masked while a modal is shown.
-        ...computeDispatchOverlayFlags({
-          modalOpen: modalHost.isOpen,
-          historyOpen: navigationHistoryState.isOpen,
-          searchActive: searchState.active,
-          searchInputFocused: searchState.inputFocused,
-        }),
-        customOverrides: {},
-        onHardcodedShortcut: exitOnly,
-        onExitAction: exitOnly,
-        // §3.2.8: the history/jump list rides on the existing overlay slot.
-        onOverlayKey: (action, overlayEvent) => {
-          if (modalHost.isOpen) return handleModalKey(overlayEvent);
-          if (!navigationHistoryState.isOpen) return false;
-          return overlay.handleIntent(resolveListKeyIntent(overlayEvent, action));
-        },
-        onMenuBarKey: () => false,
-        onTreeAction: () => false,
-        onListAction,
-        onSearchAction: handleSearchAction,
-      };
-
-      const handled = dispatchKeydown(keydownLike, ctx);
-      if (handled) {
-        ke.preventDefault();
-      }
-    };
+    keydownHandler = createMainKeydownHandler({
+      isTreeFocused,
+      customOverrides: () => keymapState.customOverrides,
+      modal: modalHost,
+      history: navigationHistoryState,
+      sortMenu: sortMenuState,
+      search: searchState,
+      onHardcodedShortcut: exitOnly,
+      onExitAction: exitOnly,
+      handleModalKey,
+      handleSortMenuKey,
+      sortMenuToggle,
+      resolveHistoryIntent: (event, action) => overlay.handleIntent(resolveListKeyIntent(event, action)),
+      onTreeAction,
+      onListAction,
+      onSearchAction: handleSearchAction,
+      onTabStop,
+    });
 
     attachGlobalKeydownListener(window, keydownHandler);
 
-    // R-208 #6 / §3.2.7: fire-and-forget (not awaited).
-    void loadInitialDirectory({
+    // R-208 #6/§3.2.7: awaited so R-14-12/AC-613 can focus the list right
+    // after the initial directory settles.
+    await loadInitialDirectory({
       lastVisited: navigationHistoryState.visitHistory[0],
       load: (path) => afterUserNavigation(fileListState.loadDirectory(path)),
       homeDir,
     });
+    if (!destroyed) focus.container();
 
-    // R-244: flush pending navigation data before the window closes.
+    // R-244/R-77-2-1: flush both persistence coordinators before the window
+    // closes (allSettled-safe, within the existing 3s timeout).
     try {
       const unlisten = await getCurrentWindow().onCloseRequested(
-        createCloseRequestHandler({ flush: () => navigationPersistence.flush() }),
+        createCloseRequestHandler({
+          flush: () => Promise.allSettled([navigationPersistence.flush(), uiStatePersistence.flush()]).then(() => undefined),
+        }),
       );
       if (destroyed) unlisten();
       else unlistenClose = unlisten;
@@ -278,85 +311,75 @@
 </script>
 
 <!-- §3.3.2: the background is inert while a modal is shown; <ModalHost> is
-     rendered outside <main>. -->
-<main inert={modalHost.isOpen}>
-  <h1>ReflexFiles Successor — Phase 1</h1>
+     rendered outside <main>. R-10-11/AC-631: path bar -> body (tree + list)
+     -> status bar (§3.6.11.4(e), no <h1>, no menu bar per SPEC-0100-0005 R-08). -->
+{#if ready}
+  <main inert={modalHost.isOpen}>
+    <p class="current-path">Current directory: {fileListState.currentPath}</p>
 
-  <p class="current-path">Current directory: {fileListState.currentPath}</p>
-
-  <!-- R-104/R-216: search bar and history/jump list share one region below
-       the path bar; mutually exclusive (§3.2.9-1). -->
-  {#if searchState.active}
-    <SearchBar
-      bind:inputEl={searchInputEl}
+    <OverlayRegion
+      searchActive={searchState.active}
       query={searchState.query}
       regexMode={searchState.regexMode}
-      error={filterResult.error}
+      filterError={filterResult.error}
+      bind:searchInputEl
       onQueryInput={(value) => searchState.setQuery(value)}
       onRegexModeChange={(value) => searchState.setRegexMode(value)}
-      onCancel={() => handleSearchAction("cancel")}
-      onSubmit={() => handleSearchAction("confirm")}
-      onInputFocus={() => searchState.setInputFocused(true)}
-      onInputBlur={() => searchState.setInputFocused(false)}
-    />
-  {/if}
-  {#if navigationHistoryState.isOpen}
-    <NavigationHistoryList
-      bind:listEl={historyListEl}
-      items={navigationHistoryState.mode === "history"
-        ? navigationHistoryState.visitHistory
-        : navigationHistoryState.jumpList}
-      selectedIndex={navigationHistoryState.selectedIndex}
-      label={navigationHistoryState.mode === "history" ? "Visit history" : "Jump list"}
-      onRowClick={(index) => {
+      onSearchCancel={() => handleSearchAction("cancel")}
+      onSearchSubmit={() => handleSearchAction("confirm")}
+      onSearchInputFocus={() => searchState.setInputFocused(true)}
+      onSearchInputBlur={() => searchState.setInputFocused(false)}
+      historyOpen={navigationHistoryState.isOpen}
+      historyItems={navigationHistoryState.mode === "history" ? navigationHistoryState.visitHistory : navigationHistoryState.jumpList}
+      historySelectedIndex={navigationHistoryState.selectedIndex}
+      historyLabel={navigationHistoryState.mode === "history" ? "Visit history" : "Jump list"}
+      bind:historyListEl
+      onHistoryRowClick={(index) => {
         navigationHistoryState.selectIndex(index);
         overlay.handleIntent("confirm");
       }}
-      onRemove={(index) => {
+      onHistoryRemove={(index) => {
         navigationHistoryState.removeIndex(index);
-        if (!navigationHistoryState.isOpen) containerEl?.focus();
+        if (!navigationHistoryState.isOpen) focus.container();
       }}
     />
-  {/if}
-  {#if statusMessage.text}
-    <p role="status" class="status-message">{statusMessage.text}</p>
-  {/if}
 
-  {#if fileListState.loading}
-    <p>Loading…</p>
-  {/if}
-  {#if fileListState.error}
-    <p role="alert" class="error">Error: {fileListState.error}</p>
-  {/if}
+    <FileListBody
+      showTree={fileListState.showTree()}
+      treeRows={treeState.visibleRows()}
+      treeFocusedPath={treeState.focusedPath}
+      treeCurrentDirPath={treeState.currentDirPath}
+      treeHasFocus={treeState.hasFocus}
+      bind:treeContainerEl
+      bind:treeFullyVisibleRows
+      onTreeToggleExpand={(path) => treeState.toggleExpand(path)}
+      onTreeSelectPath={onTreeSelectPath}
+      onTreeContainerFocus={(focused) => treeState.setContainerFocus(focused)}
+      loading={fileListState.loading}
+      error={fileListState.error}
+      entries={filteredEntries}
+      focusedPath={focusedPath()}
+      selected={fileListState.selected}
+      showSize={fileListState.showSize()}
+      showTime={fileListState.showTime()}
+      ariaMultiselectable={fileListAria["aria-multiselectable"]}
+      ariaActivedescendant={fileListAria["aria-activedescendant"]}
+      layoutRows={layout.rows}
+      bind:containerEl
+      bind:containerWidth
+      bind:containerHeight
+      onRowClick={handleRowClick}
+      onRowDblClick={handleRowDblClick}
+      sortMenuOpen={sortMenuState.isOpen}
+      sortMenuHighlightedKey={sortMenuState.highlightedKey}
+      sortMenuCurrentKey={fileListState.sortKey()}
+      sortMenuCurrentOrder={fileListState.sortOrder()}
+      onSortMenuClose={closeSortMenuNow}
+    />
 
-  <div
-    bind:this={containerEl}
-    bind:clientWidth={containerWidth}
-    bind:clientHeight={containerHeight}
-    class="file-list"
-    tabindex="0"
-    role="listbox"
-    aria-multiselectable={computeFileListAria({
-      focusedPath: focusedPath(),
-      isFocusedPathVisible: isFocusedPathVisible(),
-    })["aria-multiselectable"]}
-    aria-activedescendant={computeFileListAria({
-      focusedPath: focusedPath(),
-      isFocusedPathVisible: isFocusedPathVisible(),
-    })["aria-activedescendant"]}
-    style="grid-template-rows: repeat({Math.max(layout.rows, 1)}, 2rem); grid-auto-flow: column;"
-  >
-    {#each filteredEntries as entry (entry.path)}
-      <FileListRow
-        {entry}
-        focused={entry.path === focusedPath()}
-        selected={fileListState.selected.has(entry.path)}
-        onRowClick={handleRowClick}
-        onRowDblClick={handleRowDblClick}
-      />
-    {/each}
-  </div>
-</main>
+    <StatusBar text={statusMessage.text} />
+  </main>
+{/if}
 
 <ModalHost
   top={modalHost.top}
@@ -373,21 +396,5 @@
   }
   .current-path {
     font-family: monospace;
-  }
-  .status-message {
-    color: #555;
-    margin: 0.25rem 0;
-  }
-  .error {
-    color: #b00020;
-  }
-  .file-list {
-    display: grid;
-    grid-auto-columns: 352px;
-    gap: 0 0.5rem;
-    overflow: auto;
-    border: 1px solid #ccc;
-    padding: 0.25rem;
-    min-height: 200px;
   }
 </style>

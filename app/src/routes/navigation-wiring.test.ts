@@ -212,3 +212,69 @@ describe("createCloseRequestHandler (§3.2.6)", () => {
     expect(flush).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------
+// Phase 7 (SPEC-0200-0001 §3.6.11.1 MUST-84, last bullet): opening the
+// search bar or the jump/history list closes an already-open sort menu (the
+// mirror image of syncSortMenuWithModal in overlay-wiring.ts, which closes
+// the sort menu when a MODAL opens). The sort menu never closes the search
+// bar itself (that direction is intentionally one-way, MUST-84).
+//
+// `sortMenu` is a NEW, OPTIONAL dependency on `OverlayControllerDeps` (like
+// `onTabStop` on `DispatchContext`), so every existing `makeOverlay()` call
+// site above -- which never passes it -- keeps working unmodified.
+// ---------------------------------------------------------------------
+
+function makeOverlayWithSortMenu(visits: string[] = [], jumps: string[] = []) {
+  const search = createSearchState();
+  const history = createNavigationHistoryState();
+  history.hydrate(visits, jumps);
+  const focus = { container: vi.fn(), historyList: vi.fn(), searchInput: vi.fn() };
+  const navigate = vi.fn();
+  const sortMenu = { isOpen: true, close: vi.fn() };
+  const controller = createOverlayController({
+    search,
+    history,
+    focus,
+    nextTick: () => Promise.resolve(),
+    navigate,
+    sortMenu,
+  } as never);
+  return { search, history, focus, navigate, sortMenu, controller };
+}
+
+describe("activateSearch/openHistoryList close an open sort menu (SPEC-0200-0001 §3.6.11.1 MUST-84)", () => {
+  it("activateSearch closes an open sort menu", async () => {
+    const { sortMenu, controller } = makeOverlayWithSortMenu();
+    controller.activateSearch();
+    expect(sortMenu.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("openHistoryList closes an open sort menu", () => {
+    const { sortMenu, controller } = makeOverlayWithSortMenu();
+    controller.openHistoryList("history");
+    expect(sortMenu.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when the sort menu is already closed", () => {
+    const search = createSearchState();
+    const history = createNavigationHistoryState();
+    const focus = { container: vi.fn(), historyList: vi.fn(), searchInput: vi.fn() };
+    const sortMenu = { isOpen: false, close: vi.fn() };
+    const controller = createOverlayController({
+      search,
+      history,
+      focus,
+      nextTick: () => Promise.resolve(),
+      navigate: vi.fn(),
+      sortMenu,
+    } as never);
+    controller.activateSearch();
+    expect(sortMenu.close).not.toHaveBeenCalled();
+  });
+
+  it("backward compatible: omitting sortMenu entirely does not throw", () => {
+    const { controller } = makeOverlay([], []);
+    expect(() => controller.activateSearch()).not.toThrow();
+  });
+});

@@ -31,8 +31,10 @@
 //! would only be handled after the batch ended). Every blocking command in
 //! this module is therefore declared with the `async` command option
 //! (a synchronous fn that Tauri runs on its async runtime instead of the main
-//! thread). `fs_list_dir`/`config_*` still have the old behavior; that is
-//! recorded as a follow-up in SPEC-0200-0001 §3.3.12 and out of scope here.
+//! thread). SPEC-0200-0001 §3.6.11.6 (MUST-89): `fs_list_dir` and the Phase 7
+//! `config_load_keymap`/`ui_state_load`/`ui_state_save` commands are now
+//! also `#[tauri::command(async)]` for the same reason; the follow-up
+//! recorded in §3.3.12 for those commands is resolved.
 //!
 //! **R-43-2 (MUST-58):** `CancelRegistry::request_cancel` records a
 //! "canceled" flag even for an id that is not registered yet, and `register`

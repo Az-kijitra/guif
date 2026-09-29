@@ -24,6 +24,9 @@
     "allow-viewer-classify-path",
     "allow-viewer-open",
     "allow-viewer-os-open-path",
+    "allow-config-load-keymap",
+    "allow-ui-state-load",
+    "allow-ui-state-save",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

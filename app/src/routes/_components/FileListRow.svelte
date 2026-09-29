@@ -5,17 +5,25 @@
   // selection/open DECISION logic lives in `click.ts`/`open-decision.ts`
   // (called by the parent, not here).
   import type { FsEntry } from "$lib/shared/ipc/fs";
+  // SPEC-0300-0009 R-20-11/R-20-12 (SPEC-0200-0001 §3.6.7): display-only
+  // formatting; `entry.size`/`entry.modified` themselves stay the raw
+  // backend values used for sorting.
+  import { formatModifiedForDisplay, formatSize } from "$lib/features/file-list/format";
 
   let {
     entry,
     focused,
     selected,
+    showSize = true,
+    showTime = false,
     onRowClick,
     onRowDblClick,
   }: {
     entry: FsEntry;
     focused: boolean;
     selected: boolean;
+    showSize?: boolean;
+    showTime?: boolean;
     onRowClick: (path: string, modifiers: { shiftKey: boolean; ctrlKey: boolean }) => void;
     onRowDblClick: (entry: FsEntry) => void;
   } = $props();
@@ -31,8 +39,12 @@
   ondblclick={() => onRowDblClick(entry)}
 >
   <span class="name">{entry.entryType === "dir" ? "📁" : "📄"} {entry.name}</span>
-  <span class="size">{entry.entryType === "dir" ? "" : entry.size}</span>
-  <span class="modified">{entry.modified}</span>
+  {#if showSize}
+    <span class="size">{entry.entryType === "dir" ? "" : formatSize(entry.size)}</span>
+  {/if}
+  {#if showTime}
+    <span class="modified">{formatModifiedForDisplay(entry.modified)}</span>
+  {/if}
 </div>
 
 <style>

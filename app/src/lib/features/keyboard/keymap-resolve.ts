@@ -16,17 +16,93 @@ export interface KeydownLikeEvent {
   isComposing?: boolean;
 }
 
+// SPEC-0200-0001 §3.6.11.3 (MUST-86 (ii)/(iii), 発注者決定 2026-09-27): known
+// multi-character key names, canonicalized case-insensitively. "Plus"/"Comma"
+// are the WORD-form representations of the `+`/`,` key bodies (a bare `+`/`,`
+// character is no longer a valid key-body spelling).
+const KNOWN_MULTI_CHAR_KEY_BODIES = [
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Enter",
+  "Escape",
+  "Delete",
+  "Backspace",
+  "Tab",
+  "Space",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Comma",
+  "Plus",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "F9",
+  "F10",
+  "F11",
+  "F12",
+] as const;
+
+const KNOWN_MULTI_CHAR_KEY_BODY_BY_LOWER = new Map(
+  KNOWN_MULTI_CHAR_KEY_BODIES.map((name) => [name.toLowerCase(), name] as const),
+);
+
+// MUST-86 (iii): canonicalizes a KNOWN multi-character key name case-
+// insensitively to its documented capitalization; a single-character key
+// body is uppercased (unchanged from before); an UNKNOWN multi-character
+// string passes through unchanged (forward-compatibility -- "interpretable"
+// is not the same predicate as "known", see `isKnownKeyBody` below).
+export function canonicalizeKeyBody(raw: string): string {
+  if (raw.length === 1) return raw.toUpperCase();
+  const known = KNOWN_MULTI_CHAR_KEY_BODY_BY_LOWER.get(raw.toLowerCase());
+  return known ?? raw;
+}
+
+// SHOULD-128: the single-source predicate for "is this a key body that the
+// matcher can ever actually match" -- used by `keymap-validate.ts` to reject
+// an unknown key name (AC-62-1 (i)). Deliberately distinct from
+// `canonicalizeKeyBody`, which must pass unknown multi-character strings
+// through unchanged (by design) and therefore cannot double as this check.
+export function isKnownKeyBody(raw: string): boolean {
+  // A bare "+"/"," is never a known key body (MUST-86 (ii): must be written
+  // as the word form "Plus"/"Comma").
+  if (raw === "+" || raw === ",") return false;
+  if (raw.length === 1) return true;
+  return KNOWN_MULTI_CHAR_KEY_BODY_BY_LOWER.has(raw.toLowerCase());
+}
+
+const MODIFIER_BY_LOWER = new Map(MODIFIER_ORDER.map((mod) => [mod.toLowerCase(), mod] as const));
+
+// MUST-86 (i): case-insensitive modifier-name canonicalization (a lowercase
+// `config.toml` entry like "ctrl+a" no longer has its modifier silently
+// dropped).
+export function canonicalizeModifier(raw: string): ModifierName | null {
+  return MODIFIER_BY_LOWER.get(raw.toLowerCase()) ?? null;
+}
+
 // R-33/R-33-1: normalize a binding string's modifier order to
-// Ctrl -> Alt -> Shift -> Meta, followed by the key itself. A single-
-// alphabet-character key body is also uppercased here so that the
-// binding-string side matches the same case-insensitive normalization
-// `eventKeyToken` already applies to the event side (R-33-2: this affects
-// only the key body's letter case, never the Shift modifier itself).
+// Ctrl -> Alt -> Shift -> Meta, followed by the key itself. The key body is
+// also canonicalized here (case-insensitively) so that the binding-string
+// side matches the same normalization `eventKeyToken` already applies to the
+// event side (R-33-2: this affects only the key body, never the Shift
+// modifier itself).
 export function normalizeKeyString(binding: string): string {
   const parts = binding.split("+");
-  const rawKey = parts[parts.length - 1];
-  const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
-  const presentModifiers = new Set(parts.slice(0, -1));
+  const key = canonicalizeKeyBody(parts[parts.length - 1]);
+  const presentModifiers = new Set(
+    parts
+      .slice(0, -1)
+      .map(canonicalizeModifier)
+      .filter((m): m is ModifierName => m !== null),
+  );
 
   const orderedModifiers = MODIFIER_ORDER.filter((mod: ModifierName) => presentModifiers.has(mod));
   return [...orderedModifiers, key].join("+");
@@ -62,9 +138,18 @@ export function resolveBinding(input: ResolveBindingInput): string[] {
   return raw.split(",").map((s) => s.trim());
 }
 
+// MUST-86 (ii): "+"/","  themselves map to the canonical word-form key
+// bodies "Plus"/"Comma" (the same position as the existing " " -> "Space"
+// mapping).
 function eventKeyToken(key: string): string {
   if (key === " ") {
     return "Space";
+  }
+  if (key === "+") {
+    return "Plus";
+  }
+  if (key === ",") {
+    return "Comma";
   }
   if (key.length === 1) {
     return key.toUpperCase();

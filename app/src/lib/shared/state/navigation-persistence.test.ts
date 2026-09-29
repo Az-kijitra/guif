@@ -11,6 +11,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 //   SHOULD-70: `snapshot()` falls back to `baseline`, not `[]`, for an
 //   unregistered participant's slice)
 //
+// Phase 7 REVISION (SPEC-0200-0001 §3.6.2, §3.6.11.5 MUST-88): `hydrateAll()`
+// used to call `statusMessage.show(...)` itself for a load failure/recovery.
+// R-45-6/R-77-6 now require the app to CONCATENATE three separate startup
+// notices (config.toml/ui-state.toml/navigation.toml) into ONE message,
+// which only the new `routes/startup-wiring.ts` (which calls all three
+// loaders) can do. `hydrateAll()`'s contract therefore changes from
+// `Promise<void>` (calling `statusMessage.show` as a side effect) to
+// `Promise<string | null>` (the notice text, or `null` when there is
+// none) -- `startup-wiring.ts`, not this module, calls `statusMessage.show`
+// with the combined text. The three tests below that directly asserted
+// `statusMessage.text`/`resolves.toBeUndefined()` are updated accordingly
+// (a deliberate, spec-driven contract change, not a regression); the
+// `hydrated` flag's behavior (MUST-48(b): stays false on a failed load) is
+// UNCHANGED and re-asserted directly. Every other test in this file
+// (debounce, flush, register, SHOULD-70 baseline fallback) is untouched --
+// per SHOULD-130 condition 3, this revision is deliberately scoped to
+// exactly the `hydrateAll()` return-contract tests MUST-88 identifies.
 // Module under test (not yet implemented): ./navigation-persistence.svelte.ts
 //
 // This is a shared/state/ owner module (§5.2, registered in
@@ -116,35 +133,48 @@ describe("hydrateAll() — success path (R-245)", () => {
     expect(participant.hydrated).toEqual([loaded]);
   });
 
-  it("does not post a status message when the load succeeded without corruption", async () => {
+  // MUST-88: hydrateAll() itself no longer touches statusMessage -- it
+  // resolves to `null` (no notice text) and leaves the notification to
+  // routes/startup-wiring.ts (which concatenates config.toml/ui-state.toml/
+  // navigation.toml's notices into one message, R-45-6/R-77-6).
+  it("MUST-88: resolves to null (no notice) when the load succeeded without corruption, and does not touch statusMessage itself", async () => {
     vi.mocked(configLoadNavigation).mockResolvedValueOnce({ data: emptyData(), recoveredFromCorruption: false });
     const coordinator = createNavigationPersistenceCoordinator();
 
-    await coordinator.hydrateAll();
+    const notice = await coordinator.hydrateAll();
 
+    expect(notice).toBeNull();
     expect(statusMessage.text).toBeNull();
   });
 
-  it("R-242 item 3: posts a status message when the load result reports a corruption recovery", async () => {
+  // MUST-88: a corruption recovery is reported via the RETURN VALUE (a
+  // non-null notice string), not by this module calling statusMessage.show.
+  it("R-242 item 3/MUST-88: resolves to a non-null notice string when the load result reports a corruption recovery", async () => {
     vi.mocked(configLoadNavigation).mockResolvedValueOnce({ data: emptyData(), recoveredFromCorruption: true });
     const coordinator = createNavigationPersistenceCoordinator();
 
-    await coordinator.hydrateAll();
+    const notice = await coordinator.hydrateAll();
 
     expect(coordinator.hydrated).toBe(true); // recovery still counts as a successful load
-    expect(statusMessage.text).not.toBeNull();
+    expect(typeof notice).toBe("string");
+    expect((notice as string).length).toBeGreaterThan(0);
+    expect(statusMessage.text).toBeNull(); // MUST-88: this module no longer shows it itself
   });
 });
 
 describe("hydrateAll() — the load itself fails (MUST-48(b): I/O error, or the .bak rename failed)", () => {
-  it("leaves hydrated false and posts a status message, without throwing", async () => {
+  // MUST-88: the failure is reported via the RETURN VALUE (a non-null notice
+  // string), never `undefined` and never by calling statusMessage directly.
+  it("MUST-88: leaves hydrated false and resolves to a non-null notice string, without throwing or touching statusMessage", async () => {
     vi.mocked(configLoadNavigation).mockRejectedValueOnce(new Error("io error"));
     const coordinator = createNavigationPersistenceCoordinator();
 
-    await expect(coordinator.hydrateAll()).resolves.toBeUndefined();
+    const notice = await coordinator.hydrateAll();
 
-    expect(coordinator.hydrated).toBe(false);
-    expect(statusMessage.text).not.toBeNull();
+    expect(coordinator.hydrated).toBe(false); // MUST-48(b): unchanged by this revision
+    expect(typeof notice).toBe("string");
+    expect((notice as string).length).toBeGreaterThan(0);
+    expect(statusMessage.text).toBeNull(); // MUST-88: startup-wiring.ts shows it, not this module
   });
 
   it("keeps requestSave()/flush() disabled for the rest of the session (never overwrite a file we merely failed to read)", async () => {

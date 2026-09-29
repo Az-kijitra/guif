@@ -10,6 +10,17 @@
 | 2026-09-27 | 未採番(SPEC-0300-0011 第4版 画面配線 + ISS-0105 vim削除) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 2 画面配線」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行) → code-reviewer → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0014 第3版 ZIP作成/展開) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 5 ZIP」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行、CP932等の実験含む) → code-reviewer(セキュリティ重点) → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0015 ReflexViewer統合) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 6 ReflexViewer」セクション参照 | unit-test-writer(Rust/TS) → code-generator → オーケストレーター(設計MUST未達3点を差し戻し) → code-reviewer(差し戻し: DPI単位混在・listen/take順) → code-generator(修正) → オーケストレーター(複数モニタ座標を物理px統一へ修正、ヘッドレスブラウザで動作確認) |
+| 2026-09-29 | 未採番(SPEC-0300-0009 第8版 / SPEC-0300-0010 第11版、Phase 7) | PASS(フロント・バック双方) | 以下「## 2026-09-29 Phase 7」セクション参照 | unit-test-writer → code-generator → オーケストレーター(400行超過・ページ移動量を差し戻し) → code-reviewer(差し戻し: ソートメニュー再押下がキーマップ非経由、ツリーのページ移動量) → オーケストレーター(実Tauriで不具合2件を検出) → code-generator(修正) → オーケストレーター(ツリー再描画漏れを修正し実Tauriで確認) |
+
+## 2026-09-29 Phase 7 ツリー・一覧アクション・キーマップ読込・表示状態保存(SPEC-0300-0009 第8版 / 0010 第11版)テスト実行結果
+
+- `cd app && npx vitest run`: 77ファイル/1442件全成功。`cargo test`: 696件全成功。`npx tsc --noEmit`エラー0、`npx svelte-check`エラー0(警告6、既存a11y)、`npx vite build`・`cargo build`成功。`+page.svelte` 400行。
+- 実Tauri(WebView2リモートデバッグ)で検出・修正: (1) Tab処理が`focus.list/search`を呼ぶが画面側は`container/searchInput`で毎回TypeError、Tab移動はブラウザ標準動作によるもので回り込み・抑止が効いていなかった(tscは.svelteを検査しないため未検出→svelte-checkを確認手順に追加)。(2) ツリーの祖先展開で最後の祖先(toshi)を展開済みにしても再描画の合図(touch)が無く、画面では折りたたまれたまま(状態テストは通るが描画されない)。読込中表示も同種の漏れ。runesの反応性を検証するテストは現行のNode/サーバー側コンパイル環境では書けない(jsdom等の依存追加が必要)ため、実アプリでの確認で代替。
+- 実アプリ確認結果: 起動時フォーカスは一覧、ツリーはC:→Users→toshiを展開し現在地gitを選択表示、Tab/Shift+Tabで回り込み、ソートメニュー表示中はTab抑止・Escで一覧へ、Ctrl+Shift+Bで表示切替、ツリーのPageDown、例外なし。
+- code-reviewerで検出・修正: ソートメニュー再押下がキーマップ非経由(`S`決め打ち)、ツリーのPageUp/Downが1行多い(テストが誤値10を固定していた→9)、起動通知が後続通知で上書きされる、フォーカス判定の二重実装。
+- テスト変更(理由付き): list-action-wiringのtoggle_hidden(Phase 7で実装済みになった)、fs/commandsのcanary(rustc 1.98でERROR_BAD_NETPATHがNotFoundに写像)、tree-stateのMUST-90(b)前提、sort-menu-wiring AC-619(iv)、tree-action-wiring期待値10→9、import-boundaryにfile-list例外、tree-state 206行を厳密化。
+- 未実施: `tests/manual/phase7-tree-keymap-checklist.md` の実機確認(config.toml手動編集、ui-state.toml破損、UNC、DPI等)。
+- 残課題(非blocker): ISS-0155(config.toml作成者)、ISS-0057(c)残り、ISS-0044(a)、ISS-0022(e/g)。runes反応性テスト環境の整備(jsdom/happy-dom導入の要否)。
 
 ## 2026-09-27 Phase 6 ReflexViewer統合(SPEC-0300-0015)テスト実行結果
 

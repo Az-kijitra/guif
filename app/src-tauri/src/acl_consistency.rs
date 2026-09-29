@@ -37,6 +37,11 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "fs_list_dir",
     "config_load_navigation",
     "config_save_navigation",
+    // Phase 7 (SPEC-0300-0009/0010; SPEC-0200-0001 §3.6.1/§3.6.11.11
+    // SHOULD-115): config.toml keymap read + ui-state.toml load/save.
+    "config_load_keymap",
+    "ui_state_load",
+    "ui_state_save",
     "fs_ops_copy",
     "fs_ops_move",
     "fs_ops_cancel",
@@ -296,13 +301,14 @@ fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
     assert_eq!(all_permissions(VIEWER_CAPABILITY_JSON), expected);
 }
 
-// §3.5.12.5(a)/SHOULD-99: `capabilities/default.json`'s app-command
-// permissions become the existing 16 (Phase 1/2/5) PLUS exactly the 3
-// main-only viewer commands (`viewer_classify_path`/`viewer_open`/
-// `viewer_os_open_path`, all `viewer_`-prefixed per SHOULD-99's renaming of
-// the former `os_open_path`).
+// §3.5.12.5(a)/SHOULD-99, extended by Phase 7 (SPEC-0200-0001 §3.6.1,
+// §3.6.11.11 SHOULD-115): `capabilities/default.json`'s app-command
+// permissions become the existing 16 (Phase 1/2/5) PLUS the 3 main-only
+// viewer commands (`viewer_classify_path`/`viewer_open`/
+// `viewer_os_open_path`) PLUS the 3 Phase 7 config commands
+// (`config_load_keymap`/`ui_state_load`/`ui_state_save`) -- 22 total.
 #[test]
-fn must77_default_json_app_commands_are_the_existing_16_plus_the_three_viewer_main_commands() {
+fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config() {
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
         "allow-config-load-navigation",
@@ -323,11 +329,62 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_the_three_viewer_ma
         "allow-viewer-classify-path",
         "allow-viewer-open",
         "allow-viewer-os-open-path",
+        "allow-config-load-keymap",
+        "allow-ui-state-load",
+        "allow-ui-state-save",
     ]
     .into_iter()
     .map(String::from)
     .collect();
     assert_eq!(capability_allows(CAPABILITY_JSON), expected);
+}
+
+// SPEC-0200-0001 §3.6.11.11 SHOULD-115 / §3.6.1: every `#[tauri::command]`
+// defined in `config/commands.rs` is registered in `generate_handler!` --
+// same "defined but never registered" guard as the fs_ops/archive/viewer
+// analogs above. Also pins the count: exactly the 5 commands of Phase 4 + 7
+// (`config_load_navigation`/`config_save_navigation`/`config_load_keymap`/
+// `ui_state_load`/`ui_state_save`).
+#[test]
+fn must64_every_tauri_command_defined_in_config_commands_is_registered() {
+    let source = include_str!("config/commands.rs");
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let cleaned = strip_line_comments(production_part);
+    let mut parts = cleaned.split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String =
+                after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("config_") || name.starts_with("ui_state_") {
+                defined.insert(name);
+            }
+        }
+    }
+    assert_eq!(
+        defined.len(),
+        5,
+        "config/commands.rs must define exactly 5 config_*/ui_state_* commands, found {defined:?}"
+    );
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+// SPEC-0200-0001 §3.6.11.9 MUST-92: `config/io.rs` (the old `config.toml`
+// read/write module) must stay deleted -- `config/mod.rs` must never declare
+// it again. This test is a regression guard (expected to be green as soon as
+// the deletion lands, unlike the RED-until-implemented tests above).
+#[test]
+fn must92_config_mod_no_longer_declares_the_deleted_io_module() {
+    let mod_rs = include_str!("config/mod.rs");
+    let cleaned = strip_line_comments(mod_rs);
+    assert!(
+        !cleaned.contains("mod io"),
+        "config/io.rs must stay deleted (MUST-92, config.toml is read-only): {mod_rs}"
+    );
 }
 
 // R-405-1: neither capability may grant an `opener:*` permission (the

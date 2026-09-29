@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SORT_STATE, SORT_KEYS, nextSortState, renderEntriesInBackendOrder } from "./sort";
 
+// Phase 7 addition (SPEC-0300-0009 R-34-14, AC-618; SPEC-0200-0001 §3.6.5).
+// `moveSortMenuHighlight` is a NEW export -- a second import so the tests
+// above (against the existing exports) keep passing unaffected.
+import { moveSortMenuHighlight } from "./sort";
+
 // Spec: SPEC-0300-0009 (file list / tree view detail)
 // Module under test (not yet implemented): ./sort.ts
 //
@@ -61,5 +66,25 @@ describe("renderEntriesInBackendOrder (SPEC-0300-0009 R-32)", () => {
     const original = [...backendOrder];
     renderEntriesInBackendOrder(backendOrder);
     expect(backendOrder).toEqual(original);
+  });
+});
+
+describe("moveSortMenuHighlight (SPEC-0300-0009 R-34-14, AC-618)", () => {
+  it("AC-618: ArrowDown moves to the next key in SORT_KEYS order", () => {
+    expect(moveSortMenuHighlight("name", "down")).toBe("size");
+    expect(moveSortMenuHighlight("size", "down")).toBe("type");
+    expect(moveSortMenuHighlight("type", "down")).toBe("modified");
+  });
+
+  it("AC-618: ArrowDown on the last key wraps to the first", () => {
+    expect(moveSortMenuHighlight("modified", "down")).toBe("name");
+  });
+
+  it("AC-618: ArrowUp moves to the previous key", () => {
+    expect(moveSortMenuHighlight("size", "up")).toBe("name");
+  });
+
+  it("AC-618: ArrowUp on the first key wraps to the last", () => {
+    expect(moveSortMenuHighlight("name", "up")).toBe("modified");
   });
 });

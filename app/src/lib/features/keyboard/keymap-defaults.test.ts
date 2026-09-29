@@ -128,6 +128,16 @@ describe("DEFAULT_KEYMAP (SPEC-0300-0010 第8版 R-20-1, R-21, §4.2, P1 actions
     expect(DEFAULT_KEYMAP[actionId]).toBe(key);
   });
 
+  // SPEC-0300-0010 §4.2 row 13 (第11版承認後の追補; SPEC-0200-0001 §3.6.11.3
+  // MUST-86, 発注者決定 2026-09-27): the internal representation of "Ctrl+,"
+  // is "Ctrl+Comma" (the key BODY is the word "Comma", not the literal ","
+  // character) -- this is what keymap-resolve.ts's new eventKeyToken(",")
+  // -> "Comma" mapping requires matchesHardcodedShortcut's literal to say, or
+  // the hardcoded Ctrl+, shortcut (priority 1) stops firing entirely.
+  it("settings' default is internally represented as 'Ctrl+Comma' (MUST-86, not the literal 'Ctrl+,')", () => {
+    expect(DEFAULT_KEYMAP.settings).toBe("Ctrl+Comma");
+  });
+
   it("Phase 2 defaults (SPEC-0300-0011 R-14/R-56-4-1/R-72-1): copy/cut/paste/delete/rename/new_file/new_folder", () => {
     expect(DEFAULT_KEYMAP.copy).toBe("Ctrl+C");
     expect(DEFAULT_KEYMAP.cut).toBe("Ctrl+X");

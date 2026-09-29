@@ -491,3 +491,102 @@ describe("DispatchContext (ISS-0105): no profile input", () => {
     expect(ctx.onListAction).toHaveBeenCalledWith("move_down", expect.anything());
   });
 });
+
+// ---------------------------------------------------------------------
+// Phase 7 (SPEC-0300-0010 R-10-1/R-10-1-1/R-14-2-7; SPEC-0200-0001
+// §3.6.11.2 MUST-85): `DispatchContext.onTabStop` is a NEW, OPTIONAL field.
+// MUST-85's key correction over the withdrawn §3.6.4 design: the Tab
+// fallback condition is `action === null` (keymap matching did not resolve
+// ANY action), never "onListAction returned false" -- `onListAction`
+// legitimately returns `false` for a resolved-but-unimplemented action
+// (e.g. `refresh`, R-26), and Tab must NOT steal focus in that case.
+// ---------------------------------------------------------------------
+
+function makeTabStopContext(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    isSettingsOpen: false,
+    isOverlayOpen: false,
+    isMenuBarActive: false,
+    isTreeFocused: false,
+    isSearchInputFocused: false,
+    customOverrides: {},
+    onHardcodedShortcut: vi.fn().mockReturnValue(false),
+    onExitAction: vi.fn().mockReturnValue(false),
+    onOverlayKey: vi.fn().mockReturnValue(false),
+    onMenuBarKey: vi.fn().mockReturnValue(false),
+    onTreeAction: vi.fn().mockReturnValue(false),
+    onListAction: vi.fn().mockReturnValue(false),
+    onSearchAction: vi.fn(),
+    onTabStop: vi.fn().mockReturnValue(true),
+    ...overrides,
+  };
+}
+
+describe("dispatchKeydown: onTabStop fallback (SPEC-0200-0001 §3.6.11.2 MUST-85)", () => {
+  it("Tab with no keymap match (action === null) falls through to onTabStop('next')", () => {
+    const ctx = makeTabStopContext();
+    expect(dispatchKeydown(key("Tab"), ctx)).toBe(true);
+    expect(ctx.onTabStop).toHaveBeenCalledWith("next");
+    expect(ctx.onListAction).toHaveBeenCalledWith(null, expect.anything());
+  });
+
+  it("Shift+Tab with no keymap match falls through to onTabStop('prev')", () => {
+    const ctx = makeTabStopContext();
+    expect(dispatchKeydown(key("Tab", { shiftKey: true }), ctx)).toBe(true);
+    expect(ctx.onTabStop).toHaveBeenCalledWith("prev");
+  });
+
+  it("MUST-85: Tab bound to a RESOLVED-but-unimplemented action (onListAction returns false) does NOT reach onTabStop", () => {
+    // "refresh" resolves via the default keymap? No -- but any action !==
+    // null must suppress onTabStop even when onListAction itself returns
+    // false (R-26 no-op actions). We simulate a resolved action by giving Tab
+    // a custom override to a real (but here unimplemented-in-context) action.
+    const ctx = makeTabStopContext({
+      customOverrides: { refresh: "Tab" },
+      onListAction: vi.fn().mockReturnValue(false), // R-26: refresh is a no-op
+    });
+    expect(dispatchKeydown(key("Tab"), ctx)).toBe(false);
+    expect(ctx.onTabStop).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+Tab / Alt+Tab / Meta+Tab are never treated as a tab-stop move (left to the OS/browser)", () => {
+    for (const mods of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }]) {
+      const ctx = makeTabStopContext();
+      dispatchKeydown(key("Tab", mods), ctx);
+      expect(ctx.onTabStop).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R-14-2-7: Tab is excluded while composing an IME conversion, even with a null action", () => {
+    const ctx = makeTabStopContext();
+    const event = { key: "Tab", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, isComposing: true };
+    dispatchKeydown(event, ctx);
+    expect(ctx.onTabStop).not.toHaveBeenCalled();
+  });
+
+  it("onTabStop is optional -- an absent onTabStop does not throw and dispatch returns false", () => {
+    const ctx = makeTabStopContext();
+    delete (ctx as Record<string, unknown>).onTabStop;
+    expect(() => dispatchKeydown(key("Tab"), ctx)).not.toThrow();
+    expect(dispatchKeydown(key("Tab"), ctx)).toBe(false);
+  });
+
+  it("while the search input is focused, Tab is handled by the R-14-2-7 branch, calling onTabStop directly (no onListAction)", () => {
+    const ctx = makeTabStopContext({ isSearchInputFocused: true });
+    expect(dispatchKeydown(key("Tab"), ctx)).toBe(true);
+    expect(ctx.onTabStop).toHaveBeenCalledWith("next");
+    expect(ctx.onListAction).not.toHaveBeenCalled();
+  });
+
+  it("while an overlay is open, Tab never reaches onTabStop (the overlay handler owns it, R-10-1-2)", () => {
+    const ctx = makeTabStopContext({ isOverlayOpen: true, onOverlayKey: vi.fn().mockReturnValue(true) });
+    expect(dispatchKeydown(key("Tab"), ctx)).toBe(true);
+    expect(ctx.onTabStop).not.toHaveBeenCalled();
+  });
+
+  it("a non-Tab key with a null action does not call onTabStop", () => {
+    const ctx = makeTabStopContext();
+    dispatchKeydown(key("z"), ctx);
+    expect(ctx.onTabStop).not.toHaveBeenCalled();
+  });
+});

@@ -41,9 +41,18 @@ describe("INITIAL_UI_STATE (SPEC-0300-0009 R-13, R-21, R-30 note, R-74 note)", (
   });
 });
 
-describe("TREE_PANEL_WIDTH (SPEC-0300-0009 R-12, AC-55)", () => {
-  it("AC-55: default width is 220px, bounded between 200px and 320px", () => {
-    expect(TREE_PANEL_WIDTH).toEqual({ default: 220, min: 200, max: 320 });
+// Phase 7 / 8th ed. (ISS-0022 項目 a, レビュー B-1; SPEC-0200-0001 §3.6.11.4
+// MUST-87(e)): §9-a resolved -- the tree panel is now a FIXED 220px with no
+// drag-resize at all (no min/max range to resize within). This intentionally
+// REPLACES the Phase 1 "220 default, 200..320 range" test above (a
+// deliberate, spec-driven update, not a regression: the 7th-edition spec this
+// repo shipped against genuinely allowed a resize range; the 8th edition
+// removed it).
+describe("TREE_PANEL_WIDTH (SPEC-0300-0009 8th ed. R-12/AC-55, SPEC-0200-0001 §3.6.11.4 MUST-87(e))", () => {
+  it("AC-55: the tree panel is a fixed 220px -- no resize range (min === max === default === 220)", () => {
+    expect(TREE_PANEL_WIDTH.default).toBe(220);
+    expect(TREE_PANEL_WIDTH.min).toBe(220);
+    expect(TREE_PANEL_WIDTH.max).toBe(220);
   });
 });
 

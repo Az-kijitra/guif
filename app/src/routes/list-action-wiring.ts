@@ -4,6 +4,7 @@
 // action ids, each feature implements its own action).
 //
 import { decideOpen } from "$lib/features/viewer/open-decision";
+import { computeTreeFocusReassignment } from "$lib/features/file-list/aria";
 
 // SPEC-0300-0015 §3.5.3: `case "open"` no longer unconditionally calls
 // `fileList.openFocused()`. It branches on the focused entry's `entryType`
@@ -29,6 +30,19 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
     goParent(): Promise<string | null>;
     toggleFocused(visible: readonly E[]): void;
     selectAll(visible: readonly E[]): void;
+    // SPEC-0200-0001 §3.6.6/§3.6.11.4/§3.6.11.5 (MUST-87/94): Phase 7 toggles
+    // and the two read-only getters `toggle_tree`/`toggle_hidden` need to
+    // decide whether to compose a tree reaction here.
+    toggleTree(): void;
+    toggleHidden(): void;
+    toggleSize(): void;
+    toggleTime(): void;
+    clearSelection(): void;
+    pageUp(visible: readonly E[]): void;
+    pageDown(visible: readonly E[]): void;
+    showTree(): boolean;
+    showHidden(): boolean;
+    sortKey(): string;
   };
   filteredEntries: () => readonly E[];
   rowsPerColumn: () => number;
@@ -45,15 +59,37 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   // currently displayed).
   focusedEntry: () => OpenTargetEntry | null;
   viewer: { openFile(path: string): void | Promise<unknown>; openWithOsAssociation(path: string): void | Promise<unknown> };
+  // SPEC-0200-0001 §3.6.6 (MUST-94): the tree's own reactions to
+  // `toggle_tree`/`toggle_hidden`, composed HERE (not inside
+  // list-state.svelte.ts) so list-action-wiring.ts stays the ONLY module
+  // that imports both `file-list` (via `fileList` above) and the tree
+  // (injected, never imported -- tree-state.svelte.ts is a sibling module in
+  // the same feature, not imported by this routes/ file either). Optional:
+  // callers/tests that pre-date Phase 7 (e.g. the Phase 5 ZIP wiring tests)
+  // never pass these, so `isTreeFocused` defaults to "never focused" and the
+  // tree-composition cases below no-op when `tree`/`sortMenu`/`focus` are
+  // absent.
+  isTreeFocused?: () => boolean;
+  tree?: { clear(): void; followTo(path: string): Promise<void>; applyHiddenFilesChanged(showHidden: boolean): void };
+  sortMenu?: { toggle(): void };
+  focus?: { container(): void };
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
 // SPEC-0300-0014 R-305: ZIP create / extract. Not navigation either (R-397).
 const ZIP_ACTIONS = new Set(["zip_create", "zip_extract"]);
+// R-14-14: these 9 file-operation actions do nothing while the tree has
+// focus (everything else -- toggle_*/sort_menu/clear_selection/search/
+// history/go_parent -- keeps working as usual).
+const TREE_FOCUS_BLOCKED_ACTIONS = new Set([...FILE_OP_ACTIONS, ...ZIP_ACTIONS]);
 
 export function createListActionHandler<E extends EntryLike>(deps: ListActionDeps<E>) {
   return function onListAction(action: string | null, event: { shiftKey: boolean }): boolean {
     if (action === null) return false;
+
+    // R-14-14: consumed but a no-op while the tree has focus.
+    if ((deps.isTreeFocused?.() ?? false) && TREE_FOCUS_BLOCKED_ACTIONS.has(action)) return true;
+
     // SPEC-0300-0011 R-14: file operations are not navigation (R-208/R-209),
     // so afterUserNavigation is never involved.
     if (FILE_OP_ACTIONS.has(action)) return deps.fileOps.handleAction(action, event);
@@ -116,6 +152,54 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
         // undetermined (the key is still consumed).
         const path = deps.currentPath();
         if (path) deps.addJump(path);
+        return true;
+      }
+      // ---------------------------------------------------------------
+      // Phase 7 (SPEC-0300-0009 R-59/R-54-1/R-74-1; SPEC-0200-0001 §3.6.6).
+      // ---------------------------------------------------------------
+      case "toggle_hidden":
+        deps.fileList.toggleHidden();
+        deps.tree?.applyHiddenFilesChanged(deps.fileList.showHidden());
+        return true;
+      case "toggle_size":
+        deps.fileList.toggleSize();
+        return true;
+      case "toggle_time":
+        deps.fileList.toggleTime();
+        return true;
+      case "clear_selection":
+        deps.fileList.clearSelection();
+        return true;
+      case "page_up":
+        deps.fileList.pageUp(deps.filteredEntries());
+        return true;
+      case "page_down":
+        deps.fileList.pageDown(deps.filteredEntries());
+        return true;
+      case "sort_menu":
+        deps.sortMenu?.toggle();
+        return true;
+      // MUST-94: the tree's reaction to toggle_tree is composed HERE (not
+      // inside list-state.svelte.ts) so file-list/list-state.svelte.ts never
+      // imports tree-state.svelte.ts (avoids a circular feature-internal
+      // import, §3.6.11.4(b)/(f)).
+      case "toggle_tree": {
+        const wasTreeFocused = deps.isTreeFocused?.() ?? false;
+        deps.fileList.toggleTree(); // flag flip + save request only
+        const nowVisible = deps.fileList.showTree();
+        if (nowVisible) {
+          void deps.tree?.followTo(deps.currentPath());
+        } else {
+          deps.tree?.clear();
+          // R-14/AC-09: hiding the tree while it had focus reassigns focus
+          // to the file list container (shared judgment, not reimplemented
+          // here -- code-reviewer minor item, 2026-09-29).
+          const reassignment = computeTreeFocusReassignment({
+            focusRegion: wasTreeFocused ? "tree" : "file-list",
+            treeNowVisible: false,
+          });
+          if (reassignment.focusRegion === "file-list" && wasTreeFocused) deps.focus?.container();
+        }
         return true;
       }
       default:

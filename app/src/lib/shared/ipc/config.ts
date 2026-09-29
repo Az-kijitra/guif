@@ -22,3 +22,50 @@ export function configLoadNavigation(): Promise<LoadNavigationResult> {
 export function configSaveNavigation(data: NavigationData): Promise<void> {
   return invoke("config_save_navigation", { data });
 }
+
+// SPEC-0300-0010 R-45; SPEC-0200-0001 §3.6.2/§3.6.11.3: `config.toml`'s
+// `input_keymap_custom` table, read-only, once at startup. Raw entries only
+// (no per-element validation, MUST-86 recommendation A) --
+// `features/keyboard/keymap-validate.ts::validateKeymapEntries` does that.
+export interface RawKeymapEntryDto {
+  actionId: string;
+  value: string | null;
+}
+
+export interface KeymapParseErrorDto {
+  message: string;
+  line: number | null;
+}
+
+export interface KeymapRawLoadResultDto {
+  entries: RawKeymapEntryDto[];
+  parseError: KeymapParseErrorDto | null;
+}
+
+export function configLoadKeymap(): Promise<KeymapRawLoadResultDto> {
+  return invoke<KeymapRawLoadResultDto>("config_load_keymap");
+}
+
+// SPEC-0300-0009 R-77; SPEC-0200-0001 §3.6.1: `ui-state.toml` load/save
+// (same shape as configLoadNavigation/configSaveNavigation).
+export interface UiStateData {
+  uiShowHidden: boolean;
+  uiShowSize: boolean;
+  uiShowTime: boolean;
+  uiShowTree: boolean;
+  sortKey: string;
+  sortOrder: string;
+}
+
+export interface UiStateLoadResult {
+  data: UiStateData;
+  recoveredFromCorruption: boolean;
+}
+
+export function uiStateLoad(): Promise<UiStateLoadResult> {
+  return invoke<UiStateLoadResult>("ui_state_load");
+}
+
+export function uiStateSave(data: UiStateData): Promise<void> {
+  return invoke("ui_state_save", { data });
+}

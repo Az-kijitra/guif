@@ -12,13 +12,24 @@ import type { ListKeyIntent } from "$lib/features/navigation-history/list-ops";
 // Records the visit only when the navigation succeeded (result !== null,
 // R-210/R-211). Reload-type callers (F5 / toggle_hidden / file watching,
 // R-209) must NOT go through this.
-export function createAfterUserNavigation(recordVisit: (path: string) => void) {
+//
+// SPEC-0200-0001 §3.6.11.4 (f): `followTree` is an OPTIONAL second
+// dependency (like `onTabStop`/`sortMenu` elsewhere in Phase 7) -- this is
+// the single point every user-initiated navigation passes through, so it is
+// also where the tree follows the newly-loaded directory (R-45's reverse
+// direction, list -> tree), keeping `list-state.svelte.ts` and
+// `tree-state.svelte.ts` free of importing each other (MUST-94).
+export function createAfterUserNavigation(
+  recordVisit: (path: string) => void,
+  followTree?: (path: string) => void,
+) {
   return async function afterUserNavigation(
     navigationPromise: Promise<string | null>,
   ): Promise<string | null> {
     const result = await navigationPromise;
     if (result !== null) {
       recordVisit(result);
+      followTree?.(result);
     }
     return result;
   };
@@ -70,6 +81,10 @@ export interface OverlayControllerDeps {
   nextTick: () => Promise<void>;
   // afterUserNavigation(fileListState.loadDirectory(path)), fire-and-forget.
   navigate: (path: string) => void;
+  // SPEC-0200-0001 §3.6.11.1 (MUST-84, last bullet): OPTIONAL -- opening the
+  // search bar or the jump/history list closes an already-open sort menu
+  // (one-way; the sort menu never closes the search bar itself).
+  sortMenu?: { readonly isOpen: boolean; close(): void };
 }
 
 export function createOverlayController(deps: OverlayControllerDeps) {
@@ -78,16 +93,22 @@ export function createOverlayController(deps: OverlayControllerDeps) {
     deps.focus.container();
   }
 
+  function closeSortMenuIfOpen(): void {
+    if (deps.sortMenu?.isOpen) deps.sortMenu.close();
+  }
+
   function activateSearch(): void {
     // Mutual exclusion (§3.2.9). searchInput focus (after tick) supersedes
     // any interim focus, so no refocus is needed here.
     deps.history.close();
+    closeSortMenuIfOpen();
     deps.search.open();
     void deps.nextTick().then(() => deps.focus.searchInput());
   }
 
   function openHistoryList(mode: "history" | "jump"): void {
     deps.search.cancel();
+    closeSortMenuIfOpen();
     if (mode === "history") deps.history.openHistory();
     else deps.history.openJump();
     if (deps.history.isOpen) {

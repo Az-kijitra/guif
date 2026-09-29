@@ -93,6 +93,61 @@ describe("clear", () => {
   });
 });
 
+// code-reviewer minor item (SHOULD-119, 2026-09-29): the combined startup
+// notice (routes/startup-wiring.ts, shown for 6s) must not be silently
+// clobbered by an ordinary, short-lived `show()` call (e.g. R-40-3's tree
+// load-failure notice) that happens to fire while it is still on screen.
+describe("showPriority (SHOULD-119)", () => {
+  it("behaves like show() for its own duration", () => {
+    const s = createStatusMessageState();
+    s.showPriority("startup notice", 6000);
+    expect(s.text).toBe("startup notice");
+    vi.advanceTimersByTime(5999);
+    expect(s.text).toBe("startup notice");
+    vi.advanceTimersByTime(1);
+    expect(s.text).toBeNull();
+  });
+
+  it("a later show() call WHILE the priority message is still active appends instead of overwriting it", () => {
+    const s = createStatusMessageState();
+    s.showPriority("startup notice", 6000);
+    vi.advanceTimersByTime(1000);
+    s.show("tree load failed");
+    expect(s.text).toBe("startup notice / tree load failed");
+    // The priority message's own timer (armed at t=0 for 6000ms) is
+    // unaffected by the later show() call.
+    vi.advanceTimersByTime(4999);
+    expect(s.text).toBe("startup notice / tree load failed");
+    vi.advanceTimersByTime(1);
+    expect(s.text).toBeNull();
+  });
+
+  it("multiple show() calls during the priority window all append in order", () => {
+    const s = createStatusMessageState();
+    s.showPriority("A", 6000);
+    s.show("B");
+    s.show("C");
+    expect(s.text).toBe("A / B / C");
+  });
+
+  it("after the priority window elapses, a normal show() call overwrites as usual", () => {
+    const s = createStatusMessageState();
+    s.showPriority("startup notice", 1000);
+    vi.advanceTimersByTime(1000);
+    expect(s.text).toBeNull();
+    s.show("later message");
+    expect(s.text).toBe("later message");
+  });
+
+  it("clear() ends the priority window too -- a later show() overwrites normally", () => {
+    const s = createStatusMessageState();
+    s.showPriority("startup notice", 6000);
+    s.clear();
+    s.show("later message");
+    expect(s.text).toBe("later message");
+  });
+});
+
 describe("independent instances (factory isolation)", () => {
   it("two instances do not share state", () => {
     const a = createStatusMessageState();

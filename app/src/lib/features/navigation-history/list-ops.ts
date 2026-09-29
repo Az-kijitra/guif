@@ -3,6 +3,13 @@
 // import features/keyboard (MUST-53, R-252).
 
 import { applyMru, dedupeAndLimit } from "$lib/shared/mru-list";
+// SPEC-0200-0001 §3.6.11.11 SHOULD-129: `normalizeStoredForm`/
+// `pathComparisonKey` now live in the feature-independent `shared/path-key.ts`
+// (shared by file-list's tree, R-40-6). Re-exported here so every existing
+// caller/test of this module is unaffected (a pure move, condition 1).
+import { normalizeStoredForm, pathComparisonKey } from "$lib/shared/path-key";
+
+export { normalizeStoredForm, pathComparisonKey };
 
 // Locally defined structural type (MUST-53); keyboard's KeydownLikeEvent is
 // structurally assignable to it.
@@ -17,37 +24,6 @@ export interface ListKeydownLikeEvent {
 const VISIT_HISTORY_LIMIT = 50; // R-205
 const JUMP_LIST_LIMIT = 20; // R-205
 const PAGE_STEP = 10; // R-228
-
-// Stored/display form: case preserved (R-207-2).
-export function normalizeStoredForm(path: string): string {
-  let normalized = path.replace(/\//g, "\\");
-
-  // Collapse consecutive separators BEFORE the UNC test (SHOULD-73), keeping
-  // the leading "\\" marker of a UNC path.
-  normalized = normalized.startsWith("\\\\")
-    ? "\\\\" + normalized.slice(2).replace(/\\+/g, "\\")
-    : normalized.replace(/\\+/g, "\\");
-
-  const uncMatch = normalized.match(/^\\\\([^\\]+)\\([^\\]+)(.*)$/);
-  if (uncMatch) {
-    const rest = uncMatch[3].replace(/\\+$/, "");
-    return `\\\\${uncMatch[1]}\\${uncMatch[2]}${rest}`;
-  }
-
-  // SHOULD-61(a): bare drive letter is completed to the drive root.
-  if (/^[A-Za-z]:$/.test(normalized)) {
-    return normalized + "\\";
-  }
-  if (/^[A-Za-z]:\\$/.test(normalized)) {
-    return normalized;
-  }
-  return normalized.replace(/\\+$/, "");
-}
-
-// Comparison-only key: case folded (R-207).
-export function pathComparisonKey(path: string): string {
-  return normalizeStoredForm(path).toLowerCase();
-}
 
 export function addVisit(list: readonly string[], path: string): string[] {
   return applyMru(list, normalizeStoredForm(path), VISIT_HISTORY_LIMIT, pathComparisonKey);

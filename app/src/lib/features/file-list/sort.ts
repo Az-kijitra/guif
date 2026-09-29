@@ -29,3 +29,12 @@ export function nextSortState(current: SortState, selectedKey: SortKey): SortSta
 export function renderEntriesInBackendOrder<T>(entries: readonly T[]): T[] {
   return entries.slice();
 }
+
+// SPEC-0300-0009 R-34-14/AC-618; SPEC-0200-0001 §3.6.5: move the sort menu's
+// highlighted key up/down through SORT_KEYS, wrapping around at either end.
+export function moveSortMenuHighlight(current: SortKey, direction: "up" | "down"): SortKey {
+  const index = SORT_KEYS.indexOf(current);
+  const delta = direction === "down" ? 1 : -1;
+  const next = (index + delta + SORT_KEYS.length) % SORT_KEYS.length;
+  return SORT_KEYS[next];
+}

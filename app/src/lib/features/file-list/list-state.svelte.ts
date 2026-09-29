@@ -22,7 +22,7 @@
 // a filtered-out (hidden) entry is never moved into or selected.
 
 import { fsListDir, type FsEntry } from "$lib/shared/ipc/fs";
-import { DEFAULT_SORT_STATE, type SortState } from "./sort";
+import { DEFAULT_SORT_STATE, nextSortState, type SortKey, type SortState } from "./sort";
 import { resetListStateOnDirChange, computeGoParentTarget, reconcileAfterReload } from "./dir-load";
 import {
   selectSingle,
@@ -32,6 +32,7 @@ import {
 } from "./selection";
 import { resolveRowClick } from "./click";
 import {
+  moveFocusPage,
   moveFocusRow,
   moveFocusColumn,
   toVisualIndex,
@@ -41,6 +42,9 @@ import {
 } from "./navigation";
 import { computeListLayout, type ListLayout } from "./list-layout";
 import { INITIAL_UI_STATE } from "./aria";
+import { SORT_KEYS } from "./sort";
+import { uiStatePersistence } from "./ui-state-persistence";
+import type { UiStateData } from "$lib/shared/ipc/config";
 
 export function createFileListState() {
   let currentPath = $state(".");
@@ -50,8 +54,22 @@ export function createFileListState() {
   let anchor = $state<string | null>(null);
   let sort = $state<SortState>({ ...DEFAULT_SORT_STATE });
   let showHidden = $state(INITIAL_UI_STATE.showHidden);
+  // SPEC-0300-0009 R-21/R-13; SPEC-0200-0001 §3.6.6: persisted display-state
+  // (ui-state.toml) fields the tree/toggle_* actions read/flip. A
+  // `requestUiStateSave` callback (registered via `onUiStateChange`) is
+  // invoked after every toggle so `+page.svelte`'s ui-state persistence
+  // coordinator can debounce a save without this module importing
+  // `shared/ipc/config.ts`/`shared/persistence-coordinator.ts` directly.
+  let showSize = $state(INITIAL_UI_STATE.showSize);
+  let showTime = $state(INITIAL_UI_STATE.showTime);
+  let showTree = $state(INITIAL_UI_STATE.showTree);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let onUiStateChangeCallback: (() => void) | undefined;
+
+  function requestUiStateSave(): void {
+    onUiStateChangeCallback?.();
+  }
 
   // SHOULD-62/68 (SPEC-0200-0001 §3.2.4): returns the loaded path on success,
   // or null when nothing was navigated (failure, or a stale response that a
@@ -255,9 +273,103 @@ export function createFileListState() {
       containerHeight,
       rowHeight: undefined,
       entryCount: entries.length,
-      showSize: true,
-      showTime: false,
+      showSize,
+      showTime,
     });
+  }
+
+  // SPEC-0200-0001 §3.6.6: toggles flip a flag and request a save; the
+  // eventual re-render (showSize/showTime) or reload (showHidden) is the
+  // only observable effect -- these never import tree-state.svelte.ts
+  // (MUST-94: ties to the tree are composed in routes/list-action-wiring.ts).
+  function toggleHidden(): void {
+    showHidden = !showHidden;
+    const focusPath = focusedEntry()?.path;
+    void reload({ focusPath });
+    requestUiStateSave();
+  }
+
+  function toggleSize(): void {
+    showSize = !showSize;
+    requestUiStateSave();
+  }
+
+  function toggleTime(): void {
+    showTime = !showTime;
+    requestUiStateSave();
+  }
+
+  // MUST-94: flag flip + save request ONLY -- the tree's own
+  // clear()/followTo() reaction lives in routes/list-action-wiring.ts's
+  // `toggle_tree` case (§3.6.11.4(b)/(f)).
+  function toggleTree(): void {
+    showTree = !showTree;
+    requestUiStateSave();
+  }
+
+  // R-34-13: selection/search state is untouched; the caller (sort-menu
+  // wiring) reloads with the current focus path preserved.
+  function applySort(key: SortKey): void {
+    sort = nextSortState(sort, key);
+    const focusPath = focusedEntry()?.path;
+    void reload({ focusPath });
+    requestUiStateSave();
+  }
+
+  // R-54-1: clears the selection; focus is unaffected.
+  function clearSelection(): void {
+    selected = new Set();
+    anchor = null;
+  }
+
+  // R-59-1: page_up/page_down move by "1列分の行数" (R-16-1's `rows`, the
+  // SAME value `layout()` computes and routes/+page.svelte already exposes
+  // as `rowsPerColumn` for move_left/move_right). The caller reports the
+  // measured value via `setPageRows` (reactively, whenever the container is
+  // resized) rather than `pageUp`/`pageDown` taking it as a call argument,
+  // so the existing single-argument `fileList.pageUp(filtered)` call in
+  // routes/list-action-wiring.ts (and its frozen test) is unaffected.
+  let pageRows = $state(1);
+
+  function setPageRows(rows: number): void {
+    pageRows = Math.max(1, rows);
+  }
+
+  function pageUp(visible: readonly FsEntry[]): void {
+    movePage(visible, "up");
+  }
+
+  function pageDown(visible: readonly FsEntry[]): void {
+    movePage(visible, "down");
+  }
+
+  function movePage(visible: readonly FsEntry[], direction: "up" | "down"): void {
+    if (visible.length === 0) return;
+    const visualIndex = toVisualIndex(focusedIndex, entries, visible);
+    const safeVisualIndex = visualIndex === -1 ? 0 : visualIndex;
+    const nextVisual = moveFocusPage(visible, safeVisualIndex, direction, pageRows);
+    const nextReal = toRealIndex(nextVisual, entries, visible);
+    if (nextReal === -1) return;
+    focusedIndex = nextReal;
+  }
+
+  function onUiStateChange(callback: () => void): void {
+    onUiStateChangeCallback = callback;
+  }
+
+  // §3.6.11.11: applied ONLY at startup (before the first fs_list_dir,
+  // R-77-3-1), never re-applied mid-session. `sortKey`/`sortOrder` arrive as
+  // plain strings from `ui-state.toml`'s IPC DTO; an out-of-range value
+  // (should already be defaulted by the backend, AC-629 (iii)) is ignored
+  // defensively rather than corrupting `sort`.
+  function hydrateUiState(data: UiStateData): void {
+    showHidden = data.uiShowHidden;
+    showSize = data.uiShowSize;
+    showTime = data.uiShowTime;
+    showTree = data.uiShowTree;
+    const key = (SORT_KEYS as readonly string[]).includes(data.sortKey) ? (data.sortKey as SortKey) : sort.key;
+    const order = data.sortOrder === "asc" || data.sortOrder === "desc" ? data.sortOrder : sort.order;
+    sort = { key, order };
   }
 
   return {
@@ -279,6 +391,12 @@ export function createFileListState() {
     get error() {
       return error;
     },
+    showTree: () => showTree,
+    showHidden: () => showHidden,
+    showSize: () => showSize,
+    showTime: () => showTime,
+    sortKey: () => sort.key,
+    sortOrder: () => sort.order,
     loadDirectory,
     reload,
     moveRow,
@@ -292,7 +410,36 @@ export function createFileListState() {
     openFocused,
     goParent,
     layout,
+    toggleHidden,
+    toggleSize,
+    toggleTime,
+    toggleTree,
+    applySort,
+    clearSelection,
+    pageUp,
+    pageDown,
+    setPageRows,
+    onUiStateChange,
+    hydrateUiState,
   };
 }
 
 export const fileListState = createFileListState();
+
+// SPEC-0200-0001 §3.6.6/§3.6.11.11 (SHOULD-118/130): self-registers with the
+// ui-state.toml persistence coordinator, mirroring the existing
+// navigation-history-state.svelte.ts/search-state.svelte.ts precedent. Only
+// the module-scope singleton participates (not every `createFileListState()`
+// instance a test builds), so isolated test instances stay side-effect-free.
+uiStatePersistence.register({
+  getSnapshot: () => ({
+    uiShowHidden: fileListState.showHidden(),
+    uiShowSize: fileListState.showSize(),
+    uiShowTime: fileListState.showTime(),
+    uiShowTree: fileListState.showTree(),
+    sortKey: fileListState.sortKey(),
+    sortOrder: fileListState.sortOrder(),
+  }),
+  hydrate: (data) => fileListState.hydrateUiState(data),
+});
+fileListState.onUiStateChange(() => uiStatePersistence.requestSave());

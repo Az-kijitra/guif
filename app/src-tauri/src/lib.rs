@@ -7,8 +7,10 @@
 //! - `fs_ops` (SPEC-0300-0011 copy/move/delete/rename/create — Phase 2;
 //!   `fs_ops::commands` registers the commands below, including R-40~R-45
 //!   copy/move progress events and cancellation, ISS-0052)
-//! - `keymap` (SPEC-0300-0010 defaults/key-processing logic, no persistence)
-//! - `config` (persistence I/O, SPEC-0200-0001 §6)
+//! - `config` (persistence I/O, SPEC-0200-0001 §6; `config/keymap.rs` is the
+//!   sole reader of `config.toml`'s `input_keymap_custom` table, SPEC-0200-0001
+//!   §3.6.11.3 MUST-92 — the former `keymap/` module was removed once
+//!   `config/io.rs`'s deletion left it with no remaining caller)
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
 //! - `archive` (SPEC-0300-0014 ZIP create/extract — Phase 5; see
 //!   `archive/mod.rs`)
@@ -26,7 +28,6 @@ pub mod archive;
 pub mod config;
 pub mod fs;
 pub mod fs_ops;
-pub mod keymap;
 pub mod shared;
 // SPEC-0300-0015 (Phase 6, ReflexViewer): not implemented yet (TDD). See
 // `viewer/mod.rs` for the planned submodule list; this declaration alone is
@@ -75,6 +76,9 @@ pub fn run() {
         .manage(shared::cancel::CancelRegistry::default())
         // MUST-48(c): serializes navigation.toml load/save.
         .manage(config::commands::NavigationIoLock::default())
+        // SPEC-0200-0001 §3.6.1/§3.6.11.11 (SHOULD-117): serializes
+        // ui-state.toml load/save.
+        .manage(config::commands::UiStateIoLock::default())
         // R-441/R-491/R-492/R-430: the viewer's session (allow-set + sibling
         // snapshot) and pending-open handoff slot (single instance, R-421).
         .manage(viewer::window::ViewerRuntime::default())
@@ -106,6 +110,9 @@ pub fn run() {
             fs_ops::commands::fs_ops_detect_conflicts,
             config::commands::config_load_navigation,
             config::commands::config_save_navigation,
+            config::commands::config_load_keymap,
+            config::commands::ui_state_load,
+            config::commands::ui_state_save,
             archive::commands::archive_check_create,
             archive::commands::archive_create,
             archive::commands::archive_detect_conflicts,

@@ -33,6 +33,11 @@ import {
   syncHistoryWithModal,
 } from "./overlay-wiring";
 
+// Phase 7 (SPEC-0200-0001 §3.6.11.1 MUST-84): `syncSortMenuWithModal` is a
+// NEW export -- a second import so the existing tests above (against the
+// current exports) keep passing unaffected.
+import { syncSortMenuWithModal } from "./overlay-wiring";
+
 function key(k: string, mods: Partial<Record<"ctrlKey" | "altKey" | "shiftKey" | "metaKey" | "isComposing", boolean>> = {}) {
   return { key: k, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods };
 }
@@ -369,5 +374,70 @@ describe("syncHistoryWithModal (§3.3.2 exclusion invariant, SHOULD-85)", () => 
     const history = { isOpen: false, close: vi.fn() };
     syncHistoryWithModal({ modalOpen: true, history });
     expect(history.close).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase 7 (SPEC-0300-0009 R-34-13/AC-617; SPEC-0200-0001 §3.6.11.1 MUST-84).
+// The withdrawn §3.6.5 design closed the search bar when the sort menu
+// opened and masked search flags only by `modalOpen` -- both wrong (AC-617
+// requires search to survive a sort change; masking only by modalOpen let
+// Escape while the sort menu is open cancel the search bar instead of
+// closing the menu, AC-03). `sortMenuOpen` is an OPTIONAL new parameter
+// (defaults to false) so every existing call site above, which never passes
+// it, keeps behaving exactly as before (no regression).
+// ---------------------------------------------------------------------
+
+describe("computeDispatchOverlayFlags: sortMenuOpen masking (SPEC-0200-0001 §3.6.11.1 MUST-84)", () => {
+  const base = { modalOpen: false, historyOpen: false, searchActive: false, searchInputFocused: false };
+
+  it("isOverlayOpen becomes true while the sort menu is open (Tab/Escape must reach the overlay branch)", () => {
+    expect(computeDispatchOverlayFlags({ ...base, sortMenuOpen: true }).isOverlayOpen).toBe(true);
+  });
+
+  it("MUST-84/AC-03: while the sort menu is open, the search-active flag is masked so Escape reaches the overlay branch, not the search-cancel branch", () => {
+    const flags = computeDispatchOverlayFlags({ ...base, searchActive: true, sortMenuOpen: true });
+    expect(flags.isSearchActive).toBe(false);
+  });
+
+  it("the search-input-focused flag is masked too while the sort menu is open", () => {
+    const flags = computeDispatchOverlayFlags({ ...base, searchActive: true, searchInputFocused: true, sortMenuOpen: true });
+    expect(flags.isSearchInputFocused).toBe(false);
+  });
+
+  it("AC-617: with the sort menu CLOSED, an active search bar is untouched (masking is specific to the sort menu being open)", () => {
+    const flags = computeDispatchOverlayFlags({ ...base, searchActive: true, searchInputFocused: true, sortMenuOpen: false });
+    expect(flags.isSearchActive).toBe(true);
+    expect(flags.isSearchInputFocused).toBe(true);
+  });
+
+  it("omitting sortMenuOpen entirely behaves exactly like sortMenuOpen: false (backward compatible)", () => {
+    expect(computeDispatchOverlayFlags(base)).toEqual({
+      isOverlayOpen: false,
+      isSearchActive: false,
+      isSearchInputFocused: false,
+    });
+  });
+});
+
+// SHOULD-126/MUST-84 (c): a modal opening while the sort menu is shown must
+// close the sort menu (same shape as syncHistoryWithModal/SHOULD-85).
+describe("syncSortMenuWithModal (SPEC-0200-0001 §3.6.11.1 MUST-84 (c))", () => {
+  it("closes an open sort menu when a modal opens", () => {
+    const sortMenu = { isOpen: true, close: vi.fn() };
+    syncSortMenuWithModal({ modalOpen: true, sortMenu });
+    expect(sortMenu.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when no modal is open", () => {
+    const sortMenu = { isOpen: true, close: vi.fn() };
+    syncSortMenuWithModal({ modalOpen: false, sortMenu });
+    expect(sortMenu.close).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the sort menu is already closed", () => {
+    const sortMenu = { isOpen: false, close: vi.fn() };
+    syncSortMenuWithModal({ modalOpen: true, sortMenu });
+    expect(sortMenu.close).not.toHaveBeenCalled();
   });
 });

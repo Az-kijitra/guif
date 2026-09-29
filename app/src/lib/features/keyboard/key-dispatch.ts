@@ -47,7 +47,9 @@ export function matchesHardcodedShortcut(event: KeydownLikeEvent): "exit" | "set
   if (matchesAction(event, ["Ctrl+Q"])) {
     return "exit";
   }
-  if (matchesAction(event, ["Ctrl+,"])) {
+  // MUST-86: eventKeyToken(",") now maps to "Comma" (word form), so the
+  // hardcoded literal must say "Ctrl+Comma" or this shortcut stops matching.
+  if (matchesAction(event, ["Ctrl+Comma"])) {
     return "settings";
   }
   return null;
@@ -94,6 +96,20 @@ export interface DispatchContext {
   // R-14-2/R-121: fired for Escape/Enter/ArrowUp/ArrowDown while the search
   // input is focused.
   onSearchAction: (action: SearchAction) => void;
+  // SPEC-0300-0009 R-10-1/R-10-1-1; SPEC-0200-0001 §3.6.11.2 (MUST-85):
+  // Tab/Shift+Tab moves focus between the tree/search/list Tab stops, but
+  // ONLY when keymap matching resolved NO action at all (never when a
+  // resolved-but-unimplemented action's handler merely returned `false`).
+  // Optional so existing DispatchContext builders/tests are unaffected.
+  onTabStop?: (direction: "next" | "prev") => boolean;
+}
+
+// R-10-1-1/R-14-2-7: Tab is a tab-stop move only when unmodified (Ctrl/Alt/
+// Meta excluded -- left to the OS/browser) and not mid IME composition.
+function isPlainTab(event: KeydownLikeEvent): boolean {
+  return (
+    event.key === "Tab" && event.isComposing !== true && !event.ctrlKey && !event.altKey && !event.metaKey
+  );
 }
 
 // SPEC-0300-0012 R-121: the search bar's own 4 keys, resolved by fixed key
@@ -146,6 +162,11 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
   }
 
   if (ctx.isSearchInputFocused) {
+    // R-14-2-7: Tab moves between Tab stops even while the search input is
+    // focused, ahead of the 4 recognized search keys.
+    if (isPlainTab(event)) {
+      return ctx.onTabStop?.(event.shiftKey ? "prev" : "next") ?? false;
+    }
     const searchAction = matchesSearchInputAction(event);
     if (searchAction !== null) {
       ctx.onSearchAction(searchAction);
@@ -195,5 +216,15 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
     }
   }
 
-  return !!ctx.onListAction(action, event);
+  const listHandled = !!ctx.onListAction(action, event);
+  if (listHandled) return true;
+
+  // MUST-85: the Tab fallback condition is keymap-match FAILURE
+  // (`action === null`), never "onListAction returned false" -- a
+  // resolved-but-unimplemented action (e.g. `refresh`, R-26) legitimately
+  // returns false from onListAction, and Tab must not steal focus then.
+  if (action === null && isPlainTab(event)) {
+    return ctx.onTabStop?.(event.shiftKey ? "prev" : "next") ?? false;
+  }
+  return false;
 }
