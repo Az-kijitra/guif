@@ -79,15 +79,22 @@ fn unsafe_word() -> String {
     ["uns", "afe"].concat()
 }
 
-// §3.4.13-7 / §3.4.14 C2: `unsafe` exists ONLY in archive/win_fs.rs.
+// §3.4.13-7 / §3.4.14 C2, extended by SPEC-0300-0016 R-785 / SPEC-0200-0001
+// §3.7.1 (architecture-guardian 16th audit, ISS-0161): `unsafe` exists ONLY
+// in this fixed allow-list of isolation modules. `fs/win_drives.rs` was
+// added to the list alongside the pre-existing `archive/win_fs.rs` -- this
+// widens WHERE `unsafe` is tolerated, it never removes a check (a stray
+// `unsafe` anywhere else in the crate still fails this test).
+const UNSAFE_ALLOWED_FILES: &[&str] = &["src/archive/win_fs.rs", "src/fs/win_drives.rs"];
+
 #[test]
-fn unsafe_code_exists_only_in_archive_win_fs() {
+fn unsafe_code_exists_only_in_the_isolated_modules() {
     let needle = unsafe_word();
     let mut offenders = Vec::new();
     let mut files = Vec::new();
     rust_sources(&manifest_dir().join("src"), &mut files);
     for path in files {
-        if rel(&path) == "src/archive/win_fs.rs" {
+        if UNSAFE_ALLOWED_FILES.contains(&rel(&path).as_str()) {
             continue;
         }
         let text = fs::read_to_string(&path).unwrap();
@@ -95,7 +102,26 @@ fn unsafe_code_exists_only_in_archive_win_fs() {
             offenders.push(rel(&path));
         }
     }
-    assert!(offenders.is_empty(), "`{needle}` outside archive/win_fs.rs: {offenders:?}");
+    assert!(offenders.is_empty(), "`{needle}` outside {UNSAFE_ALLOWED_FILES:?}: {offenders:?}");
+}
+
+// SPEC-0300-0016 R-785 / SPEC-0200-0001 §3.7.1: `fs/win_drives.rs`'s ONLY
+// `unsafe` surface is the single `GetLogicalDrives` call, documented with a
+// `// SAFETY:` comment, and the file opts out of the crate-level deny.
+// RED until code-generator implements `list_logical_drives` (the current
+// TDD stub, fs/win_drives.rs, contains zero `unsafe` blocks and no
+// `GetLogicalDrives` text at all).
+#[test]
+fn win_drives_contains_exactly_one_win32_call_with_a_safety_comment() {
+    let text = fs::read_to_string(manifest_dir().join("src/fs/win_drives.rs")).unwrap();
+    let code = code_only(&text);
+    let needle = unsafe_word();
+    let blocks = count_word(&code, &needle);
+    let safety = text.matches("SAFETY:").count();
+    assert!(code.contains("GetLogicalDrives"), "list_logical_drives must be built on GetLogicalDrives (R-785)");
+    assert_eq!(blocks, 1, "fs/win_drives.rs must contain exactly one `{needle}` block (the GetLogicalDrives call)");
+    assert!(safety >= blocks, "the `{needle}` block needs a `// SAFETY:` comment ({safety} comments for {blocks} block)");
+    assert!(code.contains("allow(unsafe_code)"), "win_drives.rs must opt out of the crate-level deny");
 }
 
 // §3.4.14 C2: crate-level deny, so a stray block anywhere else fails to compile.

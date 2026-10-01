@@ -6,7 +6,9 @@
 // "open" must use pathsEqual, not !==, to decide whether to reload). Every
 // dependency is injected; this module imports no feature module.
 
-import { pathsEqual, treePageStep } from "$lib/features/file-list/tree";
+import { normalizeForTreeComparison, treePageStep } from "$lib/features/file-list/tree";
+import { pathComparisonKey } from "$lib/shared/path-key";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 export interface TreeActionDeps {
   tree: {
@@ -16,13 +18,33 @@ export interface TreeActionDeps {
     handleMoveLeft(): void; // R-66
     selectFocused(): { path: string } | null; // R-43
   };
-  afterUserNavigation: (navigation: Promise<string | null>) => Promise<string | null>;
-  loadDirectory: (path: string) => Promise<string | null>;
+  afterUserNavigation: (navigation: Promise<NavigateResult>) => Promise<NavigateResult>;
+  // SPEC-0200-0001 §3.7.2: node selection (drive nodes included, R-773) goes
+  // through the shared navigate() so failures reach R-238/R-773-1 handling.
+  navigate: (path: string) => Promise<NavigateResult>;
   fullyVisibleRows: () => number; // R-59-2
   currentPath: () => string;
 }
 
+// R-43/R-773 (shared by the keyboard "open" action and a tree row click):
+// navigate to the node's path only when it differs from the current one.
+// MUST-87(d)/SHOULD-146: both sides are compared with the `\\?\` prefix removed
+// (tree node paths never carry it) and case/trailing-separator insensitively
+// (R-40-6), so an already-open path triggers no reload / history entry.
+export function createTreePathSelector(
+  deps: Pick<TreeActionDeps, "afterUserNavigation" | "navigate" | "currentPath">,
+) {
+  return function selectTreePath(path: string): void {
+    const same =
+      pathComparisonKey(normalizeForTreeComparison(path)) ===
+      pathComparisonKey(normalizeForTreeComparison(deps.currentPath()));
+    // R-43-1: focus stays on the tree (the caller never touches focus).
+    if (!same) void deps.afterUserNavigation(deps.navigate(path));
+  };
+}
+
 export function createTreeActionHandler(deps: TreeActionDeps) {
+  const selectTreePath = createTreePathSelector(deps);
   return function onTreeAction(action: string, event: { shiftKey: boolean }): boolean {
     // R-15-1(結果面)/AC-615: "open" with Shift (Shift+Enter) is routed here
     // by R-15 (TREE_HANDLED_ACTIONS includes "open"); the observed behavior
@@ -57,12 +79,7 @@ export function createTreeActionHandler(deps: TreeActionDeps) {
         return true;
       case "open": {
         const target = deps.tree.selectFocused();
-        // MUST-87(d): pathsEqual (R-40-6), not !==, so a case/trailing-
-        // separator difference doesn't trigger a spurious reload.
-        if (target !== null && !pathsEqual(target.path, deps.currentPath())) {
-          // R-43-1: focus stays on the tree (the caller is unchanged).
-          void deps.afterUserNavigation(deps.loadDirectory(target.path));
-        }
+        if (target !== null) selectTreePath(target.path);
         return true;
       }
       default:

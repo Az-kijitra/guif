@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 // Spec: SPEC-0300-0014 R-305 / R-305-1 (zip_create / zip_extract are started
 //   from the keyboard actions), R-306 (no menu / context-menu entry in Phase
@@ -38,14 +39,14 @@ function makeDeps(over: Record<string, unknown> = {}) {
     fileList: {
       moveRow: vi.fn(),
       moveColumn: vi.fn(),
-      openFocused: vi.fn(async () => "C:\\d\\sub" as string | null),
-      goParent: vi.fn(async () => "C:\\" as string | null),
+      openFocused: vi.fn(async (): Promise<NavigateResult> => ({ status: "success", path: "C:\\d\\sub" })),
+      goParent: vi.fn(async (): Promise<NavigateResult> => ({ status: "success", path: "C:\\" })),
       toggleFocused: vi.fn(),
       selectAll: vi.fn(),
     },
     filteredEntries: () => filtered,
     rowsPerColumn: () => 10,
-    afterUserNavigation: vi.fn(async (pr: Promise<string | null>) => pr),
+    afterUserNavigation: vi.fn(async (pr: Promise<NavigateResult>) => pr),
     activateSearch: vi.fn(),
     openHistoryList: vi.fn(),
     addJump: vi.fn(),

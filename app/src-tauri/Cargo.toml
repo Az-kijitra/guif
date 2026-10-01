@@ -45,8 +45,9 @@ time = { version = "0.3", default-features = false, features = ["std", "local-of
 encoding_rs = "0.8"
 tauri-plugin-opener = "~2.5"
 
-# SPEC-0200-0001 §3.4.13-7 / §3.4.14 C2: the only `unsafe` in the crate lives
-# in archive/win_fs.rs (MoveFileExW without replace, GetDiskFreeSpaceExW).
+# SPEC-0200-0001 §3.4.13-7 / §3.4.14 C2 / §3.7.1: the only `unsafe` in the crate lives
+# in archive/win_fs.rs (MoveFileExW without replace, GetDiskFreeSpaceExW) and
+# fs/win_drives.rs (GetLogicalDrives).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 

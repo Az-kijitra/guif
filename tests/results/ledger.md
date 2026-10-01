@@ -11,6 +11,16 @@
 | 2026-09-27 | 未採番(SPEC-0300-0014 第3版 ZIP作成/展開) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 5 ZIP」セクション参照 | unit-test-writer(Rust/TS並行) → code-generator(Rust/TS並行、CP932等の実験含む) → code-reviewer(セキュリティ重点) → code-generator(指摘修正) → オーケストレーター(ヘッドレスブラウザで動作確認) → 判定「PR作成可」 |
 | 2026-09-27 | 未採番(SPEC-0300-0015 ReflexViewer統合) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 6 ReflexViewer」セクション参照 | unit-test-writer(Rust/TS) → code-generator → オーケストレーター(設計MUST未達3点を差し戻し) → code-reviewer(差し戻し: DPI単位混在・listen/take順) → code-generator(修正) → オーケストレーター(複数モニタ座標を物理px統一へ修正、ヘッドレスブラウザで動作確認) |
 | 2026-09-29 | 未採番(SPEC-0300-0009 第8版 / SPEC-0300-0010 第11版、Phase 7) | PASS(フロント・バック双方) | 以下「## 2026-09-29 Phase 7」セクション参照 | unit-test-writer → code-generator → オーケストレーター(400行超過・ページ移動量を差し戻し) → code-reviewer(差し戻し: ソートメニュー再押下がキーマップ非経由、ツリーのページ移動量) → オーケストレーター(実Tauriで不具合2件を検出) → code-generator(修正) → オーケストレーター(ツリー再描画漏れを修正し実Tauriで確認) |
+| 2026-10-01 | 未採番(SPEC-0300-0016 第2版 ほか連動新版、Phase 8) | PASS(フロント・バック双方) | 以下「## 2026-10-01 Phase 8」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(実Tauriで確認) |
+
+## 2026-10-01 Phase 8 パスバー+ドライブ切替(SPEC-0300-0016 第2版、0009第9版/0010第12版/0012第4版/0013第5版)テスト実行結果
+
+- `cargo test`: 708件全成功。`npx vitest run`: 84ファイル/1614件全成功。`npx tsc --noEmit`・`npx svelte-check`エラー0(警告6、既存a11y)、`npx vite build`・`cargo build`成功。`+page.svelte` 396行。
+- 設計監査(guardian第16・17回)で検出・設計段階で解消: 移動の競合が既存loadSequenceだけでは満たされない(起動時ロードと再表示の2経路)、MUST-105(ホームへのフォールバック中の利用者移動)、MUST-106(staleな移動がCtrl+Hを数十秒塞ぐ)、MUST-107(履歴一覧表示中のEnterがパスバー確定になる)ほか。
+- 実Tauri(WebView2リモートデバッグ)で確認: Ctrl+Lで全選択、`C:\Win`+Tabで`C:\Windows\`に補完、Enterで移動し一覧へ・ツリー追従、存在しないパスは入力を残し「対象が見つかりません。」、ファイルパスは「フォルダーではありません。」、`c:/users/../users`の正規化、パスバーで↓→履歴一覧、`F:`入力・ツリーの`F:\`選択でドライブ切替(ツリー最上位にC:\とF:\、現在ドライブのみ展開)、検索バー表示中に一覧フォーカスでCtrl+L→検索バーを閉じてパスバーへ、編集中のステータスバークリック→編集破棄し一覧へ。例外なし。
+- 観察(Phase 8範囲外、既存): 検索入力欄にフォーカスがある間のCtrl+Lは何もしない(SPEC-0300-0010 R-14-2-1どおり、mainも同じ)。検索入力欄で入力中にステータスバー等をクリックするとフォーカスがbodyへ落ちる。
+- code-reviewer SHOULD(未対応、非blocker): path-bar-wiringのblur/focus分岐(R-704/R-704-1)の単体テスト不足(実機では確認済み)、path-bar-stateの未使用deps(onOpenHistory/onAddJump)、reload延期時のnull戻り値が失敗と区別できない。
+- 未実施: `tests/manual/phase8-path-bar-checklist.md` の実機確認(切断中ネットワークドライブ、UNC、IME、WebView2既定キー、DPI等)。
 
 ## 2026-09-29 Phase 7 ツリー・一覧アクション・キーマップ読込・表示状態保存(SPEC-0300-0009 第8版 / 0010 第11版)テスト実行結果
 

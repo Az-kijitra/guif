@@ -590,3 +590,123 @@ describe("dispatchKeydown: onTabStop fallback (SPEC-0200-0001 §3.6.11.2 MUST-85
     expect(ctx.onTabStop).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------
+// Phase 8: SPEC-0300-0010 第12版 R-14-4 / SPEC-0300-0016 R-760~R-765, AC-717~
+// AC-722, AC-746, AC-748; SPEC-0200-0001 §3.7.5, §3.7.10.3 (MUST-99 a/c).
+// New optional DispatchContext fields: isPathBarEditing, onPathBarKey,
+// onPathBarOverlayAction (SHOULD-141). Guard sits AFTER the isSearchInputFocused
+// block and BEFORE the isSearchActive Escape branch (MUST-99(a)).
+// ---------------------------------------------------------------------
+describe("dispatchKeydown R-14-4 (path-bar editing guard)", () => {
+  function ctxOf(over: Partial<Record<string, unknown>> = {}) {
+    return {
+      isSettingsOpen: false,
+      isOverlayOpen: false,
+      isMenuBarActive: false,
+      isTreeFocused: false,
+      isSearchInputFocused: false,
+      isPathBarEditing: true,
+      customOverrides: {},
+      onHardcodedShortcut: vi.fn().mockReturnValue(true),
+      onExitAction: vi.fn().mockReturnValue(true),
+      onOverlayKey: vi.fn().mockReturnValue(false),
+      onMenuBarKey: vi.fn().mockReturnValue(false),
+      onTreeAction: vi.fn().mockReturnValue(false),
+      onListAction: vi.fn().mockReturnValue(true),
+      onSearchAction: vi.fn(),
+      onPathBarKey: vi.fn(),
+      onPathBarOverlayAction: vi.fn(),
+      ...over,
+    };
+  }
+
+  it.each([
+    ["Enter", {}, "confirm"],
+    ["Escape", {}, "cancel"],
+    ["Tab", {}, "complete"],
+    ["Tab", { shiftKey: true }, "exit_to_list"],
+    ["ArrowDown", {}, "open_history"],
+  ] as const)("R-761: %s %o -> onPathBarKey('%s'), handled", (k, mods, fixed) => {
+    const ctx = ctxOf();
+    expect(dispatchKeydown(key(k, mods), ctx)).toBe(true);
+    expect(ctx.onPathBarKey).toHaveBeenCalledWith(fixed, expect.anything());
+    expect(ctx.onListAction).not.toHaveBeenCalled();
+  });
+
+  it("MUST-99(a)/AC-718: Escape while the search bar is still open (click entry, R-703) goes to the path bar, not search cancel", () => {
+    const ctx = ctxOf({ isSearchActive: true });
+    dispatchKeydown(key("Escape"), ctx);
+    expect(ctx.onPathBarKey).toHaveBeenCalledWith("cancel", expect.anything());
+    expect(ctx.onSearchAction).not.toHaveBeenCalled();
+  });
+
+  it("R-761-1/AC-746: Shift+Enter, Shift+ArrowDown and Ctrl/Alt/Meta-modified fixed keys are NOT fixed keys (left to the input)", () => {
+    for (const ev of [key("Enter", { shiftKey: true }), key("ArrowDown", { shiftKey: true }), key("Enter", { ctrlKey: true }), key("Escape", { altKey: true })]) {
+      const ctx = ctxOf();
+      expect(dispatchKeydown(ev, ctx)).toBe(false);
+      expect(ctx.onPathBarKey).not.toHaveBeenCalled();
+      expect(ctx.onListAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R-763/AC-717: other keys fall through to the input (false, no list action, no exit)", () => {
+    for (const ev of [key("s"), key("/"), key("Delete"), key("Backspace"), key("a", { ctrlKey: true }), key("h", { ctrlKey: true }), key("ArrowUp"), key("l", { ctrlKey: true })]) {
+      const ctx = ctxOf();
+      expect(dispatchKeydown(ev, ctx)).toBe(false);
+      expect(ctx.onListAction).not.toHaveBeenCalled();
+      expect(ctx.onPathBarOverlayAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    ["y", { ctrlKey: true }, "history"],
+    ["j", { ctrlKey: true }, "history_jump_list"],
+    ["J", { ctrlKey: true, shiftKey: true }, "jump_add"],
+  ] as const)("R-762/AC-720: %s %o -> onPathBarOverlayAction('%s')", (k, mods, action) => {
+    const ctx = ctxOf();
+    expect(dispatchKeydown(key(k, mods), ctx)).toBe(true);
+    expect(ctx.onPathBarOverlayAction).toHaveBeenCalledWith(action);
+  });
+
+  it("R-762-1/AC-721: a custom single-key binding (no Ctrl/Alt/Meta) is typed into the input; keymap `exit` does not fire", () => {
+    const ctx = ctxOf({ customOverrides: { history: "H", exit: "Q" } });
+    for (const k of ["H", "Q"]) {
+      expect(dispatchKeydown(key(k, { shiftKey: true }), ctx)).toBe(false);
+    }
+    expect(ctx.onPathBarOverlayAction).not.toHaveBeenCalled();
+    expect(ctx.onExitAction).not.toHaveBeenCalled();
+  });
+
+  it("R-760-1/AC-721: Ctrl+Q (hardcoded) and settings-open still take precedence", () => {
+    const ctx = ctxOf();
+    dispatchKeydown(key("q", { ctrlKey: true }), ctx);
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    const s = ctxOf({ isSettingsOpen: true });
+    expect(dispatchKeydown(key("Enter"), s)).toBe(false);
+    expect(s.onPathBarKey).not.toHaveBeenCalled();
+  });
+
+  it("R-764/MUST-99(c)/AC-722: isComposing or keyCode 229 -> nothing handled, passes to the input", () => {
+    for (const k of ["Enter", "Escape", "Tab"]) {
+      for (const extra of [{ isComposing: true }, { keyCode: 229 }]) {
+        const ctx = ctxOf();
+        expect(dispatchKeydown({ ...key(k), ...extra }, ctx)).toBe(false);
+        expect(ctx.onPathBarKey).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("R-760-2/MUST-107: with isPathBarEditing=false (masked by an overlay) the guard is inert and the overlay handler runs", () => {
+    const ctx = ctxOf({ isPathBarEditing: false, isOverlayOpen: true, onOverlayKey: vi.fn().mockReturnValue(true) });
+    expect(dispatchKeydown(key("Enter"), ctx)).toBe(true);
+    expect(ctx.onOverlayKey).toHaveBeenCalled();
+    expect(ctx.onPathBarKey).not.toHaveBeenCalled();
+  });
+
+  it("SHOULD-141: contexts without the new fields behave exactly as before", () => {
+    const ctx = ctxOf({ isPathBarEditing: undefined, onPathBarKey: undefined, onPathBarOverlayAction: undefined });
+    expect(dispatchKeydown(key("ArrowDown"), ctx)).toBe(true);
+    expect(ctx.onListAction).toHaveBeenCalledWith("move_down", expect.anything());
+  });
+});

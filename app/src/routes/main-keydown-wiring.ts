@@ -6,7 +6,13 @@
 // `viewer-open-wiring.ts`/`row-interaction-wiring.ts` "thin composition"
 // pattern.
 
-import { dispatchKeydown, type DispatchContext, type SearchAction } from "$lib/features/keyboard/key-dispatch";
+import {
+  dispatchKeydown,
+  type DispatchContext,
+  type PathBarFixedKey,
+  type PathBarOverlayAction,
+  type SearchAction,
+} from "$lib/features/keyboard/key-dispatch";
 import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
 import { computeDispatchOverlayFlags } from "./overlay-wiring";
 
@@ -36,6 +42,13 @@ export interface MainKeydownWiringDeps {
   onListAction: (action: string | null, event: KeydownLikeEvent) => boolean;
   onSearchAction: (action: SearchAction) => void;
   onTabStop: (direction: "next" | "prev") => boolean;
+  // R-14-4 (Phase 8): path bar editing guard (optional so existing callers
+  // and tests stay valid).
+  pathBar?: {
+    readonly editing: boolean;
+    onKey: (key: PathBarFixedKey, event: KeydownLikeEvent) => void;
+    onOverlayAction: (action: PathBarOverlayAction) => void;
+  };
 }
 
 // Builds the `(event: Event) => void` handler `attachGlobalKeydownListener`
@@ -50,6 +63,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       shiftKey: ke.shiftKey,
       metaKey: ke.metaKey,
       isComposing: ke.isComposing,
+      keyCode: ke.keyCode, // R-764: IME marker 229 (MUST-99(c))
     };
 
     const flags = computeDispatchOverlayFlags({
@@ -58,6 +72,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       searchActive: deps.search.active,
       searchInputFocused: deps.search.inputFocused,
       sortMenuOpen: deps.sortMenu.isOpen,
+      pathBarEditing: deps.pathBar?.editing ?? false,
     });
     const ctx: DispatchContext = {
       isSettingsOpen: false,
@@ -86,6 +101,9 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       onListAction: deps.onListAction,
       onSearchAction: deps.onSearchAction,
       onTabStop: deps.onTabStop,
+      isPathBarEditing: flags.isPathBarEditing,
+      onPathBarKey: deps.pathBar?.onKey,
+      onPathBarOverlayAction: deps.pathBar?.onOverlayAction,
     };
 
     const handled = dispatchKeydown(keydownLike, ctx);

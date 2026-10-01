@@ -22,13 +22,18 @@ export function computeDispatchOverlayFlags(s: {
   searchActive: boolean;
   searchInputFocused: boolean;
   sortMenuOpen?: boolean;
+  pathBarEditing?: boolean;
 }) {
   const sortMenuOpen = s.sortMenuOpen ?? false;
   const masked = s.modalOpen || sortMenuOpen;
+  const isOverlayOpen = s.modalOpen || s.historyOpen || sortMenuOpen;
   return {
-    isOverlayOpen: s.modalOpen || s.historyOpen || sortMenuOpen,
+    isOverlayOpen,
     isSearchActive: s.searchActive && !masked,
     isSearchInputFocused: s.searchInputFocused && !masked,
+    // R-14-4-1 / MUST-107: the path bar guard is masked by the WHOLE overlay
+    // set (modal, history list, sort menu).
+    isPathBarEditing: (s.pathBarEditing ?? false) && !isOverlayOpen,
   };
 }
 

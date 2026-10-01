@@ -7,8 +7,9 @@
 // of its own beyond the `FsEntry` type).
 
 import type { FsEntry } from "$lib/shared/ipc/fs";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 import { createListActionHandler, type ListActionDeps } from "./list-action-wiring";
-import { createTreeActionHandler } from "./tree-action-wiring";
+import { createTreeActionHandler, createTreePathSelector } from "./tree-action-wiring";
 
 export interface TreeStateLike {
   clear(): void;
@@ -22,11 +23,11 @@ export interface TreeStateLike {
 }
 
 export interface ListTreeControllersDeps {
-  fileList: ListActionDeps<FsEntry>["fileList"] & { loadDirectory(path: string): Promise<string | null> };
+  fileList: ListActionDeps<FsEntry>["fileList"] & { navigate(path: string): Promise<NavigateResult> };
   treeState: TreeStateLike;
   filteredEntries: () => readonly FsEntry[];
   rowsPerColumn: () => number;
-  afterUserNavigation: (navigation: Promise<string | null>) => Promise<string | null>;
+  afterUserNavigation: (navigation: Promise<NavigateResult>) => Promise<NavigateResult>;
   activateSearch: () => void;
   openHistoryList: (mode: "history" | "jump") => void;
   addJump: (path: string) => void;
@@ -39,6 +40,8 @@ export interface ListTreeControllersDeps {
   sortMenuToggle: () => void;
   focusContainer: () => void;
   treeFullyVisibleRows: () => number;
+  // SPEC-0300-0016 R-710: the `focus_path` action's implementation.
+  pathBar?: { open(): void };
 }
 
 export function createListTreeControllers(deps: ListTreeControllersDeps) {
@@ -63,6 +66,7 @@ export function createListTreeControllers(deps: ListTreeControllersDeps) {
     },
     sortMenu: { toggle: deps.sortMenuToggle },
     focus: { container: deps.focusContainer },
+    pathBar: deps.pathBar,
   });
 
   const onTreeAction = createTreeActionHandler({
@@ -74,10 +78,18 @@ export function createListTreeControllers(deps: ListTreeControllersDeps) {
       selectFocused: () => deps.treeState.selectFocused(),
     },
     afterUserNavigation: deps.afterUserNavigation,
-    loadDirectory: (path) => deps.fileList.loadDirectory(path),
+    navigate: (path) => deps.fileList.navigate(path),
     fullyVisibleRows: deps.treeFullyVisibleRows,
     currentPath: deps.currentPath,
   });
 
-  return { onListAction, onTreeAction };
+  // R-43/R-773: a tree row click goes through the same selection logic as
+  // the keyboard "open" action.
+  const onTreeSelectPath = createTreePathSelector({
+    afterUserNavigation: deps.afterUserNavigation,
+    navigate: (path) => deps.fileList.navigate(path),
+    currentPath: deps.currentPath,
+  });
+
+  return { onListAction, onTreeAction, onTreeSelectPath };
 }

@@ -29,42 +29,12 @@ export interface FsListDirParams {
   sortOrder: string;
 }
 
-// SPEC-0200-0001 §3.6.11.6 (MUST-89, §19 第15回 MUST-95): `fs_list_dir`'s
-// backend error is now a structured `{code, message}` DTO. Tauri's `invoke()`
-// rejects with that DTO as-is, so it is normalized into a real `Error`
-// subclass here (the same precedent `shared/ipc/archive.ts`'s `ArchiveError`/
-// `normalizeArchiveError` set) — otherwise `list-state.svelte.ts`'s existing
-// `e instanceof Error ? e.message : String(e)` catch clause would display
-// "[object Object]".
-export type FsListDirErrorCode = "access_denied" | "not_found" | "other";
-
-export class FsListDirError extends Error {
-  code: FsListDirErrorCode;
-
-  constructor(code: FsListDirErrorCode, message: string) {
-    super(message);
-    this.name = "FsListDirError";
-    this.code = code;
-  }
-}
-
-const KNOWN_CODES: readonly FsListDirErrorCode[] = ["access_denied", "not_found", "other"];
-
-// Never throws: any rejected value becomes an FsListDirError. Accepts the 3
-// input shapes MUST-95 requires: a structured DTO object, a bare string (an
-// ACL-rejection message, or the pre-MUST-89 command shape), or an Error
-// instance.
-export function normalizeFsListDirError(raw: unknown): FsListDirError {
-  if (raw instanceof FsListDirError) return raw;
-  if (typeof raw === "string") return new FsListDirError("other", raw);
-  if (raw instanceof Error) return new FsListDirError("other", raw.message);
-  if (typeof raw === "object" && raw !== null) {
-    const o = raw as { code?: unknown; message?: unknown };
-    const code = KNOWN_CODES.includes(o.code as FsListDirErrorCode) ? (o.code as FsListDirErrorCode) : "other";
-    return new FsListDirError(code, typeof o.message === "string" ? o.message : "");
-  }
-  return new FsListDirError("other", String(raw));
-}
+// SPEC-0200-0001 §3.6.11.6 (MUST-89, §19 第15回 MUST-95): the structured
+// error type lives in ./fs-error (re-exported); SPEC-0300-0016 R-731-1 adds
+// the `not_a_directory` code.
+import { FsListDirError, normalizeFsListDirError } from "./fs-error";
+export { FsListDirError, normalizeFsListDirError };
+export type { FsListDirErrorCode } from "./fs-error";
 
 // R-70: the single directory-enumeration command, used by both the file
 // list and the tree (SPEC-0300-0009 §7).
@@ -77,4 +47,12 @@ export function fsListDir(params: FsListDirParams): Promise<FsEntry[]> {
   }).catch((e) => {
     throw normalizeFsListDirError(e);
   });
+}
+
+// SPEC-0300-0016 R-780~R-785: logical drive roots ("C:\\", "D:\\", ...), in
+// drive-letter order. Never fails by design (R-783); an invoke() failure is
+// passed through as an exception (not swallowed into []) so the tree can
+// treat it like any other unexpected listing failure.
+export function fsListDrives(): Promise<string[]> {
+  return invoke<string[]>("fs_list_drives");
 }

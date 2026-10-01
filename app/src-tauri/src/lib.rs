@@ -21,7 +21,8 @@
 //! Tauri 2 desktop template split, so `lib.rs` stays the single source of
 //! bootstrap wiring and can also be exercised by integration tests later).
 
-// SPEC-0200-0001 §3.4.13-7: the only unsafe in the crate is archive/win_fs.rs.
+// SPEC-0200-0001 §3.4.13-7 / §3.7.1 (ISS-0161): the only unsafe in the crate lives in
+// archive/win_fs.rs and fs/win_drives.rs.
 #![deny(unsafe_code)]
 
 pub mod archive;
@@ -100,6 +101,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             fs::commands::fs_list_dir,
+            fs::commands::fs_list_drives,
             fs_ops::commands::fs_ops_copy,
             fs_ops::commands::fs_ops_move,
             fs_ops::commands::fs_ops_cancel,

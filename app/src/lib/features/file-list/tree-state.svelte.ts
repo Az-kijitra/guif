@@ -7,7 +7,7 @@
 // `list-state.svelte.ts`).
 
 import { pathComparisonKey } from "$lib/shared/path-key";
-import { computeTreeRoot, isAncestorPath, pathsEqual, resolveAncestorChain } from "./tree";
+import { computeTreeTopLevel, isAncestorPath, mergeDriveList, pathsEqual, resolveAncestorChain } from "./tree";
 
 export interface TreeStateEntry {
   path: string;
@@ -18,6 +18,9 @@ export interface TreeStateDeps {
   listDir: (path: string, showHidden: boolean) => Promise<TreeStateEntry[]>;
   isVisible: () => boolean;
   onLoadFailureNotice: (message: string) => void;
+  // SPEC-0300-0016 R-782: asynchronous, DI-able drive enumeration
+  // (production: shared/ipc/fs.ts::fsListDrives).
+  listDrives: () => Promise<string[]>;
 }
 
 export interface TreeRowView {
@@ -61,7 +64,17 @@ function basenameOf(path: string): string {
 }
 
 export function createTreeState(deps: TreeStateDeps) {
-  let root = $state<string | null>(null);
+  // SPEC-0300-0016 §9 / SPEC-0200-0001 §3.7.3: the top level is a list of
+  // drive nodes (`drives`, ascending) plus at most one extra node (UNC share,
+  // volume GUID / `\\.\` path); `anchorKey` is the top-level node the current
+  // path lives under (null while the tree has not been built).
+  let drives = $state<string[]>([]);
+  let extraNodeKey = $state<string | null>(null);
+  let anchorKey = $state<string | null>(null);
+  // The drive root of the current path (null for UNC/GUID/`\\.\`), read when
+  // an enumeration result arrives (SHOULD-137).
+  let currentDrive: string | null = null;
+  let drivesSeq = 0;
   let currentDirPath = $state("");
   let focusedPath = $state<string | null>(null);
   let rawHasFocus = $state(false);
@@ -146,30 +159,117 @@ export function createTreeState(deps: TreeStateDeps) {
 
   // R-40/R-40-1/R-40-5/R-40-7/AC-600~AC-608: build/extend the tree toward
   // `path` and highlight the deepest node we could confirm.
-  async function followTo(path: string, opts?: { rebuild?: boolean }): Promise<void> {
-    const mySeq = ++followSeq;
-    const rootResult = computeTreeRoot(path);
-    const targetRoot = rootResult.singleNodeOnly ? path : (rootResult.root as string);
-    const sameRoot = root !== null && pathsEqual(targetRoot, root) && opts?.rebuild !== true;
+  // SPEC-0200-0001 §3.7.10.14 SHOULD-142: really deletes `key` and every
+  // descendant from `nodes` (in-flight fetches are invalidated), so a later
+  // re-creation starts from a fresh node.
+  function removeSubtree(key: string): void {
+    const node = nodes.get(key);
+    if (node === undefined) return;
+    for (const childKey of node.children ?? []) removeSubtree(childKey);
+    node.fetchToken += 1;
+    nodes.delete(key);
+    touch();
+  }
 
-    if (!sameRoot) {
+  // R-775 (latter half): a top-level node that stays in the list but is no
+  // longer the anchor is collapsed and its fetched children discarded.
+  function discardChildren(key: string): void {
+    const node = nodes.get(key);
+    if (node === undefined) return;
+    for (const childKey of node.children ?? []) removeSubtree(childKey);
+    node.fetchToken += 1;
+    node.children = undefined;
+    node.loaded = false;
+    node.expanded = false;
+    node.loading = false;
+    touch();
+  }
+
+  function ensureTopLevelNode(path: string): void {
+    const key = keyOf(path);
+    if (nodes.has(key)) return;
+    nodes.set(key, makeNode(path, path, 0, null));
+    touch();
+  }
+
+  // R-770/R-778/R-781/R-782: apply an enumeration result (or just the current
+  // drive, before the result arrives) to `drives`.
+  function applyDrives(enumerated: readonly string[]): void {
+    const merged = mergeDriveList(enumerated, currentDrive);
+    const mergedKeys = new Set(merged.map(keyOf));
+    for (const old of drives) {
+      if (mergedKeys.has(keyOf(old))) continue;
+      // SHOULD-137/142: a drive that vanished is removed with its subtree; a
+      // focus that was inside it moves to the anchor.
+      const oldKey = keyOf(old);
+      if (focusedPath !== null && (pathsEqual(focusedPath, old) || isAncestorPath(old, focusedPath))) {
+        const anchorNode = anchorKey === null ? undefined : nodes.get(anchorKey);
+        focusedPath = anchorNode === undefined ? null : anchorNode.path;
+      }
+      removeSubtree(oldKey);
+    }
+    for (const drive of merged) ensureTopLevelNode(drive);
+    drives = merged;
+    touch();
+  }
+
+  // R-781: enumeration triggers are (i) an anchor change and (ii) a tree that
+  // has not enumerated yet (both are "anchorKey changed" -- clear() resets it).
+  // Never awaited by followTo (R-782). A newer enumeration supersedes an older
+  // one (drivesSeq, separate from rootGeneration -- SHOULD-137).
+  function enumerateDrives(): void {
+    const mySeq = ++drivesSeq;
+    deps.listDrives().then(
+      (list) => {
+        if (mySeq !== drivesSeq) return;
+        applyDrives(list);
+      },
+      (e) => {
+        if (mySeq !== drivesSeq) return;
+        notifyIfNeeded({ success: false, code: errorCodeOf(e), stale: false });
+      },
+    );
+  }
+
+  async function followTo(path: string): Promise<void> {
+    // R-779/MUST-102(d): inert while the tree is hidden (pairs with clear()).
+    if (!deps.isVisible()) return;
+    const mySeq = ++followSeq;
+    const top = computeTreeTopLevel(path);
+    const newAnchorKey = keyOf(top.anchorRoot);
+    const anchorChanged = anchorKey === null || anchorKey !== newAnchorKey;
+
+    if (anchorChanged) {
       rootGeneration += 1;
-      nodes.clear();
-      root = targetRoot;
-      nodes.set(keyOf(targetRoot), makeNode(targetRoot, targetRoot, 0, null));
+      currentDrive = top.currentDrive;
+      // R-775: every other top-level node is collapsed and loses its fetched
+      // children; a previous extra node (UNC share / single node) is dropped.
+      for (const drive of drives) {
+        if (keyOf(drive) !== newAnchorKey) discardChildren(keyOf(drive));
+      }
+      if (extraNodeKey !== null && extraNodeKey !== newAnchorKey) {
+        removeSubtree(extraNodeKey);
+        extraNodeKey = null;
+      }
+      if (top.anchorIsExtra) {
+        extraNodeKey = newAnchorKey;
+        ensureTopLevelNode(top.anchorRoot);
+      }
+      // R-778/R-782: show at least the current drive right away; the full
+      // list follows when the enumeration resolves.
+      applyDrives(drives);
+      anchorKey = newAnchorKey;
       touch();
+      enumerateDrives();
     }
     const myGeneration = rootGeneration;
     const isCurrent = () => mySeq === followSeq;
+    const targetRoot = top.anchorRoot;
 
-    if (rootResult.singleNodeOnly) {
-      if (!isCurrent()) return;
-      currentDirPath = targetRoot;
-      focusedPath = targetRoot;
-      return;
-    }
-
-    const chain = resolveAncestorChain(path, targetRoot);
+    // R-777: a volume GUID / `\\.\` path is a single top-level node whose
+    // normalizedTarget equals its anchorRoot, so the chain below has one
+    // element: no listing, no ancestor expansion.
+    const chain = resolveAncestorChain(top.normalizedTarget, targetRoot);
     let confirmed = targetRoot;
 
     for (let i = 0; i < chain.length - 1; i++) {
@@ -241,7 +341,11 @@ export function createTreeState(deps: TreeStateDeps) {
   function clear(): void {
     rootGeneration += 1;
     followSeq += 1;
-    root = null;
+    drivesSeq += 1; // drops any in-flight enumeration
+    drives = [];
+    extraNodeKey = null;
+    anchorKey = null;
+    currentDrive = null;
     currentDirPath = "";
     focusedPath = null;
     nodes.clear();
@@ -305,9 +409,6 @@ export function createTreeState(deps: TreeStateDeps) {
     // touch() bumps `version`; reading it here makes this function reactive
     // to in-place mutations of the plain `nodes` map under Svelte 5 runes.
     void version;
-    if (root === null) return [];
-    const rootNode = nodes.get(keyOf(root));
-    if (rootNode === undefined) return [];
     const rows: TreeRowView[] = [];
     const visit = (node: InternalNode): void => {
       rows.push({ path: node.path, name: node.name, level: node.level, expanded: node.expanded, loading: node.loading });
@@ -318,7 +419,15 @@ export function createTreeState(deps: TreeStateDeps) {
         }
       }
     };
-    visit(rootNode);
+    // R-770/R-776/R-777: the drive nodes in order, then the extra node.
+    for (const drive of drives) {
+      const node = nodes.get(keyOf(drive));
+      if (node !== undefined) visit(node);
+    }
+    if (extraNodeKey !== null) {
+      const extra = nodes.get(extraNodeKey);
+      if (extra !== undefined) visit(extra);
+    }
     return rows;
   }
 
@@ -366,8 +475,18 @@ export function createTreeState(deps: TreeStateDeps) {
   }
 
   return {
-    get root() {
-      return root;
+    get drives() {
+      return drives;
+    },
+    get anchorKey() {
+      return anchorKey;
+    },
+    get extraNodeKey() {
+      return extraNodeKey;
+    },
+    // SHOULD-144: read-only, for tests that pin which operations call touch().
+    get version() {
+      return version;
     },
     get currentDirPath() {
       return currentDirPath;

@@ -9,6 +9,7 @@ fn main() {
         tauri_build::Attributes::new()
             .app_manifest(tauri_build::AppManifest::new().commands(&[
                 "fs_list_dir",
+                "fs_list_drives",
                 "config_load_navigation",
                 "config_save_navigation",
                 "config_load_keymap",

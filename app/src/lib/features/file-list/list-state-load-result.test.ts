@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Spec: SPEC-0300-0013 R-210/R-211 (record only on success), SPEC-0200-0001
 //   §3.2.4 (SHOULD-62/68: loadDirectory returns the loaded path or null, and
 //   a stale (outrun) response must not touch state).
+// REVISED 2026-10-01 (unit-test-writer, Phase 8): loadDirectory/openFocused/
+//   goParent now return NavigateResult (SPEC-0200-0001 §3.7.10.1 MUST-96,
+//   SHOULD-133/134) instead of `string | null`. Assertions migrated
+//   mechanically; new behavior lives in list-state-navigate.test.ts.
 // $lib/shared/ipc/fs is mocked (no real Tauri invoke).
 
 vi.mock("$lib/shared/ipc/fs", () => ({
@@ -34,14 +38,14 @@ describe("loadDirectory return value", () => {
   it("returns the loaded path on success", async () => {
     vi.mocked(fsListDir).mockResolvedValueOnce([entry("a")]);
     const state = createFileListState();
-    expect(await state.loadDirectory("C:\\x")).toBe("C:\\x");
+    expect(await state.loadDirectory("C:\\x")).toEqual({ status: "success", path: "C:\\x" });
     expect(state.currentPath).toBe("C:\\x");
   });
 
   it("returns null and sets error on failure, leaving currentPath untouched", async () => {
     vi.mocked(fsListDir).mockRejectedValueOnce(new Error("boom"));
     const state = createFileListState();
-    expect(await state.loadDirectory("C:\\bad")).toBeNull();
+    expect(await state.loadDirectory("C:\\bad")).toMatchObject({ status: "failed" });
     expect(state.error).toBe("boom");
     expect(state.currentPath).toBe(".");
   });
@@ -56,10 +60,10 @@ describe("outrun guard (SHOULD-68)", () => {
 
     const first = state.loadDirectory("C:\\slow");
     const second = state.loadDirectory("C:\\fast");
-    expect(await second).toBe("C:\\fast");
+    expect(await second).toEqual({ status: "success", path: "C:\\fast" });
 
     slow.resolve([entry("old")]);
-    expect(await first).toBeNull();
+    expect(await first).toEqual({ status: "stale" });
 
     expect(state.currentPath).toBe("C:\\fast");
     expect(state.entries.map((e) => e.path)).toEqual(["new"]);
@@ -88,10 +92,10 @@ describe("openFocused / goParent propagate the result", () => {
     await state.loadDirectory("C:\\");
 
     vi.mocked(fsListDir).mockResolvedValueOnce([]);
-    expect(await state.openFocused()).toBe("C:\\d");
+    expect(await state.openFocused()).toEqual({ status: "success", path: "C:\\d" });
 
     // now empty listing: nothing focused
-    expect(await state.openFocused()).toBeNull();
+    expect(await state.openFocused()).toEqual({ status: "noop" });
   });
 
   it("goParent returns the parent path, and null when already at a root", async () => {
@@ -101,11 +105,11 @@ describe("openFocused / goParent propagate the result", () => {
 
     vi.mocked(fsListDir).mockResolvedValueOnce([]);
     const parent = await state.goParent();
-    expect(parent).not.toBeNull();
-    expect(state.currentPath).toBe(parent);
+    expect(parent.status).toBe("success");
+    expect(state.currentPath).toBe((parent as { path: string }).path);
 
     vi.mocked(fsListDir).mockResolvedValueOnce([]);
     await state.loadDirectory("C:\\");
-    expect(await state.goParent()).toBeNull();
+    expect(await state.goParent()).toEqual({ status: "noop" });
   });
 });

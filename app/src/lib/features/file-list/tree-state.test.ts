@@ -34,6 +34,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // rejection (MUST-95).
 
 import { createTreeState } from "./tree-state.svelte";
+import { pathComparisonKey } from "$lib/shared/path-key";
 
 function accessDenied(message = "denied") {
   return Promise.reject(Object.assign(new Error(message), { code: "access_denied" }));
@@ -69,8 +70,9 @@ function makeState(overrides: { listDir?: ReturnType<typeof vi.fn>; isVisible?: 
       return table[path] ?? [];
     });
   const isVisible = overrides.isVisible ?? (() => true);
-  const state = createTreeState({ listDir, isVisible, onLoadFailureNotice });
-  return { state, listDir, onLoadFailureNotice };
+  const listDrives = vi.fn(async () => ["C:\\", "D:\\"]);
+  const state = createTreeState({ listDir, isVisible, onLoadFailureNotice, listDrives });
+  return { state, listDir, onLoadFailureNotice, listDrives };
 }
 
 afterEach(() => {
@@ -83,7 +85,7 @@ describe("followTo: same-drive move (SPEC-0300-0009 R-40-1/R-44, AC-600/AC-602)"
     await state.followTo("C:\\A\\B");
     await flush();
 
-    expect(state.root).toBe("C:\\");
+    expect(state.anchorKey).toBe(pathComparisonKey("C:\\"));
     expect(state.currentDirPath).toBe("C:\\A\\B");
     expect(state.focusedPath).toBe("C:\\A\\B");
   });
@@ -104,8 +106,13 @@ describe("followTo: same-drive move (SPEC-0300-0009 R-40-1/R-44, AC-600/AC-602)"
   });
 });
 
-describe("followTo: cross-drive move rebuilds the tree (SPEC-0300-0009 R-40-5/R-44, AC-603)", () => {
-  it("AC-603: moving to a different drive changes the root and does not keep the old drive's nodes", async () => {
+// REVISED 2026-10-01 (unit-test-writer, Phase 8; SHOULD-137): the old AC-603
+// "rebuild" suite asserted the previous drive's nodes disappear. SPEC-0300-0009
+// 第9版 R-44/AC-603 + SPEC-0300-0016 R-775: the tree is NOT rebuilt -- the
+// anchor switches; the old drive node stays in the top-level list (collapsed,
+// children discarded). More detail: tree-state-drives.test.ts.
+describe("followTo: cross-drive move switches the anchor (SPEC-0300-0016 R-775, SPEC-0300-0009 第9版 AC-603)", () => {
+  it("AC-603 (revised): anchor changes; the old drive node remains but collapsed with no children", async () => {
     const { state } = makeState();
     await state.followTo("C:\\A\\B");
     await flush();
@@ -113,10 +120,11 @@ describe("followTo: cross-drive move rebuilds the tree (SPEC-0300-0009 R-40-5/R-
     await state.followTo("D:\\X");
     await flush();
 
-    expect(state.root).toBe("D:\\");
+    expect(state.anchorKey).toBe(pathComparisonKey("D:\\"));
     expect(state.currentDirPath).toBe("D:\\X");
     const rows = state.visibleRows();
-    expect(rows.some((r) => r.path.startsWith("C:\\"))).toBe(false);
+    expect(rows.map((r) => r.path)).toEqual(["C:\\", "D:\\", "D:\\X"]);
+    expect(rows.find((r) => r.path === "C:\\")?.expanded).toBe(false);
   });
 });
 
@@ -137,7 +145,7 @@ describe("followTo: latest request wins (SPEC-0300-0009 R-40-7, AC-608; MUST-90(
     await flush();
 
     expect(state.currentDirPath).toBe("D:\\X");
-    expect(state.root).toBe("D:\\");
+    expect(state.anchorKey).toBe(pathComparisonKey("D:\\"));
   });
 });
 
@@ -279,7 +287,7 @@ describe("clear() (SPEC-0300-0009 R-44 non-visible clause; SPEC-0200-0001 §3.6.
     state.clear();
 
     expect(listDir).not.toHaveBeenCalled();
-    expect(state.root).toBeNull();
+    expect(state.drives).toEqual([]);
     expect(state.visibleRows()).toEqual([]);
   });
 });
@@ -345,7 +353,7 @@ describe("followTo: a 3-segment-deep ancestor chain expands every ancestor, not 
       "C:\\Users\\toshi\\git": [],
     };
     const listDir = async (path: string) => table[path] ?? [];
-    const state = createTreeState({ listDir, isVisible: () => true, onLoadFailureNotice: () => {} });
+    const state = createTreeState({ listDir, isVisible: () => true, onLoadFailureNotice: () => {}, listDrives: async () => ["C:\\"] });
     await state.followTo("C:\\Users\\toshi\\git");
     await flush();
 

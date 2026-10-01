@@ -5,6 +5,7 @@
 //
 import { decideOpen } from "$lib/features/viewer/open-decision";
 import { computeTreeFocusReassignment } from "$lib/features/file-list/aria";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 // SPEC-0300-0015 §3.5.3: `case "open"` no longer unconditionally calls
 // `fileList.openFocused()`. It branches on the focused entry's `entryType`
@@ -26,8 +27,8 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   fileList: {
     moveRow(visible: readonly E[], direction: "up" | "down"): void;
     moveColumn(visible: readonly E[], direction: "left" | "right", rowsPerColumn: number): void;
-    openFocused(): Promise<string | null>;
-    goParent(): Promise<string | null>;
+    openFocused(): Promise<NavigateResult>;
+    goParent(): Promise<NavigateResult>;
     toggleFocused(visible: readonly E[]): void;
     selectAll(visible: readonly E[]): void;
     // SPEC-0200-0001 §3.6.6/§3.6.11.4/§3.6.11.5 (MUST-87/94): Phase 7 toggles
@@ -46,7 +47,7 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   };
   filteredEntries: () => readonly E[];
   rowsPerColumn: () => number;
-  afterUserNavigation: (navigation: Promise<string | null>) => Promise<string | null>;
+  afterUserNavigation: (navigation: Promise<NavigateResult>) => Promise<NavigateResult>;
   activateSearch: () => void;
   openHistoryList: (mode: "history" | "jump") => void;
   addJump: (path: string) => void;
@@ -73,6 +74,10 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   tree?: { clear(): void; followTo(path: string): Promise<void>; applyHiddenFilesChanged(showHidden: boolean): void };
   sortMenu?: { toggle(): void };
   focus?: { container(): void };
+  // SPEC-0300-0016 R-710 / SPEC-0200-0001 §3.7.6: the `focus_path` action's
+  // implementation (path-bar-wiring.ts::openPathBar). Optional like tree/
+  // sortMenu/focus: unset => the action does nothing.
+  pathBar?: { open(): void };
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
@@ -178,6 +183,11 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
         return true;
       case "sort_menu":
         deps.sortMenu?.toggle();
+        return true;
+      // R-710/R-710-3: also reachable while the tree has focus (not in
+      // TREE_FOCUS_BLOCKED_ACTIONS).
+      case "focus_path":
+        deps.pathBar?.open();
         return true;
       // MUST-94: the tree's reaction to toggle_tree is composed HERE (not
       // inside list-state.svelte.ts) so file-list/list-state.svelte.ts never

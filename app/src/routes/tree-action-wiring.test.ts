@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 //
 // Module under test (not yet implemented): ./tree-action-wiring.ts
 
+import type { NavigateResult } from "$lib/shared/navigation-result";
 import { createTreeActionHandler } from "./tree-action-wiring";
 
 function ev(shiftKey = false) {
@@ -26,8 +27,8 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   };
   const deps = {
     tree,
-    afterUserNavigation: vi.fn(async (p: Promise<string | null>) => p),
-    loadDirectory: vi.fn(async (path: string) => path),
+    afterUserNavigation: vi.fn(async (p: Promise<NavigateResult>) => p),
+    navigate: vi.fn(async (path: string): Promise<NavigateResult> => ({ status: "success", path })),
     fullyVisibleRows: () => 10,
     currentPath: () => "C:\\A",
     ...overrides,
@@ -83,7 +84,7 @@ describe('createTreeActionHandler: "open" (SPEC-0300-0009 R-43/R-43-1, AC-25/AC-
     tree.selectFocused = vi.fn(() => ({ path: "C:\\A\\B" }));
     const onTreeAction = createTreeActionHandler(deps as never);
     expect(onTreeAction("open", ev())).toBe(true);
-    expect(deps.loadDirectory).toHaveBeenCalledWith("C:\\A\\B");
+    expect(deps.navigate).toHaveBeenCalledWith("C:\\A\\B");
     expect(deps.afterUserNavigation).toHaveBeenCalledTimes(1);
   });
 
@@ -92,7 +93,7 @@ describe('createTreeActionHandler: "open" (SPEC-0300-0009 R-43/R-43-1, AC-25/AC-
     tree.selectFocused = vi.fn(() => ({ path: "C:\\A\\B" }));
     const onTreeAction = createTreeActionHandler(deps as never);
     expect(onTreeAction("open", ev())).toBe(true);
-    expect(deps.loadDirectory).not.toHaveBeenCalled();
+    expect(deps.navigate).not.toHaveBeenCalled();
     expect(deps.afterUserNavigation).not.toHaveBeenCalled();
   });
 
@@ -101,7 +102,7 @@ describe('createTreeActionHandler: "open" (SPEC-0300-0009 R-43/R-43-1, AC-25/AC-
     tree.selectFocused = vi.fn(() => null);
     const onTreeAction = createTreeActionHandler(deps as never);
     expect(onTreeAction("open", ev())).toBe(true);
-    expect(deps.loadDirectory).not.toHaveBeenCalled();
+    expect(deps.navigate).not.toHaveBeenCalled();
   });
 });
 
@@ -110,7 +111,7 @@ describe("createTreeActionHandler: Shift+Enter is a no-op (SPEC-0300-0010 R-15-1
     const { deps, tree } = makeDeps();
     const onTreeAction = createTreeActionHandler(deps as never);
     expect(onTreeAction("open", ev(true))).toBe(true); // consumed (matches AC-615: "nothing happens", not "unhandled")
-    expect(deps.loadDirectory).not.toHaveBeenCalled();
+    expect(deps.navigate).not.toHaveBeenCalled();
     expect(deps.afterUserNavigation).not.toHaveBeenCalled();
     expect(tree.selectFocused).not.toHaveBeenCalled();
   });

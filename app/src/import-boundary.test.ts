@@ -420,3 +420,47 @@ describe("scanner self-check (specifier extraction)", () => {
     expect(specifiersOf(code).sort()).toEqual(["$lib/features/keyboard/key-dispatch", "./a", "./c", "./d", "./e"].sort());
   });
 });
+
+// Phase 8 (SPEC-0300-0016; SPEC-0200-0001 §3.7.4, §3.7.10.2 MUST-98, §3.7.10.9
+// SHOULD-136): features/path-bar is a new vertical slice; it must not import
+// any other feature (NavigateResult / pathComparisonKey / translateErrorCode
+// live in shared/), and must never create Map/Set (nothing to touch()).
+describe("Phase 8 path-bar boundaries (SPEC-0200-0001 §3.7.4, MUST-98, SHOULD-136)", () => {
+  const edges = collectEdges();
+  const exists = (rel: string): boolean => {
+    try {
+      return statSync(join(SRC, rel)).isFile();
+    } catch {
+      return false;
+    }
+  };
+
+  it("§3.7.4/§3.7.10.2: the planned modules exist", () => {
+    const planned = [
+      "lib/features/path-bar/normalize.ts",
+      "lib/features/path-bar/completion.ts",
+      "lib/features/path-bar/path-bar-state.svelte.ts",
+      "lib/features/path-bar/PathBar.svelte",
+      "lib/shared/navigation-result.ts",
+      "lib/shared/error-text.ts",
+      "routes/path-bar-wiring.ts",
+    ];
+    expect(planned.filter((f) => !exists(f))).toEqual([]);
+  });
+
+  it("features/path-bar never imports another feature or routes (type imports included); nobody else imports path-bar", () => {
+    const own = edges.filter((e) => e.fromLayer.kind === "feature" && e.fromLayer.name === "path-bar");
+    expect(own.length).toBeGreaterThan(0);
+    expect(own.filter((e) => e.toLayer.kind === "routes" || (e.toLayer.kind === "feature" && e.toLayer.name !== "path-bar")).map(fmt)).toEqual([]);
+    const into = edges.filter((e) => e.toLayer.kind === "feature" && e.toLayer.name === "path-bar" && !(e.fromLayer.kind === "feature" && e.fromLayer.name === "path-bar") && e.fromLayer.kind !== "routes");
+    expect(into.map(fmt)).toEqual([]);
+  });
+
+  it("SHOULD-136: no `new Map/Set/WeakMap/WeakSet`, SvelteMap or SvelteSet anywhere in features/path-bar production sources (not only top level)", () => {
+    const dir = join(SRC, "lib", "features", "path-bar");
+    const files = walk(dir).filter((f) => !/\.test\.ts$/.test(f));
+    expect(files.length).toBeGreaterThan(0);
+    const bad = files.filter((f) => /\bnew\s+(Map|Set|WeakMap|WeakSet)\b|SvelteMap|SvelteSet/.test(stripComments(readFileSync(f, "utf-8"))));
+    expect(bad.map((f) => relative(SRC, f))).toEqual([]);
+  });
+});

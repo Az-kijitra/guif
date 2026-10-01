@@ -8,6 +8,7 @@
 // never changes focus/selection again (R-407).
 
 import { decideOpen } from "$lib/features/viewer/open-decision";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 interface RowEntry {
   entryType: "file" | "dir";
@@ -19,11 +20,11 @@ export interface RowInteractionDeps<E extends RowEntry = RowEntry> {
     entries: readonly E[];
     focusedIndex: number;
     clickRow(visible: readonly E[], path: string, modifiers: { shiftKey: boolean; ctrlKey: boolean }): void;
-    openFocused(): Promise<string | null>;
+    openFocused(): Promise<NavigateResult>;
   };
   filteredEntries: () => readonly E[];
   isFocusedPathVisible: () => boolean;
-  afterUserNavigation: (navigation: Promise<string | null>) => Promise<string | null>;
+  afterUserNavigation: (navigation: Promise<NavigateResult>) => Promise<NavigateResult>;
   viewer: { openFile(path: string): void | Promise<unknown> };
 }
 

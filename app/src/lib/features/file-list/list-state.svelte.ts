@@ -22,6 +22,9 @@
 // a filtered-out (hidden) entry is never moved into or selected.
 
 import { fsListDir, type FsEntry } from "$lib/shared/ipc/fs";
+import { normalizeFsListDirError, type FsListDirError } from "$lib/shared/ipc/fs-error";
+import { translateErrorCode } from "$lib/shared/error-text";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 import { DEFAULT_SORT_STATE, nextSortState, type SortKey, type SortState } from "./sort";
 import { resetListStateOnDirChange, computeGoParentTarget, reconcileAfterReload } from "./dir-load";
 import {
@@ -71,15 +74,37 @@ export function createFileListState() {
     onUiStateChangeCallback?.();
   }
 
-  // SHOULD-62/68 (SPEC-0200-0001 §3.2.4): returns the loaded path on success,
-  // or null when nothing was navigated (failure, or a stale response that a
-  // newer loadDirectory call outran). Stale responses never touch state.
+  // SPEC-0200-0001 §3.7.10.1/§3.7.10.12 (MUST-96/97/105/106, SHOULD-135):
+  // loadDirectory / navigate / reload share ONE listing core (fetchEntries)
+  // and ONE outrun guard (loadSequence): only the most recently issued
+  // request may touch state. Stale results never touch state.
   let loadSequence = 0;
+  // The sequence of the latest navigation request (not reload) while it is
+  // still unsettled; null otherwise. reload() is deferred only while the
+  // latest request is such a navigation (MUST-106).
+  let pendingNavigateSeq: number | null = null;
+  let pendingReloadAfterNavigate: { focusPath?: string; clearSelection?: boolean } | null = null;
 
-  async function loadDirectory(path: string): Promise<string | null> {
-    const mySequence = ++loadSequence;
-    loading = true;
-    error = null;
+  // R-731: message table (features/file-list may use shared/error-text).
+  function describeFsListDirError(err: FsListDirError): string {
+    switch (err.code) {
+      case "access_denied":
+        return translateErrorCode("permission_denied") ?? err.message;
+      case "not_found":
+        return translateErrorCode("not_found") ?? err.message;
+      case "not_a_directory":
+        return translateErrorCode("not_a_directory") ?? err.message;
+      default:
+        return err.message;
+    }
+  }
+
+  type CoreFetchResult =
+    | { outcome: "stale" }
+    | { outcome: "failed"; code: string; message: string }
+    | { outcome: "success"; entries: FsEntry[] };
+
+  async function fetchEntries(path: string, mySequence: number): Promise<CoreFetchResult> {
     try {
       const result = await fsListDir({
         path,
@@ -87,39 +112,106 @@ export function createFileListState() {
         sortKey: sort.key,
         sortOrder: sort.order,
       });
-      if (mySequence !== loadSequence) return null;
-      entries = result;
+      if (mySequence !== loadSequence) return { outcome: "stale" };
+      return { outcome: "success", entries: result };
+    } catch (e) {
+      if (mySequence !== loadSequence) return { outcome: "stale" };
+      const err = normalizeFsListDirError(e);
+      return { outcome: "failed", code: err.code, message: describeFsListDirError(err) };
+    }
+  }
+
+  async function runNavigation(
+    path: string,
+    mySequence: number,
+    onFailure: (message: string) => void,
+  ): Promise<NavigateResult> {
+    pendingNavigateSeq = mySequence;
+    loading = true;
+    try {
+      const core = await fetchEntries(path, mySequence);
+      if (core.outcome === "stale") return { status: "stale" };
+      if (core.outcome === "failed") {
+        onFailure(core.message);
+        return { status: "failed", code: core.code, message: core.message };
+      }
+      entries = core.entries;
       currentPath = path;
+      error = null; // MUST-96: a successful move clears a stale banner
       const reset = resetListStateOnDirChange();
       selected = reset.selected;
       focusedIndex = reset.focusedIndex;
       anchor = reset.anchor;
-      return path;
-    } catch (e) {
-      if (mySequence === loadSequence) {
-        error = e instanceof Error ? e.message : String(e);
-      }
-      return null;
+      return { status: "success", path };
     } finally {
       if (mySequence === loadSequence) loading = false;
+      if (mySequence === pendingNavigateSeq) pendingNavigateSeq = null;
     }
   }
 
+  // SHOULD-145: re-issue a reload that was deferred while the latest
+  // navigation was pending. After a successful move the captured
+  // focusPath/clearSelection belong to the OLD directory and are dropped.
+  function flushPendingReloadIfLatestSettled(mySequence: number, result: NavigateResult): void {
+    if (mySequence !== pendingNavigateSeq && pendingNavigateSeq !== null) return;
+    if (pendingReloadAfterNavigate === null) return;
+    // Outrun by a non-navigation request (a reload): that request owns the
+    // outcome, nothing to re-issue.
+    if (mySequence !== loadSequence && result.status === "stale") return;
+    const opts = pendingReloadAfterNavigate;
+    pendingReloadAfterNavigate = null;
+    void reload(result.status === "success" ? undefined : opts);
+  }
+
+  // R-726/R-238: a user-initiated move. Never writes the error banner
+  // (failures are reported through the returned value).
+  async function navigate(path: string): Promise<NavigateResult> {
+    const mySequence = ++loadSequence;
+    const result = await runNavigation(path, mySequence, () => {});
+    flushPendingReloadIfLatestSettled(mySequence, result);
+    return result;
+  }
+
+  // Initial-load entry (SPEC-0300-0009 R-77): on a non-stale failure the
+  // permanent error banner is set, since no list exists to keep showing.
+  async function loadDirectory(path: string): Promise<NavigateResult> {
+    const mySequence = ++loadSequence;
+    const result = await runNavigation(path, mySequence, (message) => {
+      error = message;
+    });
+    flushPendingReloadIfLatestSettled(mySequence, result);
+    return result;
+  }
+
+  // MUST-105: loads only when no other request was issued since sinceSeq.
+  function currentSequence(): number {
+    return loadSequence;
+  }
+
+  async function loadIfNoNewerRequest(path: string, sinceSeq: number): Promise<NavigateResult> {
+    if (sinceSeq !== loadSequence) return { status: "stale" };
+    return loadDirectory(path);
+  }
+
   // SPEC-0200-0001 §3.3.6: re-list the CURRENT path without discarding
-  // selection/focus (unlike loadDirectory, R-72). Shares loadSequence's
-  // outrun guard. Returns the path on success, null on failure/stale. Not a
-  // navigation (R-209): callers must not record a visit.
+  // selection/focus (unlike a navigation, R-72). Not a navigation (R-209):
+  // callers must not record a visit. While the latest navigation is still
+  // pending the reload is deferred and re-issued after it settles (MUST-97).
   async function reload(opts?: { focusPath?: string; clearSelection?: boolean }): Promise<string | null> {
+    if (pendingNavigateSeq !== null && pendingNavigateSeq === loadSequence) {
+      pendingReloadAfterNavigate = { ...(pendingReloadAfterNavigate ?? {}), ...opts };
+      return null;
+    }
     const mySequence = ++loadSequence;
     const path = currentPath;
     try {
-      const result = await fsListDir({
-        path,
-        showHidden,
-        sortKey: sort.key,
-        sortOrder: sort.order,
-      });
-      if (mySequence !== loadSequence) return null;
+      const core = await fetchEntries(path, mySequence);
+      if (core.outcome === "stale") return null;
+      if (core.outcome === "failed") {
+        error = core.message;
+        return null;
+      }
+      const result = core.entries;
       const reconciled = reconcileAfterReload({
         prevEntries: entries,
         prevSelected: selected,
@@ -134,11 +226,6 @@ export function createFileListState() {
       if (anchor !== null && !reconciled.selected.has(anchor)) anchor = null;
       error = null;
       return path;
-    } catch (e) {
-      if (mySequence === loadSequence) {
-        error = e instanceof Error ? e.message : String(e);
-      }
-      return null;
     } finally {
       if (mySequence === loadSequence) loading = false;
     }
@@ -251,20 +338,20 @@ export function createFileListState() {
 
   // R-61: opening a directory entry navigates into it; opening a file is a
   // no-op in Phase 1 (viewer integration is a later phase, SPEC-0300-0008).
-  async function openFocused(): Promise<string | null> {
+  async function openFocused(): Promise<NavigateResult> {
     const entry = focusedEntry();
-    if (entry === undefined || entry.entryType !== "dir") return null;
-    return loadDirectory(entry.path);
+    if (entry === undefined || entry.entryType !== "dir") return { status: "noop" };
+    return navigate(entry.path);
   }
 
   // R-63: go_parent works even when the current listing is empty, and is a
   // no-op once already at a filesystem root.
-  async function goParent(): Promise<string | null> {
+  async function goParent(): Promise<NavigateResult> {
     const target = computeGoParentTarget({ currentPath, visibleCount: entries.length });
     if (target.shouldNavigate && target.path !== undefined) {
-      return loadDirectory(target.path);
+      return navigate(target.path);
     }
-    return null;
+    return { status: "noop" };
   }
 
   function layout(containerWidth: number, containerHeight: number): ListLayout {
@@ -398,6 +485,9 @@ export function createFileListState() {
     sortKey: () => sort.key,
     sortOrder: () => sort.order,
     loadDirectory,
+    navigate,
+    currentSequence,
+    loadIfNoNewerRequest,
     reload,
     moveRow,
     moveColumn,

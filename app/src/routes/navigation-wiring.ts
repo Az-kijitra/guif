@@ -5,31 +5,37 @@
 // ones in +page.svelte).
 
 import type { ListKeyIntent } from "$lib/features/navigation-history/list-ops";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 // --- §3.2.4: afterUserNavigation ------------------------------------------
 
-// The single call-through point for every R-208 user-initiated move.
-// Records the visit only when the navigation succeeded (result !== null,
-// R-210/R-211). Reload-type callers (F5 / toggle_hidden / file watching,
-// R-209) must NOT go through this.
+// The single call-through point for every R-208 user-initiated move
+// (SPEC-0200-0001 §3.7.2/§3.7.10.9 SHOULD-132). On a successful result it
+// records the visit (R-210/R-211) and lets the tree follow (R-45's reverse
+// direction); on a failed result it reports the message (R-238/R-730, never
+// the permanent error banner); stale (R-726) and noop results do nothing.
+// The result is returned as-is so callers can make follow-up decisions.
+// Reload-type callers (F5 / toggle_hidden / file watching, R-209) must NOT go
+// through this.
 //
-// SPEC-0200-0001 §3.6.11.4 (f): `followTree` is an OPTIONAL second
-// dependency (like `onTabStop`/`sortMenu` elsewhere in Phase 7) -- this is
-// the single point every user-initiated navigation passes through, so it is
-// also where the tree follows the newly-loaded directory (R-45's reverse
-// direction, list -> tree), keeping `list-state.svelte.ts` and
-// `tree-state.svelte.ts` free of importing each other (MUST-94).
-export function createAfterUserNavigation(
-  recordVisit: (path: string) => void,
-  followTree?: (path: string) => void,
-) {
+// `followTree` is OPTIONAL (SPEC-0200-0001 §3.6.11.4 (f)); the guard for a
+// hidden tree lives inside tree-state itself (MUST-102(d)).
+export interface AfterUserNavigationDeps {
+  recordVisit: (path: string) => void;
+  notifyFailure: (message: string) => void;
+  followTree?: (path: string) => void;
+}
+
+export function createAfterUserNavigation(deps: AfterUserNavigationDeps) {
   return async function afterUserNavigation(
-    navigationPromise: Promise<string | null>,
-  ): Promise<string | null> {
+    navigationPromise: Promise<NavigateResult>,
+  ): Promise<NavigateResult> {
     const result = await navigationPromise;
-    if (result !== null) {
-      recordVisit(result);
-      followTree?.(result);
+    if (result.status === "success") {
+      deps.recordVisit(result.path);
+      deps.followTree?.(result.path);
+    } else if (result.status === "failed") {
+      deps.notifyFailure(result.message);
     }
     return result;
   };
@@ -41,22 +47,33 @@ export interface InitialDirectoryDeps {
   // visitHistory[0] after hydrate, if any.
   lastVisited: string | undefined;
   // Loads a directory through afterUserNavigation (R-208 #6).
-  load: (path: string) => Promise<string | null>;
+  load: (path: string) => Promise<NavigateResult>;
+  // MUST-105: the request generation, and a load that only proceeds when no
+  // newer request has been issued since (closes the homeDir() IPC gap).
+  currentSequence: () => number;
+  loadIfNoNewerRequest: (path: string, sinceSeq: number) => Promise<NavigateResult>;
   homeDir: () => Promise<string>;
 }
 
-// visitHistory[0] -> home directory -> undetermined (null).
-export async function loadInitialDirectory(deps: InitialDirectoryDeps): Promise<string | null> {
-  if (deps.lastVisited !== undefined && deps.lastVisited !== "") {
-    const loaded = await deps.load(deps.lastVisited);
-    if (loaded !== null) return loaded;
-  }
+async function fallbackToHome(deps: InitialDirectoryDeps): Promise<NavigateResult> {
+  const sinceSeq = deps.currentSequence(); // recorded BEFORE the homeDir() IPC wait
+  let home: string;
   try {
-    const home = await deps.homeDir();
-    return await deps.load(home);
+    home = await deps.homeDir();
   } catch {
-    return null;
+    return { status: "failed", code: "other", message: "" };
   }
+  return deps.loadIfNoNewerRequest(home, sinceSeq);
+}
+
+// visitHistory[0] -> home directory -> failed. "stale" (the user already moved
+// on, R-726) never falls back to home (MUST-96).
+export async function loadInitialDirectory(deps: InitialDirectoryDeps): Promise<NavigateResult> {
+  if (deps.lastVisited !== undefined && deps.lastVisited !== "") {
+    const result = await deps.load(deps.lastVisited);
+    if (result.status !== "failed") return result;
+  }
+  return fallbackToHome(deps);
 }
 
 // --- §3.2.9-1: overlay list / search bar exclusion + focus control ---------
@@ -79,7 +96,7 @@ export interface OverlayControllerDeps {
     searchInput(): void;
   };
   nextTick: () => Promise<void>;
-  // afterUserNavigation(fileListState.loadDirectory(path)), fire-and-forget.
+  // afterUserNavigation(fileListState.navigate(path)), fire-and-forget.
   navigate: (path: string) => void;
   // SPEC-0200-0001 §3.6.11.1 (MUST-84, last bullet): OPTIONAL -- opening the
   // search bar or the jump/history list closes an already-open sort menu
@@ -168,7 +185,14 @@ export function createOverlayController(deps: OverlayControllerDeps) {
     }
   }
 
-  return { closeOverlayList, activateSearch, openHistoryList, handleIntent };
+  // R-710-5 (SPEC-0200-0001 §3.7.6): focus_path closes an open search bar the
+  // way R-108 does, but does NOT move focus to the file list (the caller
+  // focuses the path bar right after).
+  function closeSearchForPathBar(): void {
+    deps.search.cancel();
+  }
+
+  return { closeOverlayList, activateSearch, openHistoryList, handleIntent, closeSearchForPathBar };
 }
 
 // --- §3.2.6: window close handling ----------------------------------------

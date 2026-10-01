@@ -22,6 +22,7 @@ import { computeFullyVisibleRows } from "./tree";
 // these new named imports resolve to `undefined` until `./tree.ts` exports
 // them (each new `it()` below fails individually with "is not a function",
 // not a whole-file module-resolution error).
+import * as treeNs from "./tree";
 import { computeTreeRoot, isAncestorPath, pathsEqual, resolveAncestorChain, treePageStep } from "./tree";
 
 // Spec: SPEC-0300-0009 (file list / tree view detail) §5 / §6.4
@@ -270,5 +271,68 @@ describe("computeFullyVisibleRows (SPEC-0300-0009 R-59-2, AC-623)", () => {
   it("a zero/negative row height never divides by zero -- falls back to 1", () => {
     expect(computeFullyVisibleRows(300, 0)).toBe(1);
     expect(computeFullyVisibleRows(300, -5)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase 8 (SPEC-0300-0016 R-770~R-778, AC-730, AC-735, AC-736, AC-755,
+// AC-756; SPEC-0200-0001 §3.7.3, §3.7.10.6(e), §3.7.10.14 SHOULD-137/138/146).
+// computeTreeTopLevel REPLACES computeTreeRoot for tree-state (computeTreeRoot
+// tests above stay while it remains exported; AC-607's old "never a drive
+// listing" assertion is obsolete: the drive list now exists, R-770 -- it only
+// described computeTreeRoot's own shape and stays true for that function).
+// New pure functions are accessed through a namespace import so a missing
+// export fails per-test (RED), not at module load.
+// ---------------------------------------------------------------------
+describe("computeTreeTopLevel (R-771, R-776, R-777, SHOULD-138, MUST-102(e))", () => {
+  const top = (p: string) => (treeNs as unknown as { computeTreeTopLevel: (p: string) => Record<string, unknown> }).computeTreeTopLevel(p);
+
+  it("AC-730: a drive path -> anchor is the drive root, not extra, currentDrive is that drive", () => {
+    expect(top("C:\\A\\B")).toEqual({ anchorRoot: "C:\\", anchorIsExtra: false, currentDrive: "C:\\", normalizedTarget: "C:\\A\\B" });
+  });
+
+  it("AC-756 (ii)/MUST-102(e): \\\\?\\C:\\A -> anchor C:\\, normalizedTarget has NO prefix (no fake 'C:\\C:' nodes)", () => {
+    expect(top("\\\\?\\C:\\A")).toMatchObject({ anchorRoot: "C:\\", anchorIsExtra: false, currentDrive: "C:\\", normalizedTarget: "C:\\A" });
+  });
+
+  it("AC-735/AC-756 (i)/R-776: UNC and \\\\?\\UNC\\ -> extra anchor = share root, currentDrive null", () => {
+    expect(top("\\\\server\\share\\X")).toMatchObject({ anchorRoot: "\\\\server\\share\\", anchorIsExtra: true, currentDrive: null });
+    expect(top("\\\\?\\UNC\\server\\share\\X")).toMatchObject({ anchorRoot: "\\\\server\\share\\", anchorIsExtra: true, currentDrive: null, normalizedTarget: "\\\\server\\share\\X" });
+  });
+
+  it("AC-736/R-777: volume GUID and \\\\.\\ -> single extra node = the path itself, currentDrive null", () => {
+    const g = "\\\\?\\Volume{12345678-1234-1234-1234-123456789abc}\\X";
+    expect(top(g)).toMatchObject({ anchorRoot: g, anchorIsExtra: true, currentDrive: null });
+    expect(top("\\\\.\\C:\\Windows")).toMatchObject({ anchorIsExtra: true, currentDrive: null });
+  });
+});
+
+describe("mergeDriveList (R-770-1, R-778, SHOULD-138)", () => {
+  const merge = (e: string[], c: string | null) => (treeNs as unknown as { mergeDriveList: (e: string[], c: string | null) => string[] }).mergeDriveList(e, c);
+
+  it("keeps an already-present drive list in ascending order", () => {
+    expect(merge(["D:\\", "C:\\"], "C:\\")).toEqual(["C:\\", "D:\\"]);
+  });
+
+  it("AC-755: a current drive missing from the enumeration is inserted at its sorted position", () => {
+    expect(merge(["C:\\", "E:\\"], "D:\\")).toEqual(["C:\\", "D:\\", "E:\\"]);
+  });
+
+  it("currentDrive null (UNC/GUID) adds nothing; case-insensitive no-duplicate", () => {
+    expect(merge(["C:\\"], null)).toEqual(["C:\\"]);
+    expect(merge(["C:\\"], "c:\\")).toEqual(["C:\\"]);
+  });
+});
+
+describe("normalizeForTreeComparison (SHOULD-146)", () => {
+  const norm = (p: string) => (treeNs as unknown as { normalizeForTreeComparison: (p: string) => string }).normalizeForTreeComparison(p);
+
+  it("strips \\\\?\\ and rewrites \\\\?\\UNC\\ to \\\\\\\\", () => {
+    expect(norm("\\\\?\\C:\\A")).toBe("C:\\A");
+    expect(norm("\\\\?\\UNC\\s\\sh\\X")).toBe("\\\\s\\sh\\X");
+  });
+
+  it("leaves ordinary paths untouched", () => {
+    expect(norm("C:\\A")).toBe("C:\\A");
   });
 });

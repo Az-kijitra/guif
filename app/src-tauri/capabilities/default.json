@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "allow-fs-list-dir",
+    "allow-fs-list-drives",
     "allow-config-load-navigation",
     "allow-config-save-navigation",
     "allow-fs-ops-copy",

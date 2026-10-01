@@ -102,6 +102,41 @@ export interface DispatchContext {
   // resolved-but-unimplemented action's handler merely returned `false`).
   // Optional so existing DispatchContext builders/tests are unaffected.
   onTabStop?: (direction: "next" | "prev") => boolean;
+  // R-14-4 (SPEC-0300-0010 第12版, SPEC-0300-0016 R-760~R-765): path bar
+  // editing guard. All three are optional (SHOULD-141) so existing context
+  // builders/tests are unaffected. `isPathBarEditing` is expected to be
+  // already masked by `isOverlayOpen` (computeDispatchOverlayFlags).
+  isPathBarEditing?: boolean;
+  onPathBarKey?: (key: PathBarFixedKey, event: KeydownLikeEvent) => void;
+  onPathBarOverlayAction?: (action: PathBarOverlayAction) => void;
+}
+
+// R-761: the path bar's own fixed keys (keymap-independent, §3.1 (a)).
+export type PathBarFixedKey = "confirm" | "cancel" | "complete" | "exit_to_list" | "open_history";
+export type PathBarOverlayAction = "history" | "history_jump_list" | "jump_add";
+
+// R-764 / MUST-99(c): IME composition (isComposing, or keyCode 229).
+function isImeComposing(event: KeydownLikeEvent): boolean {
+  return event.isComposing === true || event.keyCode === 229;
+}
+
+// R-761/R-761-1: only without Ctrl/Alt/Meta; Shift+Enter / Shift+ArrowDown
+// are not fixed keys (they go to the input's default behavior, R-763).
+export function matchesPathBarFixedKey(event: KeydownLikeEvent): PathBarFixedKey | null {
+  if (isImeComposing(event)) return null;
+  if (event.ctrlKey || event.altKey || event.metaKey) return null;
+  switch (event.key) {
+    case "Enter":
+      return event.shiftKey ? null : "confirm";
+    case "Escape":
+      return "cancel";
+    case "Tab":
+      return event.shiftKey ? "exit_to_list" : "complete";
+    case "ArrowDown":
+      return event.shiftKey ? null : "open_history";
+    default:
+      return null;
+  }
 }
 
 // R-10-1-1/R-14-2-7: Tab is a tab-stop move only when unmodified (Ctrl/Alt/
@@ -146,6 +181,8 @@ function matchesSearchInputAction(event: KeydownLikeEvent): SearchAction | null 
 //      (SPEC-0300-0012 R-120/R-121, SPEC-0200-0001 §3.1.4). Evaluated
 //      immediately after R-14 and before priority 2 below, so R-14's
 //      guarantee (nothing fires while settings is open) is never weakened.
+//   R-14-4. path bar editing -> its own fixed keys / 3 overlay actions only
+//      (SPEC-0300-0016 R-760~R-765); evaluated before the search-active Escape.
 //   3. exit action resolved via the keymap (in case it's rebound)
 //   4. overlay (modal/dropdown/sort menu/context menu) — traps all keys (R-13)
 //   5. menu bar
@@ -176,6 +213,30 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
     // (mirrors the isSettingsOpen `return false` pattern) without
     // preventDefault, so the <input> keeps handling it as ordinary text
     // entry (AC-123).
+    return false;
+  }
+
+  // R-14-4 (MUST-99(a)): path bar editing. Placed BEFORE the isSearchActive
+  // Escape branch below so a path bar entered by click (R-703, search bar
+  // still open) gets its own Escape. Ends the chain either handled or
+  // untouched (R-763: the <input> keeps its default behavior).
+  if (ctx.isPathBarEditing === true && ctx.onPathBarKey !== undefined) {
+    const fixed = matchesPathBarFixedKey(event);
+    if (fixed !== null) {
+      ctx.onPathBarKey(fixed, event);
+      return true;
+    }
+    if (isImeComposing(event)) return false;
+    const pathBarAction = resolveActionForKey(event, ctx.customOverrides);
+    const hasModifier = event.ctrlKey || event.altKey || event.metaKey;
+    if (
+      hasModifier &&
+      ctx.onPathBarOverlayAction !== undefined &&
+      (pathBarAction === "history" || pathBarAction === "history_jump_list" || pathBarAction === "jump_add")
+    ) {
+      ctx.onPathBarOverlayAction(pathBarAction);
+      return true;
+    }
     return false;
   }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { NavigateResult } from "$lib/shared/navigation-result";
 
 // Spec: SPEC-0300-0010 R-17 (each feature implements its own actions; the
 //   keyboard layer only resolves ids), §4.2 (action set), SPEC-0300-0011 R-14
@@ -54,8 +55,8 @@ function makeDeps(over: Record<string, unknown> = {}) {
     fileList: {
       moveRow: vi.fn(),
       moveColumn: vi.fn(),
-      openFocused: vi.fn(async () => "C:\\d\\sub" as string | null),
-      goParent: vi.fn(async () => "C:\\" as string | null),
+      openFocused: vi.fn(async (): Promise<NavigateResult> => ({ status: "success", path: "C:\\d\\sub" })),
+      goParent: vi.fn(async (): Promise<NavigateResult> => ({ status: "success", path: "C:\\" })),
       toggleFocused: vi.fn(),
       selectAll: vi.fn(),
       // Phase 7 (SPEC-0200-0001 §3.6.6, §3.6.11.4/.5 MUST-87/94):
@@ -72,7 +73,7 @@ function makeDeps(over: Record<string, unknown> = {}) {
     },
     filteredEntries: () => filtered,
     rowsPerColumn: () => 10,
-    afterUserNavigation: vi.fn(async (pr: Promise<string | null>) => pr),
+    afterUserNavigation: vi.fn(async (pr: Promise<NavigateResult>) => pr),
     activateSearch: vi.fn(),
     openHistoryList: vi.fn(),
     addJump: vi.fn(),
@@ -380,7 +381,7 @@ describe("MUST-61 end to end: routes context + real controller + handler (AC-02-
     } as never);
     const fileOps = createFileOpsController({ ipc, modal, status, clipboard, context, reload } as never);
     const recordVisit = vi.fn();
-    const afterUserNavigation = createAfterUserNavigation(recordVisit);
+    const afterUserNavigation = createAfterUserNavigation({ recordVisit, notifyFailure: vi.fn() });
     const handler = createListActionHandler({
       fileList: {
         moveRow: vi.fn(),

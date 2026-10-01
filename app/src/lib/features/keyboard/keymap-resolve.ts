@@ -14,6 +14,8 @@ export interface KeydownLikeEvent {
   shiftKey: boolean;
   metaKey: boolean;
   isComposing?: boolean;
+  // SPEC-0200-0001 §3.7.10.3(c): legacy IME marker (229) used by R-764.
+  keyCode?: number;
 }
 
 // SPEC-0200-0001 §3.6.11.3 (MUST-86 (ii)/(iii), 発注者決定 2026-09-27): known

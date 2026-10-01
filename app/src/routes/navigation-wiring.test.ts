@@ -19,57 +19,123 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("afterUserNavigation (R-210/R-211)", () => {
-  it("records the visit and returns the path on success", async () => {
-    const record = vi.fn();
-    const after = createAfterUserNavigation(record);
-    expect(await after(Promise.resolve("C:\\a"))).toBe("C:\\a");
-    expect(record).toHaveBeenCalledWith("C:\\a");
+// REVISED 2026-10-01 (unit-test-writer, Phase 8): createAfterUserNavigation
+// now takes ONE options object and a NavigateResult (SPEC-0200-0001 §3.7.10.9
+// SHOULD-132/133, §3.7.2: notifyFailure = R-238/R-730); loadInitialDirectory
+// takes NavigateResult-returning deps plus currentSequence/
+// loadIfNoNewerRequest (§3.7.10.1 MUST-96, §3.7.10.11 MUST-105). The old
+// positional/`string|null` tests were replaced, not kept (contract changed).
+describe("afterUserNavigation (R-210/R-211, R-238, R-726)", () => {
+  function make() {
+    const recordVisit = vi.fn();
+    const notifyFailure = vi.fn();
+    const followTree = vi.fn();
+    const after = createAfterUserNavigation({ recordVisit, notifyFailure, followTree });
+    return { recordVisit, notifyFailure, followTree, after };
+  }
+
+  it("success: records, follows the tree, returns the result as-is", async () => {
+    const { recordVisit, followTree, notifyFailure, after } = make();
+    const r = { status: "success", path: "C:\a" } as const;
+    expect(await after(Promise.resolve(r))).toEqual(r);
+    expect(recordVisit).toHaveBeenCalledWith("C:\a");
+    expect(followTree).toHaveBeenCalledWith("C:\a");
+    expect(notifyFailure).not.toHaveBeenCalled();
   });
 
-  it("does not record when the navigation failed or was outrun (null)", async () => {
-    const record = vi.fn();
-    const after = createAfterUserNavigation(record);
-    expect(await after(Promise.resolve(null))).toBeNull();
-    expect(record).not.toHaveBeenCalled();
+  it("failed: notifies the message (R-238/R-730), no record/follow", async () => {
+    const { recordVisit, followTree, notifyFailure, after } = make();
+    await after(Promise.resolve({ status: "failed", code: "not_found", message: "nf" }));
+    expect(notifyFailure).toHaveBeenCalledWith("nf");
+    expect(recordVisit).not.toHaveBeenCalled();
+    expect(followTree).not.toHaveBeenCalled();
+  });
+
+  it("stale (R-726) and noop: nothing happens, no notification", async () => {
+    const { recordVisit, followTree, notifyFailure, after } = make();
+    await after(Promise.resolve({ status: "stale" }));
+    await after(Promise.resolve({ status: "noop" }));
+    expect(recordVisit).not.toHaveBeenCalled();
+    expect(followTree).not.toHaveBeenCalled();
+    expect(notifyFailure).not.toHaveBeenCalled();
+  });
+
+  it("followTree is optional", async () => {
+    const recordVisit = vi.fn();
+    const after = createAfterUserNavigation({ recordVisit, notifyFailure: vi.fn() });
+    await expect(after(Promise.resolve({ status: "success", path: "C:\a" }))).resolves.toBeDefined();
+    expect(recordVisit).toHaveBeenCalled();
   });
 });
 
-describe("loadInitialDirectory (§3.2.7)", () => {
-  it("loads visitHistory[0] when it succeeds, without touching the home dir", async () => {
-    const homeDir = vi.fn();
-    const load = vi.fn().mockResolvedValue("C:\\last");
-    expect(await loadInitialDirectory({ lastVisited: "C:\\last", load, homeDir })).toBe("C:\\last");
-    expect(homeDir).not.toHaveBeenCalled();
+describe("loadInitialDirectory (§3.7.2, MUST-96, MUST-105)", () => {
+  type R = { status: "success"; path: string } | { status: "stale" } | { status: "failed"; code: string; message: string };
+  const ok = (path: string): R => ({ status: "success", path });
+  const failed: R = { status: "failed", code: "not_found", message: "x" };
+  function deps(over: Record<string, unknown> = {}) {
+    return {
+      lastVisited: undefined as string | undefined,
+      load: vi.fn(async (p: string): Promise<R> => ok(p)),
+      currentSequence: vi.fn(() => 1),
+      loadIfNoNewerRequest: vi.fn(async (p: string, _s: number): Promise<R> => ok(p)),
+      homeDir: vi.fn(async () => "H"),
+      ...over,
+    };
+  }
+
+  it("lastVisited success: no home lookup", async () => {
+    const d = deps({ lastVisited: "C:\last" });
+    expect(await loadInitialDirectory(d as never)).toEqual(ok("C:\last"));
+    expect(d.homeDir).not.toHaveBeenCalled();
   });
 
-  it("falls back to the home dir when there is no history", async () => {
-    const load = vi.fn().mockResolvedValue("C:\\Users\\me");
-    const result = await loadInitialDirectory({
-      lastVisited: undefined,
-      load,
-      homeDir: async () => "C:\\Users\\me",
+  it("MUST-96: lastVisited stale -> returns stale, NO fallback to home", async () => {
+    const d = deps({ lastVisited: "C:\last", load: vi.fn(async () => ({ status: "stale" })) });
+    expect(await loadInitialDirectory(d as never)).toEqual({ status: "stale" });
+    expect(d.homeDir).not.toHaveBeenCalled();
+    expect(d.loadIfNoNewerRequest).not.toHaveBeenCalled();
+  });
+
+  it("lastVisited failed -> home via loadIfNoNewerRequest with the sequence recorded BEFORE homeDir()", async () => {
+    let seq = 5;
+    const d = deps({
+      lastVisited: "C:\gone",
+      load: vi.fn(async () => failed),
+      currentSequence: vi.fn(() => seq),
+      homeDir: vi.fn(async () => {
+        seq = 6; // user navigates while waiting
+        return "H";
+      }),
     });
-    expect(result).toBe("C:\\Users\\me");
-    expect(load).toHaveBeenCalledWith("C:\\Users\\me");
+    await loadInitialDirectory(d as never);
+    expect(d.loadIfNoNewerRequest).toHaveBeenCalledWith("H", 5);
   });
 
-  it("falls back to the home dir when the last-visited load fails", async () => {
-    const load = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce("H");
-    const result = await loadInitialDirectory({ lastVisited: "C:\\gone", load, homeDir: async () => "H" });
-    expect(result).toBe("H");
+  it("MUST-105: no lastVisited also goes through loadIfNoNewerRequest (not plain load)", async () => {
+    const d = deps();
+    expect(await loadInitialDirectory(d as never)).toEqual(ok("H"));
+    expect(d.load).not.toHaveBeenCalled();
+    expect(d.loadIfNoNewerRequest).toHaveBeenCalledWith("H", 1);
   });
 
-  it("stays undetermined (null) when the home dir cannot be resolved", async () => {
-    const load = vi.fn().mockResolvedValue(null);
-    const result = await loadInitialDirectory({
-      lastVisited: undefined,
-      load,
-      homeDir: async () => {
-        throw new Error("no tauri");
-      },
-    });
-    expect(result).toBeNull();
+  it("MUST-105: if the home load comes back stale, that is returned as-is", async () => {
+    const d = deps({ loadIfNoNewerRequest: vi.fn(async () => ({ status: "stale" })) });
+    expect(await loadInitialDirectory(d as never)).toEqual({ status: "stale" });
+  });
+
+  it("homeDir failure -> failed result (no throw)", async () => {
+    const d = deps({ homeDir: vi.fn(async () => { throw new Error("no tauri"); }) });
+    expect((await loadInitialDirectory(d as never)).status).toBe("failed");
+  });
+});
+
+describe("closeSearchForPathBar (R-710-5, SPEC-0200-0001 §3.7.6)", () => {
+  it("cancels the search (R-108 reset) WITHOUT moving focus to the file list", () => {
+    const { search, focus, controller } = makeOverlay([], []);
+    search.open();
+    (controller as unknown as { closeSearchForPathBar: () => void }).closeSearchForPathBar();
+    expect(search.active).toBe(false);
+    expect(focus.container).not.toHaveBeenCalled();
   });
 });
 

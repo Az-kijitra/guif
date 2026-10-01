@@ -50,6 +50,7 @@ describe("computeDispatchOverlayFlags (§3.3.2)", () => {
       isOverlayOpen: false,
       isSearchActive: false,
       isSearchInputFocused: false,
+      isPathBarEditing: false, // Phase 8 (MUST-99(b)): new always-present flag
     });
   });
 
@@ -416,6 +417,7 @@ describe("computeDispatchOverlayFlags: sortMenuOpen masking (SPEC-0200-0001 §3.
       isOverlayOpen: false,
       isSearchActive: false,
       isSearchInputFocused: false,
+      isPathBarEditing: false, // Phase 8 (MUST-99(b)): new always-present flag
     });
   });
 });
@@ -439,5 +441,34 @@ describe("syncSortMenuWithModal (SPEC-0200-0001 §3.6.11.1 MUST-84 (c))", () => 
     const sortMenu = { isOpen: false, close: vi.fn() };
     syncSortMenuWithModal({ modalOpen: true, sortMenu });
     expect(sortMenu.close).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase 8 (SPEC-0300-0016 R-14-4-1/R-760-2; SPEC-0200-0001 §3.7.10.3(b),
+// §3.7.10.13 MUST-107): `pathBarEditing` is OPTIONAL (default false) and
+// `isPathBarEditing` is masked by the WHOLE isOverlayOpen set -- modal,
+// history/jump list AND sort menu (MUST-107: the history list was missing).
+// ---------------------------------------------------------------------
+describe("computeDispatchOverlayFlags: isPathBarEditing (MUST-99(b), MUST-107)", () => {
+  const base = { modalOpen: false, historyOpen: false, searchActive: false, searchInputFocused: false };
+
+  it("passes through when no overlay is open; defaults to false when omitted", () => {
+    expect(computeDispatchOverlayFlags({ ...base, pathBarEditing: true }).isPathBarEditing).toBe(true);
+    expect(computeDispatchOverlayFlags(base).isPathBarEditing).toBe(false);
+  });
+
+  it.each([
+    ["modalOpen", { modalOpen: true }],
+    ["historyOpen (MUST-107)", { historyOpen: true }],
+    ["sortMenuOpen", { sortMenuOpen: true }],
+  ])("is masked while %s", (_n, over) => {
+    expect(computeDispatchOverlayFlags({ ...base, ...over, pathBarEditing: true }).isPathBarEditing).toBe(false);
+  });
+
+  it("existing flags are unchanged (historyOpen still does not mask the search flags)", () => {
+    const f = computeDispatchOverlayFlags({ ...base, historyOpen: true, searchActive: true, pathBarEditing: true });
+    expect(f.isOverlayOpen).toBe(true);
+    expect(f.isSearchActive).toBe(true);
   });
 });

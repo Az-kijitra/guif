@@ -35,6 +35,11 @@ const VIEWER_CAPABILITY_JSON: &str = include_str!("../capabilities/viewer.json")
 /// updated, this list additionally guards against commands being dropped).
 const REQUIRED_COMMANDS: &[&str] = &[
     "fs_list_dir",
+    // Phase 8 (SPEC-0300-0016 R-780/R-784; SPEC-0200-0001 §3.7.1): drive
+    // enumeration for the tree's top level -- a NEW command in `fs/`
+    // (§3.7.9: "新規コマンドを追加せず既存fs/モジュールに" means a new
+    // MODULE is not created, not that the command itself is unchanged).
+    "fs_list_drives",
     "config_load_navigation",
     "config_save_navigation",
     // Phase 7 (SPEC-0300-0009/0010; SPEC-0200-0001 §3.6.1/§3.6.11.11
@@ -273,6 +278,37 @@ fn must64_every_tauri_command_defined_in_archive_commands_is_registered() {
     assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
 }
 
+// Phase 8 (SPEC-0200-0001 §3.7.10.9 SHOULD-139(b)): the same "defined but
+// never registered" guard for `fs/commands.rs` -- `fs_ops`/`archive`/
+// `config`/`viewer` already had this; `fs` was the one module missing it.
+// Also pins the count at 2 (`fs_list_dir` + the new `fs_list_drives`, R-784).
+#[test]
+fn must64_every_tauri_command_defined_in_fs_commands_is_registered() {
+    let source = include_str!("fs/commands.rs");
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let mut parts = strip_line_comments(production_part).split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String =
+                after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("fs_list") {
+                defined.insert(name);
+            }
+        }
+    }
+    assert_eq!(
+        defined.len(),
+        2,
+        "fs/commands.rs must define exactly fs_list_dir and fs_list_drives (R-784), found {defined:?}"
+    );
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
 // ---------------------------------------------------------------------
 // Phase 6 (SPEC-0300-0015 R-432, R-432-3, R-432-4, R-405-1; SPEC-0200-0001
 // §3.5.2, §3.5.12.5 MUST-77, SHOULD-99, SHOULD-111): two-capability ACL.
@@ -302,15 +338,30 @@ fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
 }
 
 // §3.5.12.5(a)/SHOULD-99, extended by Phase 7 (SPEC-0200-0001 §3.6.1,
-// §3.6.11.11 SHOULD-115): `capabilities/default.json`'s app-command
-// permissions become the existing 16 (Phase 1/2/5) PLUS the 3 main-only
-// viewer commands (`viewer_classify_path`/`viewer_open`/
-// `viewer_os_open_path`) PLUS the 3 Phase 7 config commands
-// (`config_load_keymap`/`ui_state_load`/`ui_state_save`) -- 22 total.
+// §3.6.11.11 SHOULD-115) and by Phase 8 (SPEC-0300-0016 R-784;
+// SPEC-0200-0001 §3.7.1, §3.7.10.9 SHOULD-139(a)):
+// `capabilities/default.json`'s app-command permissions become the existing
+// 16 (Phase 1/2/5) PLUS the 3 main-only viewer commands
+// (`viewer_classify_path`/`viewer_open`/`viewer_os_open_path`) PLUS the 3
+// Phase 7 config commands (`config_load_keymap`/`ui_state_load`/
+// `ui_state_save`) PLUS the 1 Phase 8 drive-enumeration command
+// (`fs_list_drives`) -- 23 total.
+//
+// Test revision (unit-test-writer, 2026-09-30, SHOULD-139(a)): the design
+// proposal's claim that "the existing generic check catches this
+// automatically, no test update needed" (§3.7.1/§3.7.10.9) was corrected by
+// architecture-guardian's 16th audit -- THIS exact-match test enumerates
+// every expected permission by name and therefore DOES need the new entry
+// added explicitly, or it fails the moment `allow-fs-list-drives` appears in
+// `capabilities/default.json` (an extra, unlisted permission). Adding it
+// here now makes the test RED until code-generator adds the permission
+// (rather than the test staying green today and breaking unexpectedly
+// later).
 #[test]
-fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config() {
+fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives() {
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
+        "allow-fs-list-drives",
         "allow-config-load-navigation",
         "allow-config-save-navigation",
         "allow-fs-ops-copy",

@@ -37,6 +37,8 @@ impl From<io::Error> for FsListDirErrorDto {
         let code = match e.kind() {
             io::ErrorKind::PermissionDenied => "access_denied",
             io::ErrorKind::NotFound => "not_found",
+            // SPEC-0300-0016 R-731-1: ERROR_DIRECTORY (a file given to read_dir).
+            io::ErrorKind::NotADirectory => "not_a_directory",
             _ => "other",
         };
         Self { code: code.to_string(), message: e.to_string() }
@@ -99,6 +101,16 @@ pub fn fs_list_dir(
         .map_err(FsListDirErrorDto::from)
 }
 
+/// SPEC-0300-0016 R-780~R-784: the logical drive roots (`C:`, `D:`, ...) in
+/// ascending order. A separate command from `fs_list_dir` (R-784: the drive
+/// list is not a directory listing). Returns immediately and never touches a
+/// drive's contents (R-783); `async` keeps it off the main thread like the
+/// other `fs` commands. The `unsafe` OS call is isolated in `win_drives`.
+#[tauri::command(async)]
+pub fn fs_list_drives() -> Vec<String> {
+    super::win_drives::list_logical_drives()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +139,22 @@ mod tests {
         assert_eq!(dto.message, "weird");
     }
 
+    // SPEC-0300-0016 R-731-1 (承認時に確定・ISS-0171 (c)の代案): a NEW
+    // `not_a_directory` code, distinct from the generic "other" fallback, so
+    // the frontend (SPEC-0200-0001 §3.7.10.2(c)) can show the dedicated
+    // 「フォルダーではありません」文言 instead of the raw OS message.
+    // architecture-guardian confirmed on real hardware (Windows 11, NTFS,
+    // §3.7.10.10) that `ERROR_DIRECTORY` maps to `io::ErrorKind::NotADirectory`
+    // for `std::fs::read_dir` on a file, for the plain/trailing-`\`/`\\?\`/
+    // `\\localhost\C$\` path forms. RED until the `match` in `From<io::Error>`
+    // above adds this arm (currently falls through to `_ => "other"`).
+    #[test]
+    fn not_a_directory_kind_maps_to_not_a_directory_not_other() {
+        let e = io::Error::new(io::ErrorKind::NotADirectory, "not a directory");
+        let dto: FsListDirErrorDto = e.into();
+        assert_eq!(dto.code, "not_a_directory");
+    }
+
     // R-40-3/SHOULD-131: Windows network-path errors (e.g. ERROR_BAD_NETPATH)
     // are pinned here as a canary so a std/Rust edition change to this
     // mapping is caught rather than silently drifting. On the toolchain this
@@ -146,6 +174,44 @@ mod tests {
             "R-40-3 only requires access_denied/not_found to stay silent and everything else to notify; got {:?}",
             dto.code
         );
+    }
+
+    // AC-751 (SPEC-0300-0016 R-731-1): the REAL `fs_list_dir` command,
+    // called end-to-end (not just the DTO conversion above) against a file
+    // on a real temp filesystem, must surface `not_a_directory` -- never
+    // `other`. `#[cfg(windows)]` per §3.7.10.10 (only confirmed on Windows;
+    // non-Windows/non-NTFS `ErrorKind` mapping is an explicit residual
+    // per the spec's own §13 remaining-confirmation list).
+    #[test]
+    #[cfg(windows)]
+    fn ac751_fs_list_dir_on_a_file_returns_not_a_directory_not_other() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file_path = dir.path().join("x.txt");
+        std::fs::write(&file_path, b"hello").expect("write test file");
+
+        let err = fs_list_dir(
+            file_path.to_string_lossy().into_owned(),
+            false,
+            "name".to_string(),
+            "asc".to_string(),
+        )
+        .expect_err("fs_list_dir on a FILE must fail (R-725)");
+
+        assert_eq!(err.code, "not_a_directory", "got {err:?} (must not be \"other\")");
+    }
+
+    // AC-751 companion: a path that does not exist at all is still
+    // `not_found` (distinct from `not_a_directory`), confirming the new code
+    // does not accidentally swallow the existing not-found case.
+    #[test]
+    fn ac751_fs_list_dir_on_a_missing_path_still_returns_not_found() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("does-not-exist-9271");
+
+        let err = fs_list_dir(missing.to_string_lossy().into_owned(), false, "name".to_string(), "asc".to_string())
+            .expect_err("a missing path must fail");
+
+        assert_eq!(err.code, "not_found");
     }
 
     // camelCase DTO on the wire (shared/ipc/fs.ts's FsListDirError).

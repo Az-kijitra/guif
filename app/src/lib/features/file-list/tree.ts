@@ -206,3 +206,77 @@ export function computeFullyVisibleRows(containerHeight: number, rowHeight: numb
   if (rowHeight <= 0) return 1;
   return Math.max(1, Math.floor(containerHeight / rowHeight));
 }
+
+// ---------------------------------------------------------------------
+// Phase 8 additions (SPEC-0300-0016 R-770~R-778; SPEC-0200-0001 §3.7.3,
+// §3.7.10.6(e), §3.7.10.14 SHOULD-137/138/146).
+// ---------------------------------------------------------------------
+
+// R-40-0: strips the `\\?\` extended-length prefix (`\\?\UNC\s\sh` becomes
+// `\\s\sh`). Used by computeTreeTopLevel and by callers that must compare a
+// tree node's (prefix-less) path with a prefixed current path (SHOULD-146).
+export function normalizeForTreeComparison(path: string): string {
+  if (path.startsWith("\\\\?\\UNC\\")) {
+    return "\\\\" + path.slice("\\\\?\\UNC\\".length);
+  }
+  if (path.startsWith("\\\\?\\")) {
+    return path.slice("\\\\?\\".length);
+  }
+  return path;
+}
+
+export interface TreeTopLevelResult {
+  // R-771's origin: the current drive's node, or the R-776/R-777 extra node.
+  anchorRoot: string;
+  // true when the anchor is a UNC share node (R-776) or a single node (R-777).
+  anchorIsExtra: boolean;
+  // SHOULD-138: the drive-letter root of the current path; null for UNC,
+  // volume-GUID and `\\.\` paths (no drive node is highlighted/added).
+  currentDrive: string | null;
+  // The path with the `\\?\` prefix removed, for ancestor-chain expansion
+  // (MUST-102(e): never feed a prefixed path to resolveAncestorChain).
+  normalizedTarget: string;
+}
+
+export function computeTreeTopLevel(currentPath: string): TreeTopLevelResult {
+  const normalized = normalizeForTreeComparison(currentPath);
+
+  // R-777/R-40-0-1: volume GUID or device namespace -> one single node.
+  if (/^Volume\{[0-9a-fA-F-]+\}/.test(normalized) || normalized.startsWith("\\\\.\\")) {
+    return { anchorRoot: currentPath, anchorIsExtra: true, currentDrive: null, normalizedTarget: currentPath };
+  }
+
+  const uncMatch = UNC_ROOT.exec(normalized);
+  if (uncMatch) {
+    return {
+      anchorRoot: `\\\\${uncMatch[1]}\\${uncMatch[2]}\\`,
+      anchorIsExtra: true,
+      currentDrive: null,
+      normalizedTarget: normalized,
+    };
+  }
+
+  if (DRIVE_ROOT.test(normalized)) {
+    const drive = `${normalized.slice(0, 2)}\\`;
+    return { anchorRoot: drive, anchorIsExtra: false, currentDrive: drive, normalizedTarget: normalized };
+  }
+
+  // Anything else (e.g. a not-yet-resolved relative path): a single node.
+  return { anchorRoot: currentPath, anchorIsExtra: true, currentDrive: null, normalizedTarget: currentPath };
+}
+
+// R-770-1/R-778: ascending, de-duplicated (case-insensitive) drive list that
+// always contains `currentDrive` when it is non-null.
+export function mergeDriveList(enumerated: readonly string[], currentDrive: string | null): string[] {
+  const byKey = new Map<string, string>();
+  for (const drive of enumerated) {
+    const key = drive.toUpperCase();
+    if (!byKey.has(key)) byKey.set(key, drive);
+  }
+  if (currentDrive !== null && !byKey.has(currentDrive.toUpperCase())) {
+    byKey.set(currentDrive.toUpperCase(), currentDrive);
+  }
+  return [...byKey.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, drive]) => drive);
+}
