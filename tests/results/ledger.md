@@ -12,6 +12,16 @@
 | 2026-09-27 | 未採番(SPEC-0300-0015 ReflexViewer統合) | PASS(フロント・バック双方) | 以下「## 2026-09-27 Phase 6 ReflexViewer」セクション参照 | unit-test-writer(Rust/TS) → code-generator → オーケストレーター(設計MUST未達3点を差し戻し) → code-reviewer(差し戻し: DPI単位混在・listen/take順) → code-generator(修正) → オーケストレーター(複数モニタ座標を物理px統一へ修正、ヘッドレスブラウザで動作確認) |
 | 2026-09-29 | 未採番(SPEC-0300-0009 第8版 / SPEC-0300-0010 第11版、Phase 7) | PASS(フロント・バック双方) | 以下「## 2026-09-29 Phase 7」セクション参照 | unit-test-writer → code-generator → オーケストレーター(400行超過・ページ移動量を差し戻し) → code-reviewer(差し戻し: ソートメニュー再押下がキーマップ非経由、ツリーのページ移動量) → オーケストレーター(実Tauriで不具合2件を検出) → code-generator(修正) → オーケストレーター(ツリー再描画漏れを修正し実Tauriで確認) |
 | 2026-10-01 | 未採番(SPEC-0300-0016 第2版 ほか連動新版、Phase 8) | PASS(フロント・バック双方) | 以下「## 2026-10-01 Phase 8」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(実Tauriで確認) |
+| 2026-10-03 | 未採番(SPEC-0300-0017 第3版・SPEC-0400-0001 第2版ほか、Phase 9) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 9」セクション参照 | unit-test-writer → code-generator(E2E 作成・実行含む) → code-reviewer(PR作成可、SHOULD 4件) → code-generator(E2E 安全策 S-1/S-2/S-4 修正) → オーケストレーター(実アプリで画面確認) |
+
+## 2026-10-03 Phase 9 見た目(SPEC-0300-0017 第3版、SPEC-0400-0001 第2版、0016第3版/0009第10・11版/0012第5版/0015第3版)テスト実行結果
+
+- `cargo test`: 727件全成功。`npx vitest run`: 93ファイル/1805件全成功。`npx tsc --noEmit`・`npx svelte-check`エラー0(警告6、既存a11yパターン)、`npx vite build`・`cargo build`・`cargo check --release`成功。`+page.svelte` 396行。
+- **E2E(新設、`app/e2e/`、`npm run e2e`)**: 49 PASS / 0 FAIL / 5 SKIP。SKIP は目視指定の4件(タイトルバー、Ctrl+ホイールのズーム抑止、最小サイズ未満へのドラッグ、旧ビルドの設定からの復元)と単体テストで担保の1件(AC-931 コントラスト)。
+- E2E の安全策: テスト用の一時設定フォルダを `REFLEXFILES_CONFIG_DIR`(debug ビルドのみ有効)で渡し、起動時の `[config] override dir:` 行を確認してから入力。終了後に実データ(`%APPDATA%\dev.reflexfiles.successor\`)の更新日時が不変であることを検査(R-08 PASS)。ファイル変更・外部起動の9コマンドは拒否スタブ、スタブが効いていることを起動時に確認、テスト用フォルダ外ではキー送信を拒否、パスバーにフォーカスが入らなければ中止。不正な `REFLEXFILES_CONFIG_DIR`(空・空白・相対)では起動が止まり実データに触れないことを確認。
+- 実アプリでの目視確認(オーケストレーター、通常起動): PATH ラベル付きパスバー、ツリー(C: / F: の表示名、▼▶、選択行の薄青)、一覧(等幅・区切り線・サイズ右寄せ・28px 行)、ステータスバー(フォーカス・並び替え・選択・隠し)がオリジナル(main)の画面構成に近いことを確認。
+- code-reviewer SHOULD(対応済み): E2E の初回移動でパスバーのフォーカス確認、IPC スタブが効いているかの自己検査、`--attach` の接続先確認。S-3(AC-935 と SPEC-0300-0012 AC-113-1 の文言の食い違い)は ISS-0184 に起票。
+- 未実施: `tests/manual/phase9-visual-checklist.md` の目視確認。
 
 ## 2026-10-01 Phase 8 パスバー+ドライブ切替(SPEC-0300-0016 第2版、0009第9版/0010第12版/0012第4版/0013第5版)テスト実行結果
 

@@ -71,22 +71,24 @@
   .nav-history-list {
     max-height: 240px;
     overflow-y: auto;
-    border: 1px solid #ccc;
-    background: #fff;
+    box-sizing: border-box;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
   }
   .nav-history-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.1rem 0.4rem;
+    gap: 6px;
+    padding: 4px 8px;
     cursor: pointer;
   }
   .nav-history-row.selected {
-    background: #dbe9ff;
+    background: var(--ui-hover);
   }
   .path {
     flex: 1;
-    font-family: monospace;
+    min-width: 0;
+    font: 12px var(--ui-font-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

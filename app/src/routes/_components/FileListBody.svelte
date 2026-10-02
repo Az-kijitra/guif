@@ -5,6 +5,7 @@
   import type { FsEntry } from "$lib/shared/ipc/fs";
   import type { TreeRowView } from "$lib/features/file-list/tree-state.svelte";
   import type { SortKey, SortOrder } from "$lib/features/file-list/sort";
+  import type { ListGeometry } from "$lib/features/file-list/list-layout";
   import TreePanel from "$lib/features/file-list/TreePanel.svelte";
   import FileListPanel from "./FileListPanel.svelte";
 
@@ -28,7 +29,7 @@
     showTime,
     ariaMultiselectable,
     ariaActivedescendant,
-    layoutRows,
+    geometry,
     containerEl = $bindable(),
     containerWidth = $bindable(0),
     containerHeight = $bindable(0),
@@ -59,7 +60,7 @@
     showTime: boolean;
     ariaMultiselectable: true;
     ariaActivedescendant?: string;
-    layoutRows: number;
+    geometry: ListGeometry;
     containerEl?: HTMLDivElement;
     containerWidth?: number;
     containerHeight?: number;
@@ -101,7 +102,7 @@
     {showTime}
     {ariaMultiselectable}
     {ariaActivedescendant}
-    rows={layoutRows}
+    {geometry}
     {onRowClick}
     {onRowDblClick}
     {sortMenuOpen}
@@ -113,9 +114,12 @@
 </div>
 
 <style>
+  /* R-902: fills the height left by the bars; tree (220px) + list side by side, gap 3px. */
   .body {
     display: flex;
-    gap: 0.5rem;
-    align-items: flex-start;
+    flex: 1;
+    gap: 3px;
+    min-height: 0;
+    align-items: stretch;
   }
 </style>

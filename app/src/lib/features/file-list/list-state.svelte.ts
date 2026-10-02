@@ -43,7 +43,7 @@ import {
   type RowDirection,
   type ColumnDirection,
 } from "./navigation";
-import { computeListLayout, type ListLayout } from "./list-layout";
+import { computeListGeometry, type ListGeometry } from "./list-layout";
 import { INITIAL_UI_STATE } from "./aria";
 import { SORT_KEYS } from "./sort";
 import { uiStatePersistence } from "./ui-state-persistence";
@@ -354,15 +354,17 @@ export function createFileListState() {
     return { status: "noop" };
   }
 
-  function layout(containerWidth: number, containerHeight: number): ListLayout {
-    return computeListLayout({
-      containerWidth,
-      containerHeight,
-      rowHeight: undefined,
-      entryCount: entries.length,
-      showSize,
-      showTime,
-    });
+  // SPEC-0300-0017 R-956 / SPEC-0200-0001 §3.8.6: the full geometry from the file list
+  // FRAME's size. `entryCount` defaults to all entries; routes passes the search-filtered
+  // count (file-list never imports search, §3.1.2 path 2). `rowHeight` comes from
+  // `--list-row-height` (undefined => the 32px fallback).
+  function layout(
+    frameWidth: number,
+    frameHeight: number,
+    entryCount: number = entries.length,
+    rowHeight: number | undefined = undefined,
+  ): ListGeometry {
+    return computeListGeometry({ frameWidth, frameHeight, rowHeight, entryCount, showSize, showTime });
   }
 
   // SPEC-0200-0001 §3.6.6: toggles flip a flag and request a save; the

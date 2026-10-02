@@ -1,20 +1,17 @@
 <script lang="ts">
-  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2): composition only -- it
-  // injects state/controllers into routes/_components/; decisions live in
-  // features/ and routes/*-wiring.ts (`filteredEntries`, SPEC-0300-0012
-  // R-115~R-118, is the sole feature-to-feature bridge, §3.1.2 path 2).
+  // routes/+page.svelte (SPEC-0200-0001 §4.1 path 2): composition only; decisions live in
+  // features/ and routes/*-wiring.ts (`filteredEntries` is the sole feature bridge, §3.1.2).
+  import "../app.css"; // R-913: the main window only (never +layout.svelte / the viewer).
   import { onMount, onDestroy, tick, untrack } from "svelte";
   import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
   import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
   import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
-  import { createTreeState } from "$lib/features/file-list/tree-state.svelte";
-  import { getTreeChildQuery } from "$lib/features/file-list/tree";
+  import { readRowHeightPx } from "$lib/features/file-list/text-measure";
   import { createSortMenuState } from "$lib/features/file-list/sort-menu-state.svelte";
   import { uiStatePersistence } from "$lib/features/file-list/ui-state-persistence";
   import { computeFileListAria } from "$lib/features/file-list/aria";
   import { resolveFocusIndexForVisibleSet } from "$lib/features/file-list/navigation";
-  import { fsListDir, fsListDrives } from "$lib/shared/ipc/fs";
   import PathBar from "$lib/features/path-bar/PathBar.svelte";
   import { searchState } from "$lib/features/search/search-state.svelte";
   import { computeFilteredEntries } from "$lib/features/search/matching";
@@ -41,6 +38,8 @@
   import { runStartupHydrate } from "./startup-wiring";
   import { createMainViewerOpenController } from "./viewer-open-wiring";
   import { createRowInteractionHandlers } from "./row-interaction-wiring";
+  import { createMainTreeState } from "./tree-wiring";
+  import { createStatusBarModel } from "./status-bar-wiring.svelte";
 
   let ready = $state(false); // SHOULD-120: gate the body until R-77-3-1 applies.
 
@@ -55,12 +54,6 @@
   let historyListEl: HTMLDivElement | undefined = $state();
   let dialogEl: HTMLDivElement | undefined = $state();
 
-  let layout = $derived(fileListState.layout(containerWidth || 800, containerHeight || 400));
-  // R-59-1: page_up/page_down move by the SAME "R-16-1 rows" as rowsPerColumn.
-  $effect(() => {
-    fileListState.setPageRows(layout.rows);
-  });
-
   let filterResult = $derived( // R-116: recomputed via Svelte reactivity.
     computeFilteredEntries(fileListState.entries, {
       active: searchState.active,
@@ -70,17 +63,18 @@
   );
   let filteredEntries = $derived(filterResult.filteredEntries);
 
-  // R-41: dir-only, name/asc, independent of the list's own sort.
-  async function listDirForTree(path: string, showHidden: boolean) {
-    const query = getTreeChildQuery(path);
-    const entries = await fsListDir({ path: query.path, showHidden, sortKey: query.sortKey, sortOrder: query.sortOrder });
-    return entries.filter((e) => e.entryType === "dir").map((e) => ({ path: e.path, name: e.name }));
-  }
-  const treeState = createTreeState({
-    listDir: listDirForTree,
+  // R-956: geometry from the list FRAME's size and the displayed (filtered) count.
+  let layout = $derived(
+    fileListState.layout(containerWidth || 800, containerHeight || 400, filteredEntries.length, readRowHeightPx()),
+  );
+  // R-59-1: page_up/page_down move by the SAME "R-16-1 rows" as rowsPerColumn.
+  $effect(() => {
+    fileListState.setPageRows(layout.rows);
+  });
+
+  const { treeState, listDirForTree } = createMainTreeState({
     isVisible: () => fileListState.showTree(),
-    onLoadFailureNotice: (message) => statusMessage.show(message),
-    listDrives: () => fsListDrives(), // R-782: async, DI-able
+    notify: (message) => statusMessage.show(message),
   });
   const sortMenuState = createSortMenuState();
 
@@ -141,6 +135,17 @@
     state: sortMenuState,
     applySort: (key) => fileListState.applySort(key),
     closeSortMenu: closeSortMenuNow,
+  });
+
+  // R-971/R-972: permanent status items (focus area tracked from the DOM, SHOULD-149).
+  const status = createStatusBarModel({
+    fileList: fileListState,
+    search: searchState,
+    history: navigationHistoryState,
+    sortMenu: sortMenuState,
+    modal: modalHost,
+    pathEditing: () => pathBar.state.editing,
+    filteredEntries: () => filteredEntries,
   });
 
   const isTreeFocused = () => treeState.hasFocus;
@@ -239,6 +244,7 @@
 
   onMount(() => {
     void bootstrap();
+    return status.attach(document, window);
   });
 
   // §3.6.2/§3.6.11.11: startup notices are concatenated (config -> ui-state ->
@@ -303,11 +309,11 @@
   });
 </script>
 
-<!-- §3.3.2: the background is inert while a modal is shown; <ModalHost> is
-     rendered outside <main>. R-10-11/AC-631: path bar -> body (tree + list)
-     -> status bar (§3.6.11.4(e), no <h1>, no menu bar per SPEC-0100-0005 R-08). -->
-{#if ready}
-  <main inert={modalHost.isOpen}>
+<!-- §3.3.2: inert while a modal shows (<ModalHost> is outside <main>). R-10-11: path bar -> body
+     -> status bar, no menu bar (SPEC-0100-0005 R-08). R-901/R-913: <main> is always rendered
+     (document rules apply from the first paint); its body is gated on `ready` (SHOULD-120). -->
+<main class="app-shell ui-root" inert={modalHost.isOpen}>
+  {#if ready}
     <PathBar
       text={pathBar.state.text}
       bind:inputEl={pathBarInputEl}
@@ -363,7 +369,7 @@
       showTime={fileListState.showTime()}
       ariaMultiselectable={fileListAria["aria-multiselectable"]}
       ariaActivedescendant={fileListAria["aria-activedescendant"]}
-      layoutRows={layout.rows}
+      geometry={layout}
       bind:containerEl
       bind:containerWidth
       bind:containerHeight
@@ -376,9 +382,9 @@
       onSortMenuClose={closeSortMenuNow}
     />
 
-    <StatusBar text={statusMessage.text} />
-  </main>
-{/if}
+    <StatusBar items={status.items} message={statusMessage.text} />
+  {/if}
+</main>
 
 <ModalHost
   top={modalHost.top}
@@ -388,9 +394,3 @@
   setChecked={(checked) => modalHost.setChecked(checked)}
 />
 
-<style>
-  main {
-    font-family: sans-serif;
-    padding: 0.5rem 1rem;
-  }
-</style>

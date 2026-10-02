@@ -1,0 +1,92 @@
+/*
+ * SPEC-0300-0017 (Phase 9, visual design); SPEC-0200-0001 §3.8.1.
+ *
+ * Imported ONLY by routes/+page.svelte (the main window). The viewer window
+ * (routes/viewer/) never loads it (R-913), and the document-level rules below
+ * apply only to a document that contains `.app-shell` (the main window), so the
+ * viewer's computed styles stay untouched. `:root` carries custom properties
+ * only: no color-scheme / font / color is set on :root / html / body (R-912).
+ *
+ * This file is the single source of colour values (R-910, AC-905): components
+ * reference `var(--ui-*)` and never write a colour literal. Values are written
+ * exactly as in the spec's R-911 table (AC-904 compares the strings).
+ */
+
+:root {
+  --ui-bg: #f5f5f5;
+  --ui-fg: #111;
+  --ui-surface: #fff;
+  --ui-surface-2: #f0f0f0;
+  --ui-surface-3: #e8f0ff;
+  --ui-border: #d0d0d0;
+  --ui-border-strong: #cfcfcf;
+  --ui-border-muted: #eee;
+  --ui-muted: #666;
+  --ui-muted-2: #999;
+  --ui-hover: #e8f0ff;
+  --ui-selected: #dbe9ff;
+  --ui-focused: #7aa7ff;
+  --ui-row-head: #f0f0f0;
+  --ui-link: #2a6fdb;
+  --ui-error: #b00020;
+  --ui-backdrop: rgba(0,0,0,.35);
+  --ui-shadow-1: rgba(0,0,0,.12);
+  --ui-shadow-2: rgba(0,0,0,.14);
+
+  --ui-font: "Segoe UI", "Meiryo", sans-serif;
+  --ui-font-mono: ui-monospace, "Cascadia Mono", "Consolas", "Menlo", "Monaco", "Courier New", monospace;
+
+  /* R-924: one row height for list rows and tree nodes. */
+  --list-row-height: 28px;
+}
+
+/* R-901: the page itself never scrolls; only the main window's document. */
+html:has(.app-shell),
+body:has(.app-shell) {
+  margin: 0;
+  overflow: hidden;
+  background: var(--ui-bg);
+}
+
+/* R-920 / R-912 / R-923: base font, colour, light colour scheme. Applied to the
+   main container and to the dialog backdrop (ModalHost renders outside <main>). */
+.ui-root {
+  font-family: var(--ui-font);
+  font-size: 13px;
+  color: var(--ui-fg);
+  color-scheme: light;
+}
+
+.ui-root button,
+.ui-root input,
+.ui-root select,
+.ui-root textarea {
+  font: inherit;
+}
+
+/* R-901 / R-905: the whole-screen container. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 2px;
+  gap: 3px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--ui-bg);
+}
+
+/* R-986 / R-987: shared frame of the confirm / form / progress dialogs. */
+.ui-dialog {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px var(--ui-shadow-1);
+  overflow-wrap: anywhere;
+}

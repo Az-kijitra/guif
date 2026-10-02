@@ -22,7 +22,7 @@
 </script>
 
 {#if top}
-  <div class="backdrop">
+  <div class="backdrop ui-root">
     {#key top.id}
       {#if top.kind === "confirm"}
         <ConfirmDialog
@@ -65,7 +65,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--ui-backdrop);
     z-index: 1000;
   }
 </style>

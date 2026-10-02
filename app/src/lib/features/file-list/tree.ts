@@ -242,7 +242,7 @@ export function computeTreeTopLevel(currentPath: string): TreeTopLevelResult {
   const normalized = normalizeForTreeComparison(currentPath);
 
   // R-777/R-40-0-1: volume GUID or device namespace -> one single node.
-  if (/^Volume\{[0-9a-fA-F-]+\}/.test(normalized) || normalized.startsWith("\\\\.\\")) {
+  if (isSingleNodePath(currentPath)) {
     return { anchorRoot: currentPath, anchorIsExtra: true, currentDrive: null, normalizedTarget: currentPath };
   }
 
@@ -279,4 +279,43 @@ export function mergeDriveList(enumerated: readonly string[], currentDrive: stri
   return [...byKey.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, drive]) => drive);
+}
+
+// ---------------------------------------------------------------------
+// Phase 9 additions (SPEC-0300-0017 R-936/R-938/R-938-1/R-940;
+// SPEC-0200-0001 §3.8.4). Display-only helpers: the node path, comparison and
+// `TreeRowView.name` are untouched.
+// ---------------------------------------------------------------------
+
+// R-777 / R-40-0-1: volume-GUID and `\\.\` device-namespace paths are one single node.
+export function isSingleNodePath(path: string): boolean {
+  const normalized = normalizeForTreeComparison(path);
+  return /^Volume\{[0-9a-fA-F-]+\}/i.test(normalized) || normalized.startsWith("\\\\.\\");
+}
+
+// R-936: left padding of a node (`aria-level - 1 = level`).
+export function treeIndentPx(level: number): number {
+  return 8 + 14 * level;
+}
+
+const SINGLE_NODE_ROOT = /^\\\\\?\\Volume\{[0-9a-fA-F-]+\}|^Volume\{[0-9a-fA-F-]+\}|^\\\\\.\\[^\\]+/i;
+
+// R-938 / R-938-1: display name. Level > 0: the folder name. Level 0: the path without the
+// `\\?\` prefix and the trailing separator (`C:`, `\\server\share`); a single node shows its
+// last component, or (the root itself) the prefixed path minus the trailing separator.
+export function treeNodeLabel(path: string, level: number, name: string): string {
+  if (level > 0) return name;
+  if (isSingleNodePath(path)) {
+    const trimmed = path.replace(/\\+$/, "");
+    const rootMatch = SINGLE_NODE_ROOT.exec(trimmed);
+    const rootLength = rootMatch === null ? 0 : rootMatch[0].length;
+    if (trimmed.length <= rootLength) return trimmed;
+    return trimmed.slice(trimmed.lastIndexOf("\\") + 1);
+  }
+  return normalizeForTreeComparison(path).replace(/\\+$/, "");
+}
+
+// R-940: tooltip = the path without the `\\?\` prefix (single nodes keep the full path).
+export function treeNodeTitle(path: string): string {
+  return isSingleNodePath(path) ? path : normalizeForTreeComparison(path);
 }

@@ -88,3 +88,49 @@ describe("moveSortMenuHighlight (SPEC-0300-0009 R-34-14, AC-618)", () => {
     expect(moveSortMenuHighlight("name", "up")).toBe("modified");
   });
 });
+
+// ======================================================================
+// Phase 9 (SPEC-0300-0017 R-971 #2, R-983, AC-932, AC-933; SPEC-0200-0001
+// §3.8.8, §3.8.17 SHOULD-148: `sortKeyLabel` lives in sort.ts).
+// The status bar and the sort menu share ONE pair of order marks: ascending
+// "↑", descending "↓" (P-20; the old ▲/▼ are retired). The helper name
+// `sortOrderMark` is the test author's choice (design leaves it open).
+// ======================================================================
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { sortKeyLabel, sortOrderMark } from "./sort";
+
+describe("sortKeyLabel (R-971 #2)", () => {
+  it("name -> 名前, size -> サイズ, type -> 種類, modified -> 更新日時", () => {
+    expect(sortKeyLabel("name")).toBe("名前");
+    expect(sortKeyLabel("size")).toBe("サイズ");
+    expect(sortKeyLabel("type")).toBe("種類");
+    expect(sortKeyLabel("modified")).toBe("更新日時");
+  });
+
+  it("every sort key has a distinct non-empty label", () => {
+    const labels = SORT_KEYS.map((k) => sortKeyLabel(k));
+    expect(labels.every((l) => l.length > 0)).toBe(true);
+    expect(new Set(labels).size).toBe(SORT_KEYS.length);
+  });
+});
+
+describe("sortOrderMark (R-971 #2, R-983, AC-933)", () => {
+  it("ascending is ↑ and descending is ↓", () => {
+    expect(sortOrderMark("asc")).toBe("↑");
+    expect(sortOrderMark("desc")).toBe("↓");
+  });
+});
+
+describe("SortMenu.svelte uses the shared marks, not ▲/▼ ([静的], R-983 / P-20)", () => {
+  const src = readFileSync(resolve(__dirname, "SortMenu.svelte"), "utf-8");
+
+  it("the retired ▲ / ▼ marks are gone from the menu source", () => {
+    expect(src.includes("▲")).toBe(false);
+    expect(src.includes("▼")).toBe(false);
+  });
+
+  it("the menu derives its mark from sortOrderMark (one source with the status bar)", () => {
+    expect(src.includes("sortOrderMark")).toBe(true);
+  });
+});

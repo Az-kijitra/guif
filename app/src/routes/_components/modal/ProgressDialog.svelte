@@ -19,7 +19,7 @@
 
 <div
   bind:this={rootEl}
-  class="dialog"
+  class="ui-dialog"
   role="dialog"
   aria-modal="true"
   aria-labelledby="modal-title"
@@ -38,22 +38,14 @@
 </div>
 
 <style>
-  .dialog {
-    min-width: 22rem;
-    max-width: 32rem;
-    padding: 1rem 1.25rem;
-    background: #fff;
-    border: 1px solid #888;
-    border-radius: 4px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  }
+  /* Frame (size, padding, border, radius, shadow) is the shared .ui-dialog in app.css. */
   h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.05rem;
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
   }
   .body p {
-    margin: 0.2rem 0;
-    word-break: break-all;
+    margin: 4px 0;
   }
   progress {
     width: 100%;
@@ -61,6 +53,7 @@
   .buttons {
     display: flex;
     justify-content: flex-end;
-    margin-top: 0.75rem;
+    gap: 8px;
+    margin-top: 12px;
   }
 </style>

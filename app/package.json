@@ -11,7 +11,9 @@
     "prepare": "svelte-kit sync || echo \"\"",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "node e2e/run.mjs",
+    "e2e:attach": "node e2e/run.mjs --attach"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

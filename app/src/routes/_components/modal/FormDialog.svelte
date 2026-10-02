@@ -32,7 +32,7 @@
 
 <div
   bind:this={rootEl}
-  class="dialog"
+  class="ui-dialog"
   role="dialog"
   aria-modal="true"
   aria-labelledby="modal-title"
@@ -78,46 +78,40 @@
 </div>
 
 <style>
-  .dialog {
-    min-width: 22rem;
-    max-width: 32rem;
-    padding: 1rem 1.25rem;
-    background: #fff;
-    border: 1px solid #888;
-    border-radius: 4px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  }
+  /* Frame (size, padding, border, radius, shadow) is the shared .ui-dialog in app.css. */
   h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.05rem;
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
   }
   .line {
-    margin: 0.2rem 0;
-    font-family: monospace;
+    margin: 4px 0;
+    font-family: var(--ui-font-mono);
     overflow-wrap: anywhere;
   }
   .field {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin: 0.35rem 0;
+    gap: 8px;
+    margin: 6px 0;
   }
   .field span {
-    min-width: 3.5rem;
+    min-width: 56px;
   }
   .field input,
   .field select {
     flex: 1;
-    font-family: monospace;
+    min-width: 0;
+    font-family: var(--ui-font-mono);
   }
   .error {
-    color: #b00020;
-    margin: 0.35rem 0 0;
+    color: var(--ui-error);
+    margin: 6px 0 0;
   }
   .buttons {
     display: flex;
     justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
+    gap: 8px;
+    margin-top: 12px;
   }
 </style>

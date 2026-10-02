@@ -4,7 +4,7 @@
   // (MUST-91: outside-click closes via a transparent backdrop BEHIND the
   // menu -- clicks on the menu itself never reach the backdrop, and clicks
   // outside never reach the file list/tree behind it).
-  import { SORT_KEYS, type SortKey, type SortOrder } from "./sort";
+  import { SORT_KEYS, sortOrderMark, type SortKey, type SortOrder } from "./sort";
 
   let {
     highlightedKey,
@@ -30,7 +30,7 @@
 <div class="sort-menu" role="menu">
   {#each SORT_KEYS as key (key)}
     <div class="sort-menu-item" role="menuitemradio" aria-checked={key === currentSortKey} class:highlighted={key === highlightedKey}>
-      <span class="check">{key === currentSortKey ? (currentSortOrder === "asc" ? "▲" : "▼") : ""}</span>
+      <span class="check">{key === currentSortKey ? sortOrderMark(currentSortOrder) : ""}</span>
       <span class="label">{LABELS[key]}</span>
     </div>
   {/each}
@@ -48,18 +48,19 @@
     top: 0;
     left: 0;
     z-index: 11;
-    background: white;
-    border: 1px solid #ccc;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    box-shadow: 0 8px 20px var(--ui-shadow-1);
     min-width: 140px;
+    font-size: 13px;
   }
   .sort-menu-item {
     display: flex;
-    gap: 0.4rem;
-    padding: 0.25rem 0.5rem;
+    gap: 6px;
+    padding: 4px 8px;
   }
   .sort-menu-item.highlighted {
-    background: #dbe9ff;
+    background: var(--ui-hover);
   }
   .check {
     width: 1em;

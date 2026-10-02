@@ -86,6 +86,9 @@ pub fn run() {
         // R-425: `viewer-window.toml` load/save fn-value injection.
         .manage(viewer_window_io)
         .setup(|app| {
+            // SPEC-0400-0001 R-06-2: a bad `REFLEXFILES_CONFIG_DIR` (debug builds) is a startup
+            // error; it never falls back to the real config folder.
+            config::paths::config_dir_override()?;
             // R-428: closing the MAIN window also closes the viewer window,
             // so it never outlives the app (best-effort; does not block the
             // main window's own close).

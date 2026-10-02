@@ -464,3 +464,74 @@ describe("Phase 8 path-bar boundaries (SPEC-0200-0001 §3.7.4, MUST-98, SHOULD-1
     expect(bad.map((f) => relative(SRC, f))).toEqual([]);
   });
 });
+
+// Phase 9 (SPEC-0300-0017 R-913; SPEC-0200-0001 §3.8.1, §3.8.12 (1)-(4), §3.8.13
+// DI rule, §3.8.17 SHOULD-157/158): the stylesheet reaches ONLY the main window
+// (so the viewer's computed styles never change), and the new pure modules stay
+// DOM/Svelte independent and feature-isolated.
+describe("Phase 9 visual-design boundaries (SPEC-0300-0017 R-913, SPEC-0200-0001 §3.8.12)", () => {
+  const edges = collectEdges();
+  const exists = (rel: string): boolean => {
+    try {
+      return statSync(join(SRC, rel)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const read = (rel: string): string => stripComments(readFileSync(join(SRC, rel), "utf-8"));
+
+  it("§3.8.1: the planned Phase 9 artefacts exist (app.css, name-ellipsis, status-bar-model)", () => {
+    const planned = ["app.css", "lib/features/file-list/name-ellipsis.ts", "routes/status-bar-model.ts"];
+    expect(planned.filter((f) => !exists(f))).toEqual([]);
+  });
+
+  it("(4) app.css is imported by routes/+page.svelte and by nothing else", () => {
+    const importers = edges.filter((e) => e.to === "app.css").map((e) => e.from.split(sep).join("/"));
+    expect(importers).toEqual(["routes/+page.svelte"]);
+  });
+
+  it("(4) routes/+layout.svelte, routes/+layout.ts and everything under routes/viewer/ never mention app.css (R-913)", () => {
+    const targets = walk(join(SRC, "routes")).filter(
+      (f) => /routes[\\/]\+layout\.(svelte|ts)$/.test(f) || /routes[\\/]viewer[\\/]/.test(f),
+    );
+    expect(targets.length).toBeGreaterThan(0);
+    const bad = targets.filter((f) => /app\.css/.test(stripComments(readFileSync(f, "utf-8"))));
+    expect(bad.map((f) => relative(SRC, f))).toEqual([]);
+  });
+
+  it("(1) the pure file-list modules import no other feature (search / navigation-history / path-bar / keyboard)", () => {
+    const pure = ["name-ellipsis", "column-scroll", "list-layout"].map((n) => `lib/features/file-list/${n}.ts`);
+    const present = pure.filter(exists);
+    expect(present).toContain("lib/features/file-list/list-layout.ts");
+    expect(present).toContain("lib/features/file-list/name-ellipsis.ts");
+    const bad = edges.filter(
+      (e) =>
+        present.map((p) => p.split("/").join(sep)).includes(e.from) &&
+        (/\$lib\/features\/(search|navigation-history|path-bar|keyboard)\//.test(e.spec) ||
+          (e.toLayer.kind === "feature" && e.toLayer.name !== "file-list")),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("(2) any text-measure module (canvas-backed MeasureText factory) imports no feature (placed under shared/ or file-list/ per SHOULD-157)", () => {
+    const found = walk(join(SRC, "lib")).filter((f) => /text-measure\.ts$/.test(f));
+    const bad = edges.filter(
+      (e) => found.some((f) => relative(SRC, f) === e.from) && /\$lib\/features\//.test(e.spec) && !/\/file-list\//.test(e.spec),
+    );
+    expect(bad.map(fmt)).toEqual([]);
+  });
+
+  it("(3) routes/status-bar-model.ts imports no .svelte file and no $app/ module", () => {
+    const own = edges.filter((e) => e.from === "routes" + sep + "status-bar-model.ts");
+    expect(own.filter((e) => /\.svelte$/.test(e.spec) || /^\$app\//.test(e.spec)).map(fmt)).toEqual([]);
+    expect(/\$app\//.test(read("routes/status-bar-model.ts"))).toBe(false);
+  });
+
+  it("§3.8.13 DI rule: the pure modules reference no DOM globals and no runes", () => {
+    const pure = ["lib/features/file-list/name-ellipsis.ts", "lib/features/file-list/list-layout.ts", "routes/status-bar-model.ts"];
+    const bad = pure.filter(
+      (f) => /\b(document|window|getComputedStyle|requestAnimationFrame|OffscreenCanvas)\b|\$state\b|\$derived\b|\$effect\b/.test(read(f)),
+    );
+    expect(bad).toEqual([]);
+  });
+});

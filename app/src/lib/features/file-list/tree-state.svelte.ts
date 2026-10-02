@@ -29,6 +29,10 @@ export interface TreeRowView {
   level: number;
   expanded: boolean;
   loading: boolean;
+  // SPEC-0300-0017 R-937 / SPEC-0200-0001 §3.8.17 SHOULD-150: true when the node is
+  // known to have no children (a loaded fetch with 0 entries, or a failed fetch
+  // that left it childless) so the caret is hidden. Derived, not stored.
+  leaf: boolean;
 }
 
 interface InternalNode {
@@ -39,6 +43,9 @@ interface InternalNode {
   expanded: boolean;
   loaded: boolean;
   loading: boolean;
+  // SHOULD-150: the only stored part of `leaf` -- set by a non-stale failed fetch,
+  // cleared by a successful fetch and by discardChildren.
+  loadFailed: boolean;
   children: string[] | undefined;
   // MUST-90(b): a per-node monotonic token -- only the MOST RECENT fetch
   // attempt for a given node is allowed to apply its result, regardless of
@@ -95,7 +102,7 @@ export function createTreeState(deps: TreeStateDeps) {
   }
 
   function makeNode(path: string, name: string, level: number, parentKey: string | null): InternalNode {
-    return { path, name, level, parentKey, expanded: false, loaded: false, loading: false, children: undefined, fetchToken: 0 };
+    return { path, name, level, parentKey, expanded: false, loaded: false, loading: false, loadFailed: false, children: undefined, fetchToken: 0 };
   }
 
   function applyChildren(node: InternalNode, entries: TreeStateEntry[]): void {
@@ -137,6 +144,7 @@ export function createTreeState(deps: TreeStateDeps) {
           touch();
           return { success: false, code: "stale", stale: true } as const;
         }
+        node.loadFailed = false;
         applyChildren(node, entries);
         touch();
         return { success: true } as const;
@@ -146,6 +154,9 @@ export function createTreeState(deps: TreeStateDeps) {
         touch();
         const stale = generation !== rootGeneration || myToken !== node.fetchToken;
         if (stale) return { success: false, code: "stale", stale: true } as const;
+        // SHOULD-150: set AFTER the stale check; touch() so the view sees it.
+        node.loadFailed = true;
+        touch();
         return { success: false, code: errorCodeOf(e), stale: false } as const;
       },
     );
@@ -180,6 +191,7 @@ export function createTreeState(deps: TreeStateDeps) {
     node.fetchToken += 1;
     node.children = undefined;
     node.loaded = false;
+    node.loadFailed = false;
     node.expanded = false;
     node.loading = false;
     touch();
@@ -411,7 +423,10 @@ export function createTreeState(deps: TreeStateDeps) {
     void version;
     const rows: TreeRowView[] = [];
     const visit = (node: InternalNode): void => {
-      rows.push({ path: node.path, name: node.name, level: node.level, expanded: node.expanded, loading: node.loading });
+      const leaf =
+        (node.loadFailed && node.children === undefined) ||
+        (node.loaded && node.children !== undefined && node.children.length === 0);
+      rows.push({ path: node.path, name: node.name, level: node.level, expanded: node.expanded, loading: node.loading, leaf });
       if (node.expanded && node.children) {
         for (const childKey of node.children) {
           const child = nodes.get(childKey);

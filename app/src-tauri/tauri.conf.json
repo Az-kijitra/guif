@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ReflexFiles Successor (Phase 1)",
+  "productName": "ReflexFiles",
   "version": "0.0.0",
   "identifier": "dev.reflexfiles.successor",
   "build": {
@@ -13,9 +13,12 @@
     "windows": [
       {
         "label": "main",
-        "title": "ReflexFiles Successor (Phase 1)",
+        "title": "ReflexFiles",
         "width": 1000,
-        "height": 700
+        "height": 700,
+        "minWidth": 640,
+        "minHeight": 480,
+        "zoomHotkeysEnabled": false
       }
     ],
     "security": {

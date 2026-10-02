@@ -43,6 +43,7 @@
 
 <form
   class="search-bar"
+  data-focus-area="search"
   onsubmit={(event) => {
     // R-109-3: form submission never navigates the page.
     event.preventDefault();
@@ -78,18 +79,29 @@
   .search-bar {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.25rem 0.5rem;
-    border-bottom: 1px solid #ccc;
+    gap: 6px;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface-2);
   }
   .search-input {
     flex: 1;
-    font-family: monospace;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: 4px;
+    background: var(--ui-surface);
+    font-family: inherit;
+    font-size: 13px;
   }
   .regex-toggle[aria-pressed="true"] {
-    background: #dbe9ff;
+    background: var(--ui-surface-3);
   }
   .search-error {
-    color: #b00020;
+    margin-left: auto;
+    color: var(--ui-error);
+    font-size: 12px;
   }
 </style>

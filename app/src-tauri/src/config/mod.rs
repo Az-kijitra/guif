@@ -8,3 +8,6 @@ pub mod navigation;
 pub mod paths;
 pub mod ui_state;
 pub mod viewer_window;
+// Phase 9 (SPEC-0400-0001 第2版 R-06~R-08): tests for the configuration-folder override.
+#[cfg(test)]
+mod paths_tests;

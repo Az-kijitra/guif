@@ -336,3 +336,112 @@ describe("normalizeForTreeComparison (SHOULD-146)", () => {
     expect(norm("C:\\A")).toBe("C:\\A");
   });
 });
+
+// ======================================================================
+// Phase 9 (SPEC-0300-0017 R-936, R-938, R-938-1, R-940; AC-911, AC-913;
+// SPEC-0200-0001 §3.8.4). Display name / title / indent are pure functions of
+// the node path + level; `TreeRowView.name` and the node path/comparison are
+// untouched. Stubs exist in ./tree.ts, so these fail (RED) until implemented.
+// ======================================================================
+
+const GUID = "{12345678-1234-1234-1234-123456789abc}";
+const GUID_ROOT = "\\\\?\\Volume" + GUID + "\\";
+const GUID_X = GUID_ROOT + "X";
+const DEV_ROOT = "\\\\.\\C:\\";
+const DEV_WIN = "\\\\.\\C:\\Windows";
+
+describe("treeIndentPx (R-936, AC-911)", () => {
+  it("is 8 + 14 * level (aria-level - 1): C: 8, A 22, B 36", () => {
+    expect(treeNs.treeIndentPx(0)).toBe(8);
+    expect(treeNs.treeIndentPx(1)).toBe(22);
+    expect(treeNs.treeIndentPx(2)).toBe(36);
+    expect(treeNs.treeIndentPx(5)).toBe(78);
+  });
+});
+
+describe("treeNodeLabel: level > 0 is the folder name as is (R-938 last sentence)", () => {
+  it("returns the given name", () => {
+    expect(treeNs.treeNodeLabel("C:\\A", 1, "A")).toBe("A");
+    expect(treeNs.treeNodeLabel("C:\\A\\B", 2, "B")).toBe("B");
+  });
+});
+
+describe("treeNodeLabel: level 0 (R-938 [E1], R-938-1, AC-913)", () => {
+  it("drive root C:\\ -> C: (trailing separator removed)", () => {
+    expect(treeNs.treeNodeLabel("C:\\", 0, "C:\\")).toBe("C:");
+    expect(treeNs.treeNodeLabel("D:\\", 0, "D:\\")).toBe("D:");
+  });
+
+  it("UNC share \\\\server\\share\\ -> \\\\server\\share", () => {
+    expect(treeNs.treeNodeLabel("\\\\server\\share\\", 0, "\\\\server\\share\\")).toBe("\\\\server\\share");
+  });
+
+  it("AC-913 (iii): \\\\?\\C:\\ prefix is not shown -> C:", () => {
+    expect(treeNs.treeNodeLabel("\\\\?\\C:\\", 0, "\\\\?\\C:\\")).toBe("C:");
+  });
+
+  it("\\\\?\\UNC\\server\\share\\ prefix is not shown -> \\\\server\\share", () => {
+    expect(treeNs.treeNodeLabel("\\\\?\\UNC\\server\\share\\", 0, "x")).toBe("\\\\server\\share");
+  });
+
+  it("AC-913 (iv): volume GUID single node \\\\?\\Volume{GUID}\\X -> X (last component)", () => {
+    expect(treeNs.treeNodeLabel(GUID_X, 0, GUID_X)).toBe("X");
+  });
+
+  it("volume GUID single node with a trailing separator -> still the last component", () => {
+    expect(treeNs.treeNodeLabel(GUID_X + "\\", 0, GUID_X)).toBe("X");
+  });
+
+  it("R-938-1: \\\\.\\C:\\Windows -> Windows", () => {
+    expect(treeNs.treeNodeLabel(DEV_WIN, 0, DEV_WIN)).toBe("Windows");
+  });
+
+  it("R-938-1 exception: the root itself keeps the prefix, minus the trailing separator", () => {
+    expect(treeNs.treeNodeLabel(GUID_ROOT, 0, GUID_ROOT)).toBe("\\\\?\\Volume" + GUID);
+    expect(treeNs.treeNodeLabel(DEV_ROOT, 0, DEV_ROOT)).toBe("\\\\.\\C:");
+  });
+});
+
+describe("treeNodeTitle (R-940, AC-913)", () => {
+  it("drive root keeps its path: C:\\", () => {
+    expect(treeNs.treeNodeTitle("C:\\")).toBe("C:\\");
+  });
+
+  it("deeper nodes: the path", () => {
+    expect(treeNs.treeNodeTitle("C:\\A\\B")).toBe("C:\\A\\B");
+  });
+
+  it("UNC share: \\\\server\\share\\", () => {
+    expect(treeNs.treeNodeTitle("\\\\server\\share\\")).toBe("\\\\server\\share\\");
+  });
+
+  it("\\\\?\\ prefixed nodes show the path WITHOUT the prefix (C:\\, \\\\server\\share\\)", () => {
+    expect(treeNs.treeNodeTitle("\\\\?\\C:\\")).toBe("C:\\");
+    expect(treeNs.treeNodeTitle("\\\\?\\C:\\X")).toBe("C:\\X");
+    expect(treeNs.treeNodeTitle("\\\\?\\UNC\\server\\share\\")).toBe("\\\\server\\share\\");
+  });
+
+  it("single nodes (R-938-1) show the FULL path including the prefix", () => {
+    expect(treeNs.treeNodeTitle(GUID_X)).toBe(GUID_X);
+    expect(treeNs.treeNodeTitle(DEV_ROOT)).toBe(DEV_ROOT);
+    expect(treeNs.treeNodeTitle(DEV_WIN)).toBe(DEV_WIN);
+  });
+});
+
+describe("isSingleNodePath (R-777 / R-40-0-1, shared with computeTreeTopLevel)", () => {
+  it("volume GUID and device namespace paths are single-node paths", () => {
+    expect(treeNs.isSingleNodePath(GUID_X)).toBe(true);
+    expect(treeNs.isSingleNodePath(GUID_ROOT)).toBe(true);
+    expect(treeNs.isSingleNodePath(DEV_ROOT)).toBe(true);
+    expect(treeNs.isSingleNodePath(DEV_WIN)).toBe(true);
+    expect(treeNs.isSingleNodePath("\\\\?\\volume" + GUID.toUpperCase() + "\\X")).toBe(true);
+  });
+
+  it("ordinary drive / UNC / \\\\?\\ drive / \\\\?\\UNC paths are not", () => {
+    expect(treeNs.isSingleNodePath("C:\\")).toBe(false);
+    expect(treeNs.isSingleNodePath("C:\\A\\B")).toBe(false);
+    expect(treeNs.isSingleNodePath("\\\\server\\share\\")).toBe(false);
+    expect(treeNs.isSingleNodePath("\\\\?\\C:\\X")).toBe(false);
+    expect(treeNs.isSingleNodePath("\\\\?\\UNC\\server\\share\\")).toBe(false);
+  });
+});
