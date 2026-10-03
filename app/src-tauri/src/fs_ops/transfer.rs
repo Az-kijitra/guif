@@ -499,6 +499,9 @@ fn run_transfer_batch_with_progress(
     // AC-68 requires that one missing source does not prevent the rest of
     // the batch from being processed. A missing individual source is
     // therefore left to the existing per-item `not_found` check below,
+    // (SPEC-0300-0011 R-24 / R-19-7: paths taken from the OS clipboard are never
+    // checked for existence up front, so they fail per item exactly like in-app ones;
+    // AC-06-8 tests in `data_safety_tests.rs`),
     // which already implements the correct AC-68 semantics. The structural
     // checks above (destination validity, self-referential paths) are safe
     // to enforce batch-wide because they represent conditions where

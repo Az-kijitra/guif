@@ -53,3 +53,16 @@ export function createTabStopController(deps: TabStopControllerDeps): (direction
 export function resolveCurrentStop(s: { isTreeFocused: boolean; searchInputFocused: boolean }): TabStopId {
   return s.isTreeFocused ? "tree" : s.searchInputFocused ? "search" : "list";
 }
+
+// §3.10.1 S3: the focused row's path and whether it is in the displayed (filtered) set.
+export function createFocusedPathView(deps: {
+  fileList: { entries: readonly { path: string }[]; focusedIndex: number };
+  filteredEntries: () => readonly { path: string }[];
+}) {
+  const focusedPath = (): string => deps.fileList.entries[deps.fileList.focusedIndex]?.path ?? "";
+  const isFocusedPathVisible = (): boolean => {
+    const path = focusedPath();
+    return path !== "" && deps.filteredEntries().some((e) => e.path === path);
+  };
+  return { focusedPath, isFocusedPathVisible };
+}

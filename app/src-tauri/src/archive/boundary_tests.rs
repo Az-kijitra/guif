@@ -85,7 +85,8 @@ fn unsafe_word() -> String {
 // added to the list alongside the pre-existing `archive/win_fs.rs` -- this
 // widens WHERE `unsafe` is tolerated, it never removes a check (a stray
 // `unsafe` anywhere else in the crate still fails this test).
-const UNSAFE_ALLOWED_FILES: &[&str] = &["src/archive/win_fs.rs", "src/fs/win_drives.rs"];
+const UNSAFE_ALLOWED_FILES: &[&str] =
+    &["src/archive/win_fs.rs", "src/fs/win_drives.rs", "src/fs_ops/clipboard/clipboard_win.rs"];
 
 #[test]
 fn unsafe_code_exists_only_in_the_isolated_modules() {
@@ -298,6 +299,289 @@ fn ac361_the_scan_reaches_the_frontend_sources() {
     }
     count_files(&app_src, &mut count);
     assert!(count > 10, "app/src has only {count} files?");
+}
+
+// ============================================================ Phase 11: clipboard isolation
+//
+// TDD (unit-test-writer, 2026-10-03). SPEC-0300-0011 R-18-11 / AC-06-12,
+// SPEC-0200-0001 §3.10.11 + §3.10.17.7 (SHOULD-175). RED until code-generator
+// adds `fs_ops/clipboard/clipboard_win.rs` and the three `windows-sys` features.
+// Win32 names and `windows_sys` are assembled at RUN TIME so this file never
+// contains them (self-detection avoidance).
+
+const CLIPBOARD_WIN: &str = "src/fs_ops/clipboard/clipboard_win.rs";
+
+/// Upper bound for `unsafe` blocks in `clipboard_win.rs` (one to a few per thin Win32
+/// wrapper; a jump past this must be a conscious, reviewed change).
+const CLIPBOARD_WIN_MAX_UNSAFE_BLOCKS: usize = 24;
+
+fn win32_clipboard_api_names() -> Vec<String> {
+    vec![
+        ["Open", "Clipboard"].concat(),
+        ["SetClipboard", "Data"].concat(),
+        ["GetClipboard", "Data"].concat(),
+        ["Empty", "Clipboard"].concat(),
+        ["Global", "Alloc"].concat(),
+        ["DragQuery", "FileW"].concat(),
+    ]
+}
+
+fn windows_sys_word() -> String {
+    ["windows", "_sys"].concat()
+}
+
+// 1. a SAFETY comment per unsafe block, an upper bound, and the opt-out of the crate-level deny.
+#[test]
+fn clipboard_win_has_a_safety_comment_per_unsafe_block_and_opts_out_of_the_deny() {
+    let text = fs::read_to_string(manifest_dir().join(CLIPBOARD_WIN))
+        .unwrap_or_else(|e| panic!("{CLIPBOARD_WIN} must exist (R-18-11): {e}"));
+    let code = code_only(&text);
+    let needle = unsafe_word();
+    let blocks = count_word(&code, &needle);
+    let safety = text.matches("SAFETY:").count();
+    assert!(blocks >= 1, "clipboard_win.rs is the Win32 wrapper: it must contain `{needle}` blocks");
+    assert!(blocks <= CLIPBOARD_WIN_MAX_UNSAFE_BLOCKS, "{blocks} `{needle}` blocks exceed the cap {CLIPBOARD_WIN_MAX_UNSAFE_BLOCKS}");
+    assert!(safety >= blocks, "every `{needle}` block needs a `// SAFETY:` comment ({safety} comments for {blocks} blocks)");
+    assert!(code.contains("allow(unsafe_code)"), "clipboard_win.rs must opt out of the crate-level deny");
+}
+
+// 2. only clipboard_win.rs names the Win32 clipboard APIs (and it does name them).
+#[test]
+fn clipboard_win_is_the_only_file_naming_the_win32_clipboard_apis() {
+    let names = win32_clipboard_api_names();
+    let win = fs::read_to_string(manifest_dir().join(CLIPBOARD_WIN)).unwrap_or_default();
+    for n in &names {
+        assert!(code_only(&win).contains(n.as_str()), "{CLIPBOARD_WIN} must call {n}");
+    }
+    let mut offenders = Vec::new();
+    let mut files = Vec::new();
+    rust_sources(&manifest_dir().join("src"), &mut files);
+    for path in files {
+        if rel(&path) == CLIPBOARD_WIN {
+            continue;
+        }
+        let code = code_only(&fs::read_to_string(&path).unwrap());
+        for n in &names {
+            if code.contains(n.as_str()) {
+                offenders.push(format!("{}: {n}", rel(&path)));
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "Win32 clipboard API named outside {CLIPBOARD_WIN}: {offenders:?}");
+}
+
+// 3. `windows_sys` is used only by the isolation files (same list as the unsafe allow-list).
+#[test]
+fn the_win32_binding_crate_is_used_only_by_the_three_isolation_files() {
+    assert_eq!(UNSAFE_ALLOWED_FILES.len(), 3, "the allow-list is exactly the three isolation files");
+    let needle = windows_sys_word();
+    let mut offenders = Vec::new();
+    let mut files = Vec::new();
+    rust_sources(&manifest_dir().join("src"), &mut files);
+    for path in files {
+        // this file names the crate in test/function names (the token is also assembled at run time)
+        if UNSAFE_ALLOWED_FILES.contains(&rel(&path).as_str()) || rel(&path) == "src/archive/boundary_tests.rs" {
+            continue;
+        }
+        if code_only(&fs::read_to_string(&path).unwrap()).contains(needle.as_str()) {
+            offenders.push(rel(&path));
+        }
+    }
+    assert!(offenders.is_empty(), "`{needle}` outside {UNSAFE_ALLOWED_FILES:?}: {offenders:?}");
+    let win = fs::read_to_string(manifest_dir().join(CLIPBOARD_WIN)).unwrap_or_default();
+    assert!(code_only(&win).contains(needle.as_str()), "{CLIPBOARD_WIN} must be built on windows-sys");
+}
+
+// 4. fs_ops/clipboard depends on shared/ (and itself / fs_ops siblings) only.
+#[test]
+fn fs_ops_clipboard_does_not_use_other_feature_modules() {
+    let forbidden = ["archive", "fs", "config", "viewer", "keymap"];
+    let mut offenders = Vec::new();
+    for path in all_rust_files_under("fs_ops/clipboard") {
+        let code = code_only(&fs::read_to_string(&path).unwrap());
+        for used in crate_uses(&code) {
+            if forbidden.contains(&used.as_str()) {
+                offenders.push(format!("{}: crate::{used}", rel(&path)));
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "fs_ops/clipboard must depend on shared/ only:\n  {}", offenders.join("\n  "));
+}
+
+// 5. the windows-sys feature set is pinned (a needed extra feature must show up as a deliberate diff here).
+#[test]
+fn cargo_toml_windows_sys_features_are_exactly_the_approved_five() {
+    let toml = cargo_toml();
+    let line = toml.lines().find(|l| l.trim_start().starts_with("windows-sys") && l.contains('=')).expect("a `windows-sys = ...` line");
+    let listed = line.rsplit("features = ").next().unwrap_or("");
+    let mut names: Vec<&str> = listed.split('"').skip(1).step_by(2).filter(|s| s.starts_with("Win32_")).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "Win32_Foundation",
+            "Win32_Storage_FileSystem",
+            "Win32_System_DataExchange",
+            "Win32_System_Memory",
+            "Win32_UI_Shell"
+        ],
+        "{line}"
+    );
+}
+
+// ============================================================ Phase 11: E2E scope (static checks)
+//
+// SPEC-0400-0001 R-10 / R-10-5 / R-10-6, AC-10; SPEC-0200-0001 §3.10.17.6 /
+// §3.10.17.6-2 (MUST-123, SHOULD-178..180). The variable name is assembled at run time.
+
+fn e2e_scope_var() -> String {
+    ["REFLEXFILES_E2E", "_FS_SCOPE"].concat()
+}
+
+fn env_var_call() -> String {
+    ["env", "::var"].concat()
+}
+
+fn is_test_source(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name.ends_with("_tests.rs") || name == "test_support.rs" || name == "boundary_tests.rs"
+}
+
+// SHOULD-180 (a): `env::var` / `var_os` is called only by config/paths.rs and shared/e2e_scope.rs.
+#[test]
+fn env_var_is_read_only_by_config_paths_and_the_e2e_scope_module() {
+    let needle = env_var_call();
+    let allowed = ["src/config/paths.rs", "src/shared/e2e_scope.rs"];
+    let mut offenders = Vec::new();
+    let mut files = Vec::new();
+    rust_sources(&manifest_dir().join("src"), &mut files);
+    for path in files {
+        if is_test_source(&path) || allowed.contains(&rel(&path).as_str()) {
+            continue;
+        }
+        if code_only(&fs::read_to_string(&path).unwrap()).contains(needle.as_str()) {
+            offenders.push(rel(&path));
+        }
+    }
+    assert!(offenders.is_empty(), "`{needle}` outside {allowed:?}: {offenders:?}");
+    assert!(manifest_dir().join(allowed[1]).is_file(), "{} must exist", allowed[1]);
+}
+
+/// Lines (0-based, inclusive) of `#[cfg(debug_assertions)] mod imp { ... }` in rustfmt layout
+/// (the closing brace is the next line that is exactly `}`).
+fn imp_block(code_lines: &[&str]) -> Option<(usize, usize)> {
+    let start = code_lines.iter().position(|l| l.trim_start().starts_with("mod imp"))?;
+    if start == 0 || code_lines[start - 1].trim() != "#[cfg(debug_assertions)]" {
+        return None;
+    }
+    let end = code_lines[start..].iter().position(|l| *l == "}")? + start;
+    Some((start, end))
+}
+
+// SHOULD-180 (b): the variable name (and any env read) appears in the production code only inside
+// `#[cfg(debug_assertions)] mod imp` of shared/e2e_scope.rs.
+#[test]
+fn the_e2e_scope_variable_is_only_referenced_inside_the_debug_only_imp_module() {
+    let var = e2e_scope_var();
+    let env_call = env_var_call();
+    let mut files = Vec::new();
+    rust_sources(&manifest_dir().join("src"), &mut files);
+    for path in files {
+        if is_test_source(&path) {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        let code = code_only(&text);
+        if rel(&path) != "src/shared/e2e_scope.rs" {
+            assert!(!code.contains(var.as_str()), "{} must not name {var}", rel(&path));
+            continue;
+        }
+        let lines: Vec<&str> = code.lines().collect();
+        let (start, end) = imp_block(&lines).unwrap_or_else(|| panic!("e2e_scope.rs needs `#[cfg(debug_assertions)]` + `mod imp {{ ... }}` (closing `}}` alone on a line)"));
+        let mut seen_var = false;
+        for (i, line) in lines.iter().enumerate() {
+            let inside = i >= start && i <= end;
+            if line.contains(var.as_str()) {
+                seen_var = true;
+                assert!(inside, "line {}: {var} outside `mod imp`: {line}", i + 1);
+            }
+            if line.contains(env_call.as_str()) {
+                assert!(inside, "line {}: env read outside `mod imp`: {line}", i + 1);
+            }
+        }
+        assert!(seen_var, "e2e_scope.rs must read {var}");
+    }
+}
+
+fn fn_body<'a>(source: &'a str, name: &str) -> Option<&'a str> {
+    let at = source.find(&format!("pub fn {name}("))?;
+    let rest = &source[at..];
+    let end = rest[1..]
+        .find("#[tauri::command")
+        .into_iter()
+        .chain(rest[1..].find("#[cfg(test)]"))
+        .min()
+        .map_or(rest.len(), |e| e + 1);
+    Some(&rest[..end])
+}
+
+// SHOULD-180 (c) / MUST-123: the nine commands that change files or launch apps check the scope.
+#[test]
+fn the_nine_mutating_commands_call_e2e_scope_checks() {
+    let cases: [(&str, &[&str]); 3] = [
+        (
+            "src/fs_ops/commands.rs",
+            &["fs_ops_copy", "fs_ops_move", "fs_ops_delete_trash", "fs_ops_delete_permanently", "fs_ops_rename", "fs_ops_create"],
+        ),
+        ("src/archive/commands.rs", &["archive_create", "archive_extract"]),
+        ("src/viewer/commands.rs", &["viewer_os_open_path"]),
+    ];
+    let mut missing = Vec::new();
+    let mut total = 0;
+    for (file, names) in cases {
+        let text = fs::read_to_string(manifest_dir().join(file)).unwrap();
+        let code = code_only(&text);
+        for name in names {
+            total += 1;
+            match fn_body(&code, name) {
+                Some(body) if body.contains("e2e_scope::check_") => {}
+                Some(_) => missing.push(format!("{file}: {name} does not call e2e_scope::check_*")),
+                None => missing.push(format!("{file}: {name} not found")),
+            }
+        }
+    }
+    assert_eq!(total, 9);
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+// R-10-5 / SHOULD-179: viewer_os_open_path asks the always-reject launch check, not the path check.
+#[test]
+fn viewer_os_open_path_uses_the_external_launch_check() {
+    let code = code_only(&fs::read_to_string(manifest_dir().join("src/viewer/commands.rs")).unwrap());
+    let body = fn_body(&code, "viewer_os_open_path").expect("viewer_os_open_path");
+    assert!(body.contains("e2e_scope::check_external_launch"), "SHOULD-179: always reject while the scope is active");
+}
+
+// R-10-6: copy / move / ZIP sources and the ZIP to extract are checked with `check_source`.
+#[test]
+fn read_sources_are_checked_with_check_source() {
+    let fs_ops = code_only(&fs::read_to_string(manifest_dir().join("src/fs_ops/commands.rs")).unwrap());
+    for name in ["fs_ops_copy", "fs_ops_move"] {
+        assert!(fn_body(&fs_ops, name).expect(name).contains("e2e_scope::check_source"), "{name}: items");
+    }
+    let archive = code_only(&fs::read_to_string(manifest_dir().join("src/archive/commands.rs")).unwrap());
+    for name in ["archive_create", "archive_extract"] {
+        assert!(fn_body(&archive, name).expect(name).contains("e2e_scope::check_source"), "{name}: sources / zip_path");
+    }
+}
+
+// R-10-1 / §3.10.17.6: an invalid value stops start-up, right after the config override check.
+#[test]
+fn lib_rs_initialises_the_e2e_scope_after_the_config_override_and_propagates_the_error() {
+    let lib = code_only(&fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap());
+    let cfg = lib.find("config_dir_override()?").expect("config_dir_override()?");
+    let init = lib.find("e2e_scope::init_from_env()?").expect("`shared::e2e_scope::init_from_env()?` in .setup");
+    assert!(init > cfg, "init_from_env must come right after config_dir_override");
 }
 
 // ============================================================ dependency shape

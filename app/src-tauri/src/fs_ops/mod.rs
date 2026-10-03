@@ -29,6 +29,7 @@
 //! `transfer::run_transfer_batch_with_progress` and `commands`'s module doc
 //! comment for the design.
 
+pub mod clipboard;
 pub mod commands;
 pub mod create;
 pub mod delete;

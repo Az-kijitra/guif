@@ -29,3 +29,9 @@ export type PasteMode = "move" | "copy";
 export function resolvePasteMode(input: PasteModeInput): PasteMode {
   return input.origin === "internal-cut" ? "move" : "copy";
 }
+
+// R-16 / SPEC-0200-0001 §3.10.8: the `Preferred DropEffect` to WRITE to the OS clipboard
+// (only an internal cut writes "move").
+export function osEffectFor(origin: ClipboardOrigin): "copy" | "move" {
+  return origin === "internal-cut" ? "move" : "copy";
+}

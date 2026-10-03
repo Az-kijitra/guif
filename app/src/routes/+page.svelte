@@ -4,17 +4,13 @@
   import "../app.css"; // R-913: the main window only (never +layout.svelte / the viewer).
   import { onMount, onDestroy, tick, untrack } from "svelte";
   import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
-  import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
-  import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
-  import { readRowHeightPx } from "$lib/features/file-list/text-measure";
   import { createSortMenuState } from "$lib/features/file-list/sort-menu-state.svelte";
   import { uiStatePersistence } from "$lib/features/file-list/ui-state-persistence";
   import { computeFileListAria } from "$lib/features/file-list/aria";
   import { resolveFocusIndexForVisibleSet } from "$lib/features/file-list/navigation";
   import PathBar from "$lib/features/path-bar/PathBar.svelte";
   import { searchState } from "$lib/features/search/search-state.svelte";
-  import { computeFilteredEntries } from "$lib/features/search/matching";
   import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
   import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
   import { modalHost } from "$lib/shared/state/modal-host.svelte";
@@ -24,9 +20,8 @@
   import StatusBar from "./_components/StatusBar.svelte";
   import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
   import { statusMessage } from "$lib/shared/state/status-message.svelte";
-  import { configLoadKeymap } from "$lib/shared/ipc/config";
   import { homeDir } from "@tauri-apps/api/path";
-  import { createAfterUserNavigation, createOverlayController } from "./navigation-wiring";
+  import { createNavigationFollowers, createOverlayController } from "./navigation-wiring";
   import { createPathBarController } from "./path-bar-wiring";
   import { exitOnly, runBootstrap } from "./bootstrap-wiring";
   import { createListTreeControllers } from "./list-tree-controllers-wiring";
@@ -35,14 +30,15 @@
   import { createHistoryRowHandlers } from "./history-row-wiring";
   import { createModalWiring } from "./modal-wiring.svelte";
   import { createSortMenuController } from "./sort-menu-wiring";
-  import { createTabStopController, resolveCurrentStop } from "./focus-wiring";
+  import { createFocusedPathView, createTabStopController, resolveCurrentStop } from "./focus-wiring";
   import { createMainContextMenu } from "./context-menu-main.svelte";
   import ContextMenuHost from "./_components/ContextMenuHost.svelte";
-  import { runStartupHydrate } from "./startup-wiring";
+  import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
   import { createMainViewerOpenController } from "./viewer-open-wiring";
   import { createRowInteractionHandlers } from "./row-interaction-wiring";
   import { createMainTreeState } from "./tree-wiring";
   import { createStatusBarModel } from "./status-bar-wiring.svelte";
+  import { createListView } from "./list-view-wiring.svelte";
 
   let ready = $state(false); // SHOULD-120: gate the body until R-77-3-1 applies.
 
@@ -57,23 +53,15 @@
   let historyListEl: HTMLDivElement | undefined = $state();
   let dialogEl: HTMLDivElement | undefined = $state();
 
-  let filterResult = $derived( // R-116: recomputed via Svelte reactivity.
-    computeFilteredEntries(fileListState.entries, {
-      active: searchState.active,
-      query: searchState.query,
-      regexMode: searchState.regexMode,
-    }),
-  );
-  let filteredEntries = $derived(filterResult.filteredEntries);
-
-  // R-956: geometry from the list FRAME's size and the displayed (filtered) count.
-  let layout = $derived(
-    fileListState.layout(containerWidth || 800, containerHeight || 400, filteredEntries.length, readRowHeightPx()),
-  );
-  // R-59-1: page_up/page_down move by the SAME "R-16-1 rows" as rowsPerColumn.
-  $effect(() => {
-    fileListState.setPageRows(layout.rows);
+  // R-116 filter result / R-956 geometry / R-59-1 page rows (§3.10.1 S4).
+  const listView = createListView({
+    fileList: fileListState,
+    search: searchState,
+    size: () => ({ width: containerWidth, height: containerHeight }),
   });
+  let filterResult = $derived(listView.filterResult);
+  let filteredEntries = $derived(listView.filteredEntries);
+  let layout = $derived(listView.layout);
 
   const { treeState, listDirForTree } = createMainTreeState({
     isVisible: () => fileListState.showTree(),
@@ -89,12 +77,11 @@
   // also where the tree follows the list (MUST-94: no list<->tree import).
   // The initial load (R-208 #6) records/follows the same way but stays silent
   // on failure: a vanished last-visited path just falls back to home.
-  const navHooks = {
-    recordVisit: (path: string) => navigationHistoryState.recordVisit(path),
-    followTree: (path: string) => void treeState.followTo(path),
-  };
-  const afterUserNavigation = createAfterUserNavigation({ ...navHooks, notifyFailure: (m) => statusMessage.show(m) });
-  const afterInitialLoad = createAfterUserNavigation({ ...navHooks, notifyFailure: () => {} });
+  const { afterUserNavigation, afterInitialLoad } = createNavigationFollowers({
+    recordVisit: (path) => navigationHistoryState.recordVisit(path),
+    followTree: (path) => void treeState.followTo(path),
+    notify: (m) => statusMessage.show(m),
+  });
 
   const focus = {
     pathBarInput: () => pathBarInputEl,
@@ -142,11 +129,10 @@
     focus: { tree: focus.tree, search: focus.searchInput, list: focus.container },
   });
 
-  const focusedPath = (): string => fileListState.entries[fileListState.focusedIndex]?.path ?? "";
-  const isFocusedPathVisible = (): boolean => {
-    const path = focusedPath();
-    return path !== "" && filteredEntries.some((e) => e.path === path);
-  };
+  const { focusedPath, isFocusedPathVisible } = createFocusedPathView({
+    fileList: fileListState,
+    filteredEntries: () => filteredEntries,
+  });
 
   let fileListAria = $derived(computeFileListAria({ focusedPath: focusedPath(), isFocusedPathVisible: isFocusedPathVisible() }));
 
@@ -260,12 +246,7 @@
   async function bootstrap(): Promise<void> {
     await runStartupHydrate({
       loadUiState: async () => ({ notice: await uiStatePersistence.hydrateAll() }),
-      loadKeymap: async () => {
-        const raw = await configLoadKeymap();
-        const validated = validateKeymapEntries(raw.entries);
-        keymapState.hydrate(validated.effective);
-        return { notice: buildKeymapLoadNotice(raw.parseError, validated.invalidActions) };
-      },
+      loadKeymap: loadKeymapForStartup,
       loadNavigation: () => navigationPersistence.hydrateAll(),
     });
     if (destroyed) return;

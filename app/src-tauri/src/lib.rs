@@ -21,8 +21,8 @@
 //! Tauri 2 desktop template split, so `lib.rs` stays the single source of
 //! bootstrap wiring and can also be exercised by integration tests later).
 
-// SPEC-0200-0001 §3.4.13-7 / §3.7.1 (ISS-0161): the only unsafe in the crate lives in
-// archive/win_fs.rs and fs/win_drives.rs.
+// SPEC-0200-0001 §3.4.13-7 / §3.7.1 (ISS-0161) / §3.10.11: the only unsafe in the crate lives in
+// archive/win_fs.rs, fs/win_drives.rs and fs_ops/clipboard/clipboard_win.rs.
 #![deny(unsafe_code)]
 
 pub mod archive;
@@ -85,16 +85,27 @@ pub fn run() {
         .manage(viewer::window::ViewerRuntime::default())
         // R-425: `viewer-window.toml` load/save fn-value injection.
         .manage(viewer_window_io)
+        // SPEC-0300-0011 R-18 / SPEC-0200-0001 §3.10.4: the main window's HWND (the OS clipboard
+        // owner), stored in `.setup`.
+        .manage(fs_ops::clipboard::commands::ClipboardOwner::default())
         .setup(|app| {
             // SPEC-0400-0001 R-06-2: a bad `REFLEXFILES_CONFIG_DIR` (debug builds) is a startup
             // error; it never falls back to the real config folder.
             config::paths::config_dir_override()?;
+            // SPEC-0400-0001 R-10-1 (debug builds only): an invalid E2E file scope also stops start-up.
+            shared::e2e_scope::init_from_env()?;
+            #[cfg(windows)]
+            fs_ops::clipboard::commands::register_owner(app);
             // R-428: closing the MAIN window also closes the viewer window,
             // so it never outlives the app (best-effort; does not block the
             // main window's own close).
             if let Some(main) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
                 main.on_window_event(move |event| {
+                    // SHOULD-171: never open the clipboard with a destroyed (reusable) HWND.
+                    if matches!(event, tauri::WindowEvent::Destroyed) {
+                        handle.state::<fs_ops::clipboard::commands::ClipboardOwner>().set(0);
+                    }
                     if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
                         viewer::window::close_viewer_on_main_exit(&handle);
                     }
@@ -130,6 +141,9 @@ pub fn run() {
             viewer::commands::viewer_read_text,
             viewer::commands::viewer_read_image,
             viewer::commands::viewer_navigate,
+            fs_ops::clipboard::commands::clipboard_set_files,
+            fs_ops::clipboard::commands::clipboard_get_files,
+            fs_ops::clipboard::commands::clipboard_clear_if_unchanged,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

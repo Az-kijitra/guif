@@ -14,6 +14,17 @@
 | 2026-10-01 | 未採番(SPEC-0300-0016 第2版 ほか連動新版、Phase 8) | PASS(フロント・バック双方) | 以下「## 2026-10-01 Phase 8」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(実Tauriで確認) |
 | 2026-10-03 | 未採番(SPEC-0300-0017 第3版・SPEC-0400-0001 第2版ほか、Phase 9) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 9」セクション参照 | unit-test-writer → code-generator(E2E 作成・実行含む) → code-reviewer(PR作成可、SHOULD 4件) → code-generator(E2E 安全策 S-1/S-2/S-4 修正) → オーケストレーター(実アプリで画面確認) |
 | 2026-10-03 | 未採番(SPEC-0300-0018 右クリックメニュー、0010第13版/0011第7版/0015第4版/0017第4版/0009第12版/0014第4版/SPEC-0400-0001第3版、Phase 10) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 10」セクション参照 | unit-test-writer → code-generator(実機確認・E2E含む) → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(SHOULD対応、実アプリで画面確認) |
+| 2026-10-04 | 未採番(SPEC-0300-0011 第8版 / SPEC-0300-0018 第2版 / SPEC-0400-0001 第4版、Phase 11) | PASS(フロント・バック)/ E2E は一部未再実行(ISS-0200) | 以下「## 2026-10-04 Phase 11」セクション参照 | code-generator(先行作業: 既存E2Eのfail-closed化・+page.svelte分割・実機最小確認) → unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 4件) → code-generator(S-1〜S-3等修正) → オーケストレーター(実アプリでレイアウト確認) |
+
+## 2026-10-04 Phase 11 OS クリップボード連携(SPEC-0300-0011 第8版ほか)テスト実行結果
+
+- `cargo test`: 864件全成功(AC-06-8 の not_found 項目ごと失敗のバックエンドテスト4件を含む)。`cargo check --release`・`cargo clippy`(clipboard 関連の警告0)成功。`npx vitest run`: 113ファイル/2236件全成功。`npx tsc --noEmit`・`npx svelte-check` エラー0。`+page.svelte` 380行。
+- 実装: OS クリップボード(CF_HDROP + Preferred DropEffect)の読み書き。unsafe は `fs_ops/clipboard/clipboard_win.rs` のみ(19ブロック、全てに SAFETY)。新しい外部ライブラリなし(windows-sys の features を3つ追加)。外部由来は常にコピー、切り取りが移動になるのは自分が書いた内容が残っているときだけ(更新番号、0は不明)。
+- 実機確認(code-generator): メインウィンドウ HWND を所有者として SetClipboardData 成功、エクスプローラーの貼り付けでアプリのコピーはコピー・切り取りは移動(日本語名・フォルダ含む)、他アプリが書いたファイル一覧の貼り付けは DropEffect の値によらず常にコピー、.lnk は .lnk 自体をコピー、更新番号は CloseClipboard の前後で不変、IsClipboardFormatAvailable で開かずに有無を確認可。
+- E2E の安全策(既存の穴の修正を含む): ページ内 IPC スタブを fail-closed 化し、postMessage 経路への切り替わりを検出したら中止(Phase 9/10 の E2E にあった穴)。二重防御として debug 限定の `REFLEXFILES_E2E_FS_SCOPE` でバックエンドがテスト用フォルダ外へのファイル変更9コマンドを拒否。OS クリップボードは FileDrop と DropEffect も退避・復元し、退避後に空にしてから開始。
+- E2E: レビュー指摘の修正前の通しで 96 PASS / 0 FAIL / 10 SKIP。修正後の通しは 83 PASS / 0 FAIL / 23 SKIP(利用者のクリップボードに退避・復元できない HTML 形式が入っていたためクリップボード系13件が SKIP)。発注者決定(2026-10-04)により再実行を待たずにコミット。再実行は ISS-0200。AC-06-8 の E2E SKIP は ISS-0199。
+- オーケストレーターが実アプリで確認: `+page.svelte` 分割後の配線(ウィンドウ幅の変更で列幅が 720→471→720 に追従、PageDown でフォーカス移動、例外なし)。
+- 未実施: `tests/manual/phase11-clipboard-checklist.md` の目視確認。
 
 ## 2026-10-03 Phase 10 右クリックメニュー(SPEC-0300-0018)テスト実行結果
 

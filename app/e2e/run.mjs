@@ -10,13 +10,20 @@
 //   --selftest-abort                 expect a different override folder on purpose: the run must stop
 //                                    before sending any input and exit with code 1 (SPEC-0400-0001 AC-08 ii)
 //
-// OS clipboard (SPEC-0400-0001 R-09): the "copy path" checks (AC-1051 / 1052 / 1077) write text to your
-// real clipboard. Before them the clipboard is read from the test side (PowerShell); text or empty is saved and
-// restored afterwards (also on failure); anything else (image, files, HTML, ...) makes those checks SKIP.
-// Copy plain text only before a run if you want them to execute (copying from a browser or IDE often adds
-// "HTML Format" and they are skipped). With Windows clipboard history / cloud sync on, the text written by the
-// test can remain in the history or sync target. The window must be in the foreground for writeText.
-// Self test of the guard: node e2e/lib/clipboard.mjs --selftest
+// OS clipboard (SPEC-0400-0001 R-09 / R-09-1 ~ R-09-3): the clipboard checks ("copy path" AC-1051 / 1052 / 1077
+// and the file-list copy / cut / paste checks of specs/clipboard.mjs) use your real clipboard. Before them it is
+// read from the test side (Windows PowerShell 5.1); empty, text or a file list (+ Preferred DropEffect) is saved,
+// the clipboard is emptied for the test, and the saved content is restored afterwards (also on failure; a restore
+// that fails twice FAILS the test); anything else (image, HTML, a file list together with text, ...) makes those
+// checks SKIP. Copy plain text or files only before a run if you want them to execute (copying from a browser or
+// IDE often adds "HTML Format" and they are skipped). With Windows clipboard history / cloud sync on, the content
+// written by the test can remain in the history or sync target. The window must be in the foreground for writeText.
+// Self tests (no app needed): node e2e/lib/clipboard.mjs --selftest | node e2e/lib/context.mjs --selftest |
+//                             node e2e/lib/scope.mjs --selftest
+//
+// File operations (SPEC-0200-0001 §3.10.17): the page stubs refuse every file-changing command except
+// fs_ops_copy / fs_ops_move inside withScopedFileOps (only paths inside the test folder), and the backend is
+// started with REFLEXFILES_E2E_FS_SCOPE = the test folder so it refuses anything outside it as well.
 //
 // Exit code: 0 = no FAIL and the run was not aborted; 1 otherwise.
 
@@ -59,7 +66,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "viewer", "config"];
+const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "config"];
 
 async function loadTests() {
   const all = [];
@@ -83,18 +90,24 @@ async function main() {
   const tests = (await loadTests()).filter((t) => options.filter === undefined || t.id.startsWith(options.filter));
   if (tests.length === 0) throw new AbortRun(`no test matches --filter ${options.filter}`);
 
-  handle = options.attach
-    ? await attachApp({ cdpPort: options.port, allowRealConfig: options.realConfig, log })
-    : await launchApp({
-        appDir,
-        cdpPort: options.port,
-        timeoutMs: options.timeout * 1000,
-        log,
-        expectOverride: options.selftestAbort ? path.join(os.tmpdir(), "rf-e2e-deliberately-wrong") : undefined,
-      });
+  if (options.attach) {
+    handle = await attachApp({ cdpPort: options.port, allowRealConfig: options.realConfig, log });
+    // the kept app's backend only accepts file operations inside the folder it was started with
+    fx = new Fixtures(handle.fsScope ? { root: handle.fsScope } : {});
+  } else {
+    // The test folder exists BEFORE the launch: it is the backend's E2E file scope (R-10).
+    fx = new Fixtures();
+    handle = await launchApp({
+      appDir,
+      cdpPort: options.port,
+      timeoutMs: options.timeout * 1000,
+      log,
+      fsScope: fx.root,
+      expectOverride: options.selftestAbort ? path.join(os.tmpdir(), "rf-e2e-deliberately-wrong") : undefined,
+    });
+  }
 
   cdp = await Cdp.connect(handle.target.webSocketDebuggerUrl);
-  fx = new Fixtures();
   log(`test folder: ${fx.root}`);
   const ctx = createContext({ cdp, fx, shotsDir: options.shots, log });
   ctx.port = handle.cdpPort;
@@ -136,6 +149,17 @@ async function main() {
           ...(shot ? [`screenshot: ${shot}`] : []),
         ]);
       }
+    }
+  }
+
+  // MUST-118 (c): the IPC must still be intercepted (no postMessage fallback; the probe is refused).
+  if (!report.aborted) {
+    try {
+      await ctx.verifyStubs();
+    } catch (error) {
+      if (!(error instanceof AbortRun)) throw error;
+      report.aborted = true;
+      report.record("FAIL", "MUST-118", "IPC stubs still in force at the end of the run", 0, [`ABORT: ${error.message}`]);
     }
   }
 
@@ -190,7 +214,8 @@ try {
   try {
     cdp?.close();
     if (handle) await shutdown(handle, { keep: options.keep });
-    fx?.dispose();
+    // a --keep run leaves the app (and its backend scope = the test folder) alive; an attached run does not own the folder
+    if (!options.keep && !handle?.attached) fx?.dispose();
   } catch (error) {
     extra.push(`cleanup problem: ${error.message}`);
   }

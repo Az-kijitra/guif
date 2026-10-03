@@ -44,3 +44,21 @@ describe("resolvePasteMode (SPEC-0300-0011 R-19, R-19-1)", () => {
     expect(mode).toBe("copy");
   });
 });
+
+// Phase 11 (TDD, unit-test-writer 2026-10-03): the effect WRITTEN to the OS clipboard.
+// SPEC-0300-0011 R-16, R-15-2; SPEC-0200-0001 §3.10.8 (osEffectFor: only an internal cut writes "move").
+import { osEffectFor } from "./clipboard-mode";
+
+describe("osEffectFor (R-16, R-15-2)", () => {
+  it("an internal cut writes 'move' (Preferred DropEffect = 2)", () => {
+    expect(osEffectFor("internal-cut")).toBe("move");
+  });
+
+  it("an internal copy writes 'copy' (Preferred DropEffect = 1)", () => {
+    expect(osEffectFor("internal-copy")).toBe("copy");
+  });
+
+  it("an external origin never writes 'move'", () => {
+    expect(osEffectFor("external")).toBe("copy");
+  });
+});

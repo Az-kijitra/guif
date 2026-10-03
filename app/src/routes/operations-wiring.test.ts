@@ -89,12 +89,13 @@ describe("createOperationControllers: assembly (SPEC-0200-0001 §3.4.7)", () => 
     expect(typeof w.archive.handleAction).toBe("function");
   });
 
-  it("the file-ops controller is assembled exactly as before: copy stores the selection in the internal clipboard and reports it (SPEC-0300-0011 R-14)", async () => {
+  it("the file-ops controller is assembled as before: copy reports the count (SPEC-0300-0011 R-14); Phase 11: the OS port writes the OS clipboard through clipboard_set_files", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ok: true, sequence: 5 });
     const w = wire({ selected: new Set([A.path]) });
     expect(w.fileOps.handleAction("copy", { shiftKey: false })).toBe(true);
     await flush();
     expect(w.status.show).toHaveBeenCalledWith("1件をコピーしました");
-    expect(vi.mocked(invoke)).not.toHaveBeenCalled(); // internal clipboard: no IPC
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("clipboard_set_files", expect.objectContaining({ paths: [A.path], effect: "copy" }));
   });
 
   it("the file-ops controller does not react to zip actions and the archive controller does not react to file-op actions", () => {
@@ -218,5 +219,106 @@ describe("archive controller wired to the real ipc wrappers (command names, came
     const update = w.modal.showProgress.mock.results[0].value.update as ReturnType<typeof vi.fn>;
     expect(update).toHaveBeenCalledWith({ label: "展開中 mine.txt (1/1)", index: 1, total: 1 });
     expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ label: expect.stringContaining("ignored") }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 11 (TDD, unit-test-writer 2026-10-03): the OS clipboard port replaces the internal one.
+// SPEC-0300-0011 R-15-2 / R-15-3 / R-16 / R-19-2 / R-19-6 / CB-06 / CB-11;
+// SPEC-0200-0001 §3.10.8 (one replacement point: operations-wiring) / §3.10.9.
+// Only the Tauri boundary is mocked, so command names and camelCase argument names are verified too.
+describe("OS clipboard port assembly (Phase 11)", () => {
+  const EXT = "D:\\ext\\x.txt";
+
+  function ipcMock(over: Record<string, unknown> = {}) {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd in over) {
+        const v = over[cmd];
+        if (typeof v === "function") return (v as (a: unknown) => unknown)(args);
+        return v;
+      }
+      if (cmd === "clipboard_set_files") return { ok: true, sequence: 5 };
+      if (cmd === "clipboard_get_files") return { state: "none", paths: [], sequence: 5 };
+      if (cmd === "clipboard_clear_if_unchanged") return true;
+      if (cmd === "fs_ops_detect_conflicts") return [];
+      if (cmd === "fs_ops_copy" || cmd === "fs_ops_move") return { ok: 1, failed: 0, total: 1, skipped: 0, failures: [] };
+      return undefined;
+    });
+    vi.mocked(listen).mockImplementation(async () => () => {});
+  }
+
+  it("the returned clipboard is the OS port: it has hasItems and afterMove", () => {
+    ipcMock();
+    const w = wire();
+    expect(typeof w.clipboard.hasItems).toBe("function");
+    expect(typeof w.clipboard.afterMove).toBe("function");
+  });
+
+  it("R-16: cut writes the OS clipboard with effect \"move\", copy with \"copy\"", async () => {
+    ipcMock();
+    const w = wire({ selected: new Set([A.path]) });
+    w.fileOps.handleAction("cut", { shiftKey: false });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("clipboard_set_files", expect.objectContaining({ paths: [A.path], effect: "move" }));
+    expect(w.status.show).toHaveBeenCalledWith("1件を切り取りました");
+  });
+
+  it("R-15-3 / CB-06: when the IPC rejects the status says the OS write failed (no dialog) and the app clipboard still pastes", async () => {
+    ipcMock({ clipboard_set_files: () => Promise.reject(new Error("boom")) });
+    const w = wire({ selected: new Set([A.path]) });
+    w.fileOps.handleAction("copy", { shiftKey: false });
+    await flush();
+    expect(w.status.show).toHaveBeenCalledWith("1件をコピーしました(OSのクリップボードには書き込めませんでした)");
+    expect(w.modal.confirm).not.toHaveBeenCalled();
+    // OS has no files (get -> none): the app-internal copy is pasted (R-19-4)
+    w.fileOps.handleAction("paste", { shiftKey: false });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("fs_ops_copy", expect.objectContaining({ items: [A.path], destination: DIR }));
+  });
+
+  it("R-19-2: paste reads the OS clipboard (probeOnly false); OS files are pasted as a COPY of exactly those paths", async () => {
+    ipcMock({ clipboard_get_files: { state: "files", paths: [EXT], sequence: 9 } });
+    const w = wire();
+    w.fileOps.handleAction("paste", { shiftKey: false });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("clipboard_get_files", expect.objectContaining({ probeOnly: false }));
+    expect(invoke).toHaveBeenCalledWith("fs_ops_copy", expect.objectContaining({ items: [EXT], destination: DIR }));
+    expect(invoke).not.toHaveBeenCalledWith("fs_ops_move", expect.anything());
+  });
+
+  it("R-19-6: a cut whose OS content is unchanged is MOVED, and after full success the OS is cleared only if unchanged", async () => {
+    ipcMock({
+      clipboard_set_files: { ok: true, sequence: 5 },
+      clipboard_get_files: { state: "files", paths: [A.path], sequence: 5 },
+    });
+    const w = wire({ selected: new Set([A.path]) });
+    w.fileOps.handleAction("cut", { shiftKey: false });
+    await flush();
+    w.fileOps.handleAction("paste", { shiftKey: false });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("fs_ops_move", expect.objectContaining({ items: [A.path] }));
+    expect(invoke).toHaveBeenCalledWith("clipboard_clear_if_unchanged", { sequence: 5 });
+  });
+
+  it("R-19-5: a cut followed by a changed OS clipboard (sequence differs) pastes as a COPY with the CB-13 notice", async () => {
+    ipcMock({
+      clipboard_set_files: { ok: true, sequence: 5 },
+      clipboard_get_files: { state: "none", paths: [], sequence: 8 },
+    });
+    const w = wire({ selected: new Set([A.path]) });
+    w.fileOps.handleAction("cut", { shiftKey: false });
+    await flush();
+    w.fileOps.handleAction("paste", { shiftKey: false });
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("fs_ops_copy", expect.objectContaining({ items: [A.path] }));
+    expect(invoke).not.toHaveBeenCalledWith("fs_ops_move", expect.anything());
+    expect(w.status.show.mock.calls.some((c) => String(c[0]).endsWith("(切り取りの後にクリップボードが変わったため、コピーしました)"))).toBe(true);
+  });
+
+  it("CB-11: clipboard.hasItems() asks clipboard_get_files with probeOnly true", async () => {
+    ipcMock({ clipboard_get_files: { state: "files", paths: [], sequence: 1 } });
+    const w = wire();
+    expect(await w.clipboard.hasItems()).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("clipboard_get_files", expect.objectContaining({ probeOnly: true }));
   });
 });

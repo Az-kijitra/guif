@@ -338,3 +338,73 @@ fn minor2_move_fallback_refuses_an_existing_destination() {
     assert_eq!(read(&dst), "existing");
     assert_eq!(read(&src), "src");
 }
+
+// ---------- Phase 11: R-24 / R-19-7 / AC-06-8 (paths from the OS clipboard may not exist) ----------
+//
+// An item that no longer exists is a per-item `not_found` failure; it never rejects the whole
+// batch, and the remaining items are processed (the OS clipboard path goes through the same
+// commands as the in-app one, SPEC-0200-0001 §3.10.10).
+
+#[test]
+fn ac06_8_copy_with_a_missing_item_in_the_middle_copies_the_rest_and_reports_not_found() {
+    let root = tempdir();
+    let a = write(root.path(), "src/a.txt", "A");
+    let missing = root.path().join("src").join("zz.txt");
+    let c = write(root.path(), "src/c.txt", "C");
+    let dest = root.path().join("dst");
+    std::fs::create_dir_all(&dest).unwrap();
+
+    let summary = copy_batch(&[a, missing.clone(), c], &dest, ConflictResolution::Reject);
+
+    assert_eq!((summary.total, summary.ok, summary.failed, summary.skipped), (3, 2, 1, 0), "{summary:?}");
+    assert_eq!(summary.failures.len(), 1);
+    assert_eq!(summary.failures[0].path, missing);
+    assert_eq!(summary.failures[0].code, "not_found");
+    assert_eq!(read(&dest.join("a.txt")), "A");
+    assert_eq!(read(&dest.join("c.txt")), "C");
+}
+
+#[test]
+fn ac06_8_move_with_a_missing_item_moves_the_rest_and_reports_not_found() {
+    let root = tempdir();
+    let a = write(root.path(), "src/a.txt", "A");
+    let missing = root.path().join("src").join("zz.txt");
+    let dest = root.path().join("dst");
+    std::fs::create_dir_all(&dest).unwrap();
+
+    let summary = move_batch(&[missing.clone(), a.clone()], &dest, ConflictResolution::Reject);
+
+    assert_eq!((summary.total, summary.ok, summary.failed), (2, 1, 1), "{summary:?}");
+    assert_eq!(summary.failures[0].path, missing);
+    assert_eq!(summary.failures[0].code, "not_found");
+    assert_eq!(read(&dest.join("a.txt")), "A");
+    assert!(!a.exists(), "the item that exists was moved");
+}
+
+// When every item is missing the batch still ends as per-item failures (no batch-level rejection).
+#[test]
+fn ac06_8_a_batch_of_only_missing_items_fails_each_item_with_not_found() {
+    let root = tempdir();
+    let dest = root.path().join("dst");
+    std::fs::create_dir_all(&dest).unwrap();
+    let items = [root.path().join("x1.txt"), root.path().join("x2.txt")];
+
+    let summary = copy_batch(&items, &dest, ConflictResolution::Reject);
+
+    assert_eq!((summary.total, summary.ok, summary.failed), (2, 0, 2), "{summary:?}");
+    assert!(summary.failures.iter().all(|f| f.code == "not_found"));
+}
+
+// Conflict detection skips a missing item instead of erroring (R-24: `continue`).
+#[test]
+fn ac06_8_detect_conflicts_ignores_a_missing_item() {
+    let root = tempdir();
+    let a = write(root.path(), "src/a.txt", "A");
+    write(root.path(), "dst/a.txt", "existing");
+    let missing = root.path().join("src").join("zz.txt");
+
+    let conflicts = super::transfer::detect_conflicts(&[missing, a], &root.path().join("dst")).expect("no batch-level error");
+
+    assert_eq!(conflicts.len(), 1, "only a.txt conflicts");
+    assert_eq!(conflicts[0].name, "a.txt");
+}

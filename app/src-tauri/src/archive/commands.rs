@@ -23,6 +23,7 @@ use super::path_rules::strip_verbatim_prefix;
 use super::progress::{should_emit, ArchiveProgressDto, ProgressEvent, EMIT_INTERVAL};
 use crate::shared::cancel::CancelGuard;
 use crate::shared::cancel::CancelRegistry;
+use crate::shared::e2e_scope::{self, ScopeViolation, VIOLATION_CODE};
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -77,6 +78,11 @@ pub struct ExtractResultDto {
     pub destination: String,
     pub outcome: String,
     pub error: Option<ArchiveErrorDto>,
+}
+
+/// Debug-only E2E scope refusal (SPEC-0400-0001 R-10-3): rejected before anything is read or written.
+fn scope_error(violation: ScopeViolation) -> ArchiveErrorDto {
+    ArchiveErrorDto { code: VIOLATION_CODE.to_string(), message: violation.0, entry_path: None }
 }
 
 /// Path text for the UI: no `\\?\` prefix (SHOULD-90).
@@ -182,6 +188,10 @@ pub fn archive_create(
     base_dir: String,
     overwrite: bool,
 ) -> Result<CreateResultDto, ArchiveErrorDto> {
+    // R-10: output folder = container; items and base_dir are read sources.
+    e2e_scope::check_container(Path::new(&output_path).parent().unwrap_or(Path::new(""))).map_err(scope_error)?;
+    items.iter().try_for_each(|item| e2e_scope::check_source(Path::new(item))).map_err(scope_error)?;
+    e2e_scope::check_source(Path::new(&base_dir)).map_err(scope_error)?;
     // Registers the id (an early cancel is kept, R-387-2) and unregisters on exit.
     let guard = CancelGuard::new(cancel_registry.inner(), &operation_id);
     let throttle = Throttle::default();
@@ -229,6 +239,9 @@ pub fn archive_extract(
     base_dir: String,
     resolutions: Option<HashMap<String, String>>,
 ) -> Result<ExtractResultDto, ArchiveErrorDto> {
+    // R-10: destination = container; the ZIP is a read source.
+    e2e_scope::check_container(Path::new(&destination)).map_err(scope_error)?;
+    e2e_scope::check_source(Path::new(&zip_path)).map_err(scope_error)?;
     // Registers the id (an early cancel is kept, R-387-2) and unregisters on exit.
     let guard = CancelGuard::new(cancel_registry.inner(), &operation_id);
     let throttle = Throttle::default();

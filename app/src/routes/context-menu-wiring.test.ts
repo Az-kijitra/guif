@@ -61,7 +61,13 @@ interface Harness {
   deps: ContextMenuWiringDeps;
   log: string[];
   list: { currentPath: string; selected: Set<string>; displayed: DisplayedEntry[]; overlay: boolean; clipboardContent: unknown };
-  clipboardPort: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
+  clipboardPort: {
+    hasItems: ReturnType<typeof vi.fn>;
+    get: ReturnType<typeof vi.fn>;
+    set: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
+    afterMove: ReturnType<typeof vi.fn>;
+  };
   clock: { t: number };
   rightClick(el: ContextEventTarget, x?: number, y?: number): Promise<void>;
   openRow(e: DisplayedEntry, x?: number, y?: number): Promise<void>;
@@ -78,10 +84,14 @@ function setup(over: { displayed?: DisplayedEntry[]; selected?: string[]; clipbo
   };
   const log: string[] = [];
   const clock = { t: 1000 };
+  // Phase 11 (SPEC-0200-0001 §3.10.9): the menu's dependency is `{ hasItems(): Promise<boolean> }`.
+  // `get` / `set` / `clear` / `afterMove` are present only so the tests can assert the menu never calls them.
   const clipboardPort = {
+    hasItems: vi.fn(async () => list.clipboardContent !== null && list.clipboardContent !== undefined),
     get: vi.fn(async () => list.clipboardContent),
     set: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
+    afterMove: vi.fn(async () => {}),
   };
   let wiringRef: ReturnType<typeof createContextMenuWiring> | undefined;
   const deps: ContextMenuWiringDeps = {
@@ -196,13 +206,13 @@ describe("opening: row menu (R-1000, R-1020, R-1022, R-1024, AC-1000)", () => {
   it("the sync part (focus + selection) is finished BEFORE the clipboard promise settles (R-1004)", async () => {
     const h = setup();
     let release: (v: unknown) => void = () => {};
-    h.clipboardPort.get.mockImplementation(() => new Promise((r) => (release = r)));
+    h.clipboardPort.hasItems.mockImplementation(() => new Promise((r) => (release = r)));
     h.wiring.onPointerDown({ button: 2 });
     const p = h.wiring.onContextMenu({ target: rowEl(A), clientX: 1, clientY: 2 });
     expect(h.log).toContain(`contextClickRow:${A.path}`);
     expect(h.log).toContain("focus");
     expect(h.wiring.state.isOpen).toBe(false);
-    release(null);
+    release(false);
     await p;
     expect(h.wiring.state.isOpen).toBe(true);
   });
@@ -224,13 +234,44 @@ describe("opening: row menu (R-1000, R-1020, R-1022, R-1024, AC-1000)", () => {
     expect(rename).toMatchObject({ enabled: true });
   });
 
-  it("clipboardHasItems comes from the app clipboard (AC-1024)", async () => {
+  it("clipboardHasItems comes from clipboard.hasItems() (AC-1024 / AC-1024-1)", async () => {
     const empty = setup({ clipboard: null });
     await empty.openRow(A);
     expect((empty.wiring.state.snapshot as MenuSnapshot).clipboardHasItems).toBe(false);
     const full = setup();
     await full.openRow(A);
     expect((full.wiring.state.snapshot as MenuSnapshot).clipboardHasItems).toBe(true);
+  });
+
+  // Phase 11 (R-1040-1, CB-11): the OS is asked EVERY time the menu opens, through hasItems only.
+  it("AC-1024-1: every menu open asks hasItems() once (never get()), so the OS is re-checked each time", async () => {
+    const h = setup();
+    await h.openRow(A);
+    h.wiring.closeNow();
+    await h.openRow(B);
+    expect(h.clipboardPort.hasItems).toHaveBeenCalledTimes(2);
+    expect(h.clipboardPort.get).not.toHaveBeenCalled();
+  });
+
+  it("AC-1024-1: hasItems() true => ペースト is enabled; false => disabled with the existing reason", async () => {
+    const h = setup();
+    h.clipboardPort.hasItems.mockResolvedValue(true);
+    await h.openRow(A);
+    let paste = (h.wiring.state.snapshot as MenuSnapshot).entries.find((e) => e.type === "item" && e.id === "paste");
+    expect(paste).toMatchObject({ enabled: true });
+    const n = setup();
+    n.clipboardPort.hasItems.mockResolvedValue(false);
+    await n.openRow(A);
+    paste = (n.wiring.state.snapshot as MenuSnapshot).entries.find((e) => e.type === "item" && e.id === "paste");
+    expect(paste).toMatchObject({ enabled: false });
+  });
+
+  it("R-1040-1: a hasItems() rejection is treated as 'nothing to paste' and the menu still opens", async () => {
+    const h = setup();
+    h.clipboardPort.hasItems.mockRejectedValue(new Error("ipc down"));
+    await h.openRow(A);
+    expect(h.wiring.state.isOpen).toBe(true);
+    expect((h.wiring.state.snapshot as MenuSnapshot).clipboardHasItems).toBe(false);
   });
 
   it("the ZIP judgment is injected: c.zip alone enables ZIPを解凍", async () => {
@@ -369,7 +410,7 @@ describe("menu already open (R-1088, G-5, AC-1076)", () => {
 describe("open request token and re-checks after the await (§3.9.4, SHOULD-162)", () => {
   function deferredGet(h: Harness) {
     const resolvers: Array<(v: unknown) => void> = [];
-    h.clipboardPort.get.mockImplementation(() => new Promise((r) => resolvers.push(r)));
+    h.clipboardPort.hasItems.mockImplementation(() => new Promise((r) => resolvers.push(r)));
     return resolvers;
   }
 
@@ -380,9 +421,9 @@ describe("open request token and re-checks after the await (§3.9.4, SHOULD-162)
     const p1 = h.wiring.onContextMenu({ target: rowEl(A), clientX: 1, clientY: 1 });
     h.wiring.onPointerDown({ button: 2 });
     const p2 = h.wiring.onContextMenu({ target: rowEl(B), clientX: 2, clientY: 2 });
-    resolvers[1](null);
+    resolvers[1](false);
     await p2;
-    resolvers[0](null);
+    resolvers[0](false);
     await p1;
     expect(h.wiring.state.isOpen).toBe(true);
     expect((h.wiring.state.snapshot as MenuSnapshot).targets.map((t) => t.path)).toEqual([B.path]);
@@ -394,7 +435,7 @@ describe("open request token and re-checks after the await (§3.9.4, SHOULD-162)
     h.wiring.onPointerDown({ button: 2 });
     const p = h.wiring.onContextMenu({ target: rowEl(A), clientX: 1, clientY: 1 });
     h.list.overlay = true;
-    resolvers[0](null);
+    resolvers[0](false);
     await p;
     expect(h.wiring.state.isOpen).toBe(false);
   });
@@ -405,7 +446,7 @@ describe("open request token and re-checks after the await (§3.9.4, SHOULD-162)
     h.wiring.onPointerDown({ button: 2 });
     const p = h.wiring.onContextMenu({ target: rowEl(A), clientX: 1, clientY: 1 });
     h.list.currentPath = "C:\\other";
-    resolvers[0](null);
+    resolvers[0](false);
     await p;
     expect(h.wiring.state.isOpen).toBe(false);
   });
@@ -419,7 +460,7 @@ describe("while shown: nothing is re-evaluated (R-1042, AC-1027) and the directo
     h.list.displayed = [A, B, Z, D, { path: P("new.txt"), name: "new.txt", entryType: "file" }];
     h.list.clipboardContent = null;
     expect(JSON.stringify(h.wiring.state.snapshot)).toBe(before);
-    expect(h.clipboardPort.get).toHaveBeenCalledTimes(1);
+    expect(h.clipboardPort.hasItems).toHaveBeenCalledTimes(1);
   });
 
   it("a different current directory closes the menu (focus returns to the list, nothing executed)", async () => {
@@ -678,6 +719,8 @@ describe("copy_path (R-1060, AC-1050, AC-1052, AC-1053)", () => {
     await vi.waitFor(() => expect(h.deps.status.show).toHaveBeenCalled());
     expect(h.clipboardPort.set).not.toHaveBeenCalled();
     expect(h.clipboardPort.clear).not.toHaveBeenCalled();
+    expect(h.clipboardPort.afterMove).not.toHaveBeenCalled();
+    expect(h.clipboardPort.get).not.toHaveBeenCalled();
     expect(h.deps.fileOps.handleAction).not.toHaveBeenCalled();
   });
 
@@ -843,7 +886,13 @@ describe("wording consistency with the real controllers (MUST-115)", () => {
       ipc: {} as never,
       modal: {} as never,
       status: { show: (m: string) => void shown.push(m) },
-      clipboard: { set: async () => {}, get: async () => null, clear: async () => {} },
+      clipboard: {
+        set: async () => ({ os: "not-applicable" as const }),
+        get: async () => null,
+        clear: async () => {},
+        hasItems: async () => false,
+        afterMove: async () => {},
+      },
       context: () => ({ currentPath: "C:\\w", entries: [], selected: [], focusedPath: null }),
       reload: async () => {},
     });

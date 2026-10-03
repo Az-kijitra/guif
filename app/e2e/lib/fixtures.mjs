@@ -7,8 +7,9 @@ import os from "node:os";
 import path from "node:path";
 
 export class Fixtures {
-  constructor() {
-    this.root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "rf-e2e-")));
+  /** `root` only for --attach: reuse the folder the kept app was started with (its backend scope). */
+  constructor({ root } = {}) {
+    this.root = root ?? fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "rf-e2e-")));
   }
 
   /** Absolute path of `rel` below the root (no creation). */

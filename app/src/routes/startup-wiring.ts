@@ -12,6 +12,10 @@
 // explicitly a DIFFERENT order from the apply order.
 
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
+import { configLoadKeymap } from "$lib/shared/ipc/config";
+import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
+import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
+import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
 
 export interface StartupHydrateDeps {
   loadUiState: () => Promise<{ notice: string | null }>;
@@ -37,4 +41,13 @@ export async function runStartupHydrate(deps: StartupHydrateDeps): Promise<void>
     // tree load-failure message) appends instead of clobbering this one.
     statusMessage.showPriority(notices.join(" / "), STARTUP_NOTICE_DURATION_MS);
   }
+}
+
+// Keymap load for `runStartupHydrate`'s `loadKeymap` (SPEC-0200-0001 §3.10.1 S1): applies the
+// validated effective keymap to the feature state, then returns only the notice text.
+export async function loadKeymapForStartup(): Promise<{ notice: string | null }> {
+  const raw = await configLoadKeymap();
+  const validated = validateKeymapEntries(raw.entries);
+  keymapState.hydrate(validated.effective);
+  return { notice: buildKeymapLoadNotice(raw.parseError, validated.invalidActions) };
 }

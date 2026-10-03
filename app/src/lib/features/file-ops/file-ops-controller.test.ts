@@ -57,7 +57,13 @@ function deferred<T>() {
 interface HarnessOptions {
   selected?: string[];
   focusedPath?: string | null;
-  clipboard?: { paths: string[]; origin: "internal-copy" | "internal-cut" | "external" } | null;
+  clipboard?: {
+    paths: string[];
+    origin: "internal-copy" | "internal-cut" | "external";
+    notice?: "cut-changed" | "cut-write-failed";
+  } | null;
+  /** Phase 11: what `clipboard.set` reports for the OS write (default: "not-applicable"). */
+  osResult?: "written" | "failed" | "not-applicable";
   conflicts?: { path: string; name: string }[];
   confirmAnswers?: { buttonId: string; checked: boolean }[];
 }
@@ -125,11 +131,15 @@ function makeHarness(opts: HarnessOptions = {}) {
   const clipboard = {
     set: vi.fn(async (v: { paths: string[]; origin: "internal-copy" | "internal-cut" }) => {
       clipboardState = { paths: [...v.paths], origin: v.origin };
+      return { os: opts.osResult ?? "not-applicable" };
     }),
     get: vi.fn(async () => clipboardState),
     clear: vi.fn(async () => {
       clipboardState = null;
     }),
+    // Phase 11 (SPEC-0200-0001 §3.10.8): the controller hands the post-move bookkeeping to the port.
+    hasItems: vi.fn(async () => clipboardState !== null),
+    afterMove: vi.fn(async (_failedPaths: readonly string[]) => {}),
   };
   const reload = vi.fn(async (_o?: { focusPath?: string; clearSelection?: boolean }) => null as string | null);
 
@@ -287,17 +297,29 @@ describe("paste: no conflicts (R-13, R-19, R-32; AC-01, AC-13)", () => {
     expect(h.reload).toHaveBeenCalledWith(expect.objectContaining({ clearSelection: true }));
   });
 
-  it("§3.3.4 step 6: a successful move clears the internal cut clipboard; a copy keeps the clipboard", async () => {
+  // Phase 11 (R-19-6, SPEC-0200-0001 §3.10.8): the post-move clear / rewrite moved INTO the port;
+  // the controller makes exactly ONE call, `clipboard.afterMove(failedPaths)`, and never clear/set.
+  it("R-19-6: a successful move calls clipboard.afterMove([]) once; a copy never calls it", async () => {
     const moved = makeHarness({ clipboard: { paths: src, origin: "internal-cut" } });
     await moved.run("paste");
-    expect(moved.clipboard.clear).toHaveBeenCalledTimes(1);
+    expect(moved.clipboard.afterMove).toHaveBeenCalledTimes(1);
+    expect(moved.clipboard.afterMove).toHaveBeenCalledWith([]);
+    expect(moved.clipboard.clear).not.toHaveBeenCalled();
+    expect(moved.clipboard.set).not.toHaveBeenCalled();
 
     const copied = makeHarness({ clipboard: { paths: src, origin: "internal-copy" } });
     await copied.run("paste");
+    expect(copied.clipboard.afterMove).not.toHaveBeenCalled();
     expect(copied.clipboard.clear).not.toHaveBeenCalled();
   });
 
-  it("a move in which nothing succeeded (ok = 0) does not clear the clipboard", async () => {
+  it("R-19-6: an external (OS) paste is a copy and never calls afterMove", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "external" } });
+    await h.run("paste");
+    expect(h.clipboard.afterMove).not.toHaveBeenCalled();
+  });
+
+  it("a move in which nothing succeeded (ok = 0) does not call afterMove", async () => {
     const h = makeHarness({ clipboard: { paths: src, origin: "internal-cut" } });
     h.ipc.move.mockResolvedValueOnce({
       ok: 0,
@@ -310,10 +332,11 @@ describe("paste: no conflicts (R-13, R-19, R-32; AC-01, AC-13)", () => {
       ],
     });
     await h.run("paste");
+    expect(h.clipboard.afterMove).not.toHaveBeenCalled();
     expect(h.clipboard.clear).not.toHaveBeenCalled();
   });
 
-  it("minor 6: a partially failed cut keeps only the failed items on the clipboard (all-success clears)", async () => {
+  it("R-19-6 (2): a partially failed cut passes the failed paths to afterMove (ONE call)", async () => {
     const h = makeHarness({ clipboard: { paths: src, origin: "internal-cut" } });
     h.ipc.move.mockResolvedValueOnce({
       ok: 1,
@@ -323,8 +346,20 @@ describe("paste: no conflicts (R-13, R-19, R-32; AC-01, AC-13)", () => {
       failures: [{ path: src[1], code: "io_error", message: "y" }],
     });
     await h.run("paste");
+    expect(h.clipboard.afterMove).toHaveBeenCalledTimes(1);
+    expect(h.clipboard.afterMove).toHaveBeenCalledWith([src[1]]);
     expect(h.clipboard.clear).not.toHaveBeenCalled();
-    expect(h.clipboard.set).toHaveBeenCalledWith({ paths: [src[1]], origin: "internal-cut" });
+    expect(h.clipboard.set).not.toHaveBeenCalled();
+  });
+
+  it("afterMove runs after the result status is shown and before the reload", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "internal-cut" } });
+    const order: string[] = [];
+    h.status.show.mockImplementation(() => void order.push("status"));
+    h.clipboard.afterMove.mockImplementation(async () => void order.push("afterMove"));
+    h.reload.mockImplementation(async () => (order.push("reload"), null));
+    await h.run("paste");
+    expect(order).toEqual(["status", "afterMove", "reload"]);
   });
 
   it("minor 5: a rejected paste invoke still reloads the listing", async () => {
@@ -974,5 +1009,102 @@ describe("MUST-61 at the controller boundary: targets come only from what contex
     expect(h.modal.confirm).not.toHaveBeenCalled();
     expect(h.modal.form).not.toHaveBeenCalled();
     expect(h.clipboard.set).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 11 (TDD, unit-test-writer 2026-10-03): OS clipboard wiring.
+// SPEC-0300-0011 R-15-3 / CB-06 (status when the OS write failed), R-19-5 / CB-13
+// (a notice appended to the RESULT status), R-19-2 (external origin = copy);
+// SPEC-0200-0001 §3.10.8 (the 3 controller changes), §3.10.14 G-4.
+describe("copy / cut status after the OS write (R-15-3, CB-06)", () => {
+  it("success: the existing wording, nothing appended", async () => {
+    const copy = makeHarness({ selected: [p("a.txt"), p("b.txt")], osResult: "written" });
+    await copy.run("copy");
+    expect(copy.status.show).toHaveBeenCalledWith("2件をコピーしました");
+    const cut = makeHarness({ selected: [p("a.txt")], osResult: "written" });
+    await cut.run("cut");
+    expect(cut.status.show).toHaveBeenCalledWith("1件を切り取りました");
+  });
+
+  it("not-applicable (internal-only port) uses the same wording", async () => {
+    const h = makeHarness({ selected: [p("a.txt")], osResult: "not-applicable" });
+    await h.run("copy");
+    expect(h.status.show).toHaveBeenCalledWith("1件をコピーしました");
+  });
+
+  it("CB-06: OS write failed => the wording with (OSのクリップボードには書き込めませんでした), status only, no dialog", async () => {
+    const copy = makeHarness({ selected: [p("a.txt"), p("b.txt")], osResult: "failed" });
+    await copy.run("copy");
+    expect(copy.status.show).toHaveBeenCalledWith("2件をコピーしました(OSのクリップボードには書き込めませんでした)");
+    expect(copy.modal.confirm).not.toHaveBeenCalled();
+    const cut = makeHarness({ selected: [p("a.txt")], osResult: "failed" });
+    await cut.run("cut");
+    expect(cut.status.show).toHaveBeenCalledWith("1件を切り取りました(OSのクリップボードには書き込めませんでした)");
+    expect(cut.modal.confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe("paste notices (R-19-5, CB-13) and origins (R-19-2)", () => {
+  const src = [p("a.txt"), p("b.txt")];
+  const CHANGED = "(切り取りの後にクリップボードが変わったため、コピーしました)";
+  const WRITE_FAILED = "(切り取りをOSのクリップボードに書き込めなかったため、コピーしました)";
+
+  it("cut-changed: appended to the result status with no separator", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "internal-copy", notice: "cut-changed" } });
+    await h.run("paste");
+    const shown = h.status.show.mock.calls.map((c) => c[0] as string);
+    const result = shown.find((m) => m.endsWith(CHANGED));
+    expect(result).toBeDefined();
+    expect(result).toMatch(/^.+コピー.*\(切り取りの後/);
+    expect(result!.slice(0, result!.length - CHANGED.length)).not.toMatch(/\s$/);
+  });
+
+  it("cut-write-failed: the OS-write-failure wording is appended", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "internal-copy", notice: "cut-write-failed" } });
+    await h.run("paste");
+    expect(h.status.show.mock.calls.some((c) => (c[0] as string).endsWith(WRITE_FAILED))).toBe(true);
+  });
+
+  it("no notice => the result status is exactly the unchanged one", async () => {
+    const plain = makeHarness({ clipboard: { paths: src, origin: "internal-copy" } });
+    await plain.run("paste");
+    const withNotice = makeHarness({ clipboard: { paths: src, origin: "internal-copy", notice: "cut-changed" } });
+    await withNotice.run("paste");
+    const base = plain.status.show.mock.calls[0][0] as string;
+    expect(withNotice.status.show.mock.calls[0][0]).toBe(base + CHANGED);
+  });
+
+  it("an OS (external) paste with the cut-changed notice (L-7) copies, and the notice is appended", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "external", notice: "cut-changed" } });
+    await h.run("paste");
+    expect(h.ipc.copy).toHaveBeenCalledTimes(1);
+    expect(h.ipc.move).not.toHaveBeenCalled();
+    expect(h.status.show.mock.calls.some((c) => (c[0] as string).endsWith(CHANGED))).toBe(true);
+  });
+
+  // G-4: nothing was pasted when the conflict dialog is cancelled => no result, no notice.
+  it("conflict dialog cancelled: nothing is pasted and no notice is shown", async () => {
+    const h = makeHarness({
+      clipboard: { paths: src, origin: "internal-copy", notice: "cut-changed" },
+      conflicts: [{ path: src[0], name: "a.txt" }],
+      confirmAnswers: [{ buttonId: "cancel", checked: false }],
+    });
+    await h.run("paste");
+    expect(h.ipc.copy).not.toHaveBeenCalled();
+    expect(h.status.show.mock.calls.some((c) => (c[0] as string).includes("切り取りの後"))).toBe(false);
+  });
+
+  it("an empty clipboard still shows the existing status 貼り付ける項目がありません", async () => {
+    const h = makeHarness({ clipboard: null });
+    await h.run("paste");
+    expect(h.status.show).toHaveBeenCalledWith("貼り付ける項目がありません");
+  });
+
+  it("paste reads the clipboard through clipboard.get() at run time (OS is re-read on every paste, R-19-2)", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "internal-copy" } });
+    await h.run("paste");
+    await h.run("paste");
+    expect(h.clipboard.get).toHaveBeenCalledTimes(2);
   });
 });

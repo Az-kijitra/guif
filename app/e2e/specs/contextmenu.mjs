@@ -16,7 +16,7 @@
 import { MOD, sleep } from "../lib/cdp.mjs";
 import { Cdp, listTargets } from "../lib/cdp.mjs";
 import { Skip } from "../lib/report.mjs";
-import { readClipboardText, withClipboardGuard } from "../lib/clipboard.mjs";
+import { readClipboardText } from "../lib/clipboard.mjs";
 import { RGB } from "./_util.mjs";
 
 const row = (name) => `.app-shell .file-list-row[aria-label=${JSON.stringify(name)}]`;
@@ -414,7 +414,7 @@ export const tests = [
       await prep(ctx);
       await ctx.cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
       if (!(await ctx.ev(`document.hasFocus()`))) throw new Skip("the document does not have the focus (navigator.clipboard.writeText needs it)");
-      await withClipboardGuard(async () => {
+      await ctx.withClipboardGuard(async () => {
         await selectRows(ctx, ["a.txt", "d"]);
         const order = await rowOrder(ctx);
         const paths = await ctx.ev(`[...document.querySelectorAll('.app-shell .file-list-row[aria-selected=true]')].map((e) => e.getAttribute('data-entry-path'))`);
@@ -438,7 +438,7 @@ export const tests = [
       await openRowMenu(ctx, "a.txt");
       await clickItem(ctx, "copy");
       await ctx.settle(150);
-      await withClipboardGuard(async () => {
+      await ctx.withClipboardGuard(async () => {
         await openRowMenu(ctx, "b.txt");
         await clickItem(ctx, "copy_path");
         await ctx.settle(300);
@@ -649,7 +649,7 @@ export const tests = [
       t.eq(await ctx.ev(`!!document.querySelector('[role=dialog]')`), false, "nothing executed");
       await ctx.cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
       try {
-        await withClipboardGuard(async () => {
+        await ctx.withClipboardGuard(async () => {
           await clickItem(ctx, "copy_path");
           await ctx.settle(300);
         });

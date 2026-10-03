@@ -6,8 +6,10 @@
 import { createArchiveController } from "$lib/features/archive/archive-controller";
 import { createInternalClipboard } from "$lib/features/file-ops/clipboard-port";
 import { createFileOpsController } from "$lib/features/file-ops/file-ops-controller";
+import { createOsClipboardPort, type OsClipboardIpc } from "$lib/features/file-ops/os-clipboard-port";
 import type { ConfirmSpec, FormSpec, ProgressHandle, ProgressSpec } from "$lib/shared/state/modal-host.svelte";
 import { archiveIpc } from "./archive-ipc";
+import { clipboardIpc } from "./clipboard-ipc";
 import { fileOpsIpc } from "./file-ops-ipc";
 import { createFileOpsContext } from "./list-action-wiring";
 
@@ -24,6 +26,8 @@ export interface OperationControllerDeps {
   selected: () => ReadonlySet<string>;
   focusedPath: () => string | null;
   reload: (opts?: { focusPath?: string; clearSelection?: boolean }) => Promise<unknown>;
+  /** Tests only: the OS clipboard IPC (defaults to the real Tauri wrappers). */
+  clipboardIpc?: OsClipboardIpc;
 }
 
 // Operation targets are limited to the displayed entries (MUST-61); reloads
@@ -37,8 +41,9 @@ export function createOperationControllers(deps: OperationControllerDeps) {
     selected: deps.selected,
     focusedPath: deps.focusedPath,
   });
-  // The menu reads this same instance (SPEC-0200-0001 §3.9.4); it never writes it.
-  const clipboard = createInternalClipboard();
+  // OS clipboard first, the app-internal one as the fallback (SPEC-0300-0011 R-15~R-19; §3.10.8).
+  // The menu reads this same instance (SPEC-0200-0001 §3.9.4); it only asks `hasItems()`.
+  const clipboard = createOsClipboardPort({ internal: createInternalClipboard(), ipc: deps.clipboardIpc ?? clipboardIpc });
   const fileOps = createFileOpsController({
     ipc: fileOpsIpc,
     modal: deps.modal,

@@ -61,6 +61,10 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "archive_detect_conflicts",
     "archive_extract",
     "archive_cancel",
+    // Phase 11 (SPEC-0300-0011 R-18, CB-12; SPEC-0200-0001 §3.10.6):
+    "clipboard_set_files",
+    "clipboard_get_files",
+    "clipboard_clear_if_unchanged",
 ];
 
 /// Removes `// ...` line comments (good enough for the three files here).
@@ -358,7 +362,7 @@ fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
 // (rather than the test staying green today and breaking unexpectedly
 // later).
 #[test]
-fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives() {
+fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives_plus_phase11_clipboard() {
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
         "allow-fs-list-drives",
@@ -383,6 +387,10 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_ph
         "allow-config-load-keymap",
         "allow-ui-state-load",
         "allow-ui-state-save",
+        // Phase 11 (SPEC-0300-0011 R-18; SPEC-0200-0001 §3.10.6): 23 -> 26.
+        "allow-clipboard-set-files",
+        "allow-clipboard-get-files",
+        "allow-clipboard-clear-if-unchanged",
     ]
     .into_iter()
     .map(String::from)
@@ -497,6 +505,48 @@ fn must64_every_tauri_command_defined_in_viewer_commands_is_registered() {
     assert_eq!(defined.len(), 7, "viewer/commands.rs must define the seven viewer_* commands, found {defined:?}");
     let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
     assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+// ---------------------------------------------------------------------
+// Phase 11 (SPEC-0300-0011 R-18, CB-12; SPEC-0200-0001 §3.10.6): the three
+// clipboard commands. TDD (unit-test-writer, 2026-10-03) -- RED until
+// code-generator adds `fs_ops/clipboard/commands.rs` commands and wires the
+// three places. They are main-window only (never in viewer.json: the viewer's
+// text copy is the WebView's own feature, R-464).
+// ---------------------------------------------------------------------
+
+#[test]
+fn must64_every_tauri_command_defined_in_clipboard_commands_is_registered() {
+    let source = include_str!("fs_ops/clipboard/commands.rs");
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let cleaned = strip_line_comments(production_part);
+    let mut parts = cleaned.split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String =
+                after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("clipboard_") {
+                defined.insert(name);
+            }
+        }
+    }
+    let expected = set(&["clipboard_set_files", "clipboard_get_files", "clipboard_clear_if_unchanged"]);
+    assert_eq!(defined, expected, "fs_ops/clipboard/commands.rs must define exactly the three clipboard_* commands");
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+#[test]
+fn phase11_the_three_clipboard_permissions_never_appear_in_viewer_json() {
+    let viewer_perms = all_permissions(VIEWER_CAPABILITY_JSON);
+    for p in ["allow-clipboard-set-files", "allow-clipboard-get-files", "allow-clipboard-clear-if-unchanged"] {
+        assert!(!viewer_perms.contains(p), "{p} must be main-only (default.json), not in viewer.json");
+        assert!(all_permissions(CAPABILITY_JSON).contains(p), "{p} must be granted by default.json");
+    }
 }
 
 // ---------------------------------------------------------------------

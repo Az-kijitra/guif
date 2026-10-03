@@ -8,6 +8,7 @@
 //! (checked by `archive::boundary_tests`).
 
 pub mod cancel;
+pub mod e2e_scope;
 pub(crate) mod identity;
 pub mod schema;
 
@@ -16,3 +17,7 @@ pub mod schema;
 mod cancel_tests;
 #[cfg(test)]
 mod identity_tests;
+
+// TDD (unit-test-writer, Phase 11, 2026-10-03): E2E scope tests (SPEC-0400-0001 R-10).
+#[cfg(test)]
+mod e2e_scope_tests;

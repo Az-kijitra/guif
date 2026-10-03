@@ -28,6 +28,9 @@
     "allow-config-load-keymap",
     "allow-ui-state-load",
     "allow-ui-state-save",
+    "allow-clipboard-set-files",
+    "allow-clipboard-get-files",
+    "allow-clipboard-clear-if-unchanged",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

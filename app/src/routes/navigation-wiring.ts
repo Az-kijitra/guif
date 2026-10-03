@@ -41,6 +41,20 @@ export function createAfterUserNavigation(deps: AfterUserNavigationDeps) {
   };
 }
 
+// §3.10.1 S2: the single call-through point for every R-208 move (history record + tree follow).
+// The initial load (R-208 #6) stays silent on failure: a vanished last-visited path falls back to home.
+export function createNavigationFollowers(deps: {
+  recordVisit: (path: string) => void;
+  followTree: (path: string) => void;
+  notify: (message: string) => void;
+}) {
+  const hooks = { recordVisit: deps.recordVisit, followTree: deps.followTree };
+  return {
+    afterUserNavigation: createAfterUserNavigation({ ...hooks, notifyFailure: deps.notify }),
+    afterInitialLoad: createAfterUserNavigation({ ...hooks, notifyFailure: () => {} }),
+  };
+}
+
 // --- §3.2.7: initial path -------------------------------------------------
 
 export interface InitialDirectoryDeps {

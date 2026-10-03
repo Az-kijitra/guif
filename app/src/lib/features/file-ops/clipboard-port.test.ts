@@ -71,3 +71,44 @@ describe("createInternalClipboard (R-15-1)", () => {
     expect(await two.get()).toBeNull();
   });
 });
+
+// Phase 11 (TDD, unit-test-writer 2026-10-03): the extended port shape on the internal implementation.
+// SPEC-0300-0011 R-19-6, R-1040-1; SPEC-0200-0001 §3.10.8:
+//   set -> { os: "not-applicable" }, get -> as before without `notice`, hasItems -> non-empty,
+//   afterMove -> clear when nothing failed, else keep only the failed items as a cut.
+describe("createInternalClipboard: Phase 11 additions", () => {
+  it("set resolves { os: 'not-applicable' } (there is no OS to write)", async () => {
+    const cb = createInternalClipboard();
+    expect(await cb.set({ paths: ["C:\a.txt"], origin: "internal-copy" })).toEqual({ os: "not-applicable" });
+  });
+
+  it("get carries no `notice`", async () => {
+    const cb = createInternalClipboard();
+    await cb.set({ paths: ["C:\a.txt"], origin: "internal-cut" });
+    expect(await cb.get()).toEqual({ paths: ["C:\a.txt"], origin: "internal-cut" });
+    expect(await cb.get()).not.toHaveProperty("notice");
+  });
+
+  it("hasItems: false when empty, true when something is stored, false again after clear", async () => {
+    const cb = createInternalClipboard();
+    expect(await cb.hasItems()).toBe(false);
+    await cb.set({ paths: ["C:\a.txt"], origin: "internal-copy" });
+    expect(await cb.hasItems()).toBe(true);
+    await cb.clear();
+    expect(await cb.hasItems()).toBe(false);
+  });
+
+  it("afterMove([]) empties the clipboard", async () => {
+    const cb = createInternalClipboard();
+    await cb.set({ paths: ["C:\a.txt", "C:\b.txt"], origin: "internal-cut" });
+    await cb.afterMove([]);
+    expect(await cb.get()).toBeNull();
+  });
+
+  it("afterMove(failed) keeps only the failed items, as a cut, in their given order", async () => {
+    const cb = createInternalClipboard();
+    await cb.set({ paths: ["C:\a.txt", "C:\b.txt", "C:\c.txt"], origin: "internal-cut" });
+    await cb.afterMove(["C:\c.txt", "C:\b.txt"]);
+    expect(await cb.get()).toEqual({ paths: ["C:\c.txt", "C:\b.txt"], origin: "internal-cut" });
+  });
+});

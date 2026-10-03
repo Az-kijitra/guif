@@ -535,3 +535,59 @@ describe("Phase 9 visual-design boundaries (SPEC-0300-0017 R-913, SPEC-0200-0001
     expect(bad).toEqual([]);
   });
 });
+
+describe("Phase 11 OS clipboard boundaries (SPEC-0200-0001 §3.10.12 / §3.10.15, SPEC-0300-0011 R-17-3)", () => {
+  const prod = (rel: string) => join(SRC, rel);
+  const FILE_OPS = "lib/features/file-ops";
+  const NEW_MODULES = [
+    `${FILE_OPS}/os-clipboard-port.ts`,
+    `${FILE_OPS}/clipboard-source.ts`,
+    `${FILE_OPS}/clipboard-messages.ts`,
+    "lib/shared/ipc/clipboard.ts",
+    "routes/clipboard-ipc.ts",
+  ];
+
+  it("the planned modules exist", () => {
+    for (const rel of NEW_MODULES) {
+      expect(() => statSync(prod(rel)), rel).not.toThrow();
+    }
+  });
+
+  it("os-clipboard-port / clipboard-source / clipboard-messages import neither @tauri-apps/* nor shared/ipc (the IPC is injected)", () => {
+    for (const name of ["os-clipboard-port", "clipboard-source", "clipboard-messages"]) {
+      const specs = specifiersOf(readFileSync(prod(`${FILE_OPS}/${name}.ts`), "utf8"));
+      const bad = specs.filter((s) => s.startsWith("@tauri-apps/") || s.includes("shared/ipc"));
+      expect(bad, name).toEqual([]);
+    }
+  });
+
+  it("features/file-ops production files import no other feature and no routes (re-checked with the new modules)", () => {
+    const dir = prod(FILE_OPS);
+    for (const file of readdirSync(dir).filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts"))) {
+      const specs = specifiersOf(readFileSync(join(dir, file), "utf8"));
+      const bad = specs.filter((s) => /(^|\/)features\/(?!file-ops)/.test(s) || s.includes("routes/") || s.startsWith("@tauri-apps/"));
+      expect(bad, file).toEqual([]);
+    }
+  });
+
+  it("R-17-3: features/file-ops reads no text from the clipboard (navigator.clipboard.read / readText)", () => {
+    const dir = prod(FILE_OPS);
+    for (const file of readdirSync(dir).filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts"))) {
+      const code = stripComments(readFileSync(join(dir, file), "utf8"));
+      expect(/navigator\s*\.\s*clipboard\s*\.\s*read/.test(code), file).toBe(false);
+    }
+  });
+
+  it("shared/ipc/clipboard.ts imports no feature and no routes", () => {
+    const specs = specifiersOf(readFileSync(prod("lib/shared/ipc/clipboard.ts"), "utf8"));
+    expect(specs.filter((s) => s.includes("features/") || s.includes("routes/"))).toEqual([]);
+  });
+
+  it("the context-menu feature stays independent: it does not import file-ops (the menu receives hasItems from routes/)", () => {
+    const dir = prod("lib/features/context-menu");
+    for (const file of readdirSync(dir).filter((n) => /\.(ts|svelte)$/.test(n) && !n.endsWith(".test.ts"))) {
+      const specs = specifiersOf(readFileSync(join(dir, file), "utf8"));
+      expect(specs.filter((s) => s.includes("file-ops")), file).toEqual([]);
+    }
+  });
+});

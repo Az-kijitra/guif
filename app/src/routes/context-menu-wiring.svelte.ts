@@ -34,8 +34,9 @@ export interface ContextMenuWiringDeps {
   filteredEntries: () => readonly DisplayedEntry[];
   // Dialog / history / jump list / sort menu open (R-1101).
   isOverlayOpen: () => boolean;
-  // The app-internal clipboard (read-only for the menu: R-1060-4).
-  clipboard: { get(): Promise<unknown | null> };
+  // The clipboard port, read-only for the menu (R-1060-4): only the OS-file / app-internal
+  // "has anything" answer, asked on every open (R-1040-1, CB-11; SPEC-0200-0001 §3.10.9).
+  clipboard: { hasItems(): Promise<boolean> };
   focus: { container(): void };
   fileOps: { handleAction(action: string, event: { shiftKey: boolean }): unknown };
   archive: { handleAction(action: string): unknown };
@@ -156,7 +157,7 @@ export function createContextMenuWiring(deps: ContextMenuWiringDeps) {
 
     let clipboardHasItems = false;
     try {
-      clipboardHasItems = (await deps.clipboard.get()) !== null;
+      clipboardHasItems = await deps.clipboard.hasItems();
     } catch {
       clipboardHasItems = false;
     }

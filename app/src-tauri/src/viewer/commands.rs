@@ -197,6 +197,9 @@ pub fn viewer_classify_path(window: Window, path: String) -> Result<String, View
 #[tauri::command(async)]
 pub fn viewer_os_open_path(window: Window, path: String) -> Result<(), ViewerErrorDto> {
     guard(&window, MAIN_WINDOW_LABEL)?;
+    // R-10-5: while an E2E scope is active no other program is ever launched.
+    crate::shared::e2e_scope::check_external_launch(Path::new(&path))
+        .map_err(|violation| err(ViewerErrorCode::ViewerPathNotAllowed, violation.to_command_error()))?;
     let resolved = resolve_target(Path::new(&path))?;
     tauri_plugin_opener::open_path(&resolved, None::<&str>)
         .map_err(|e| err(ViewerErrorCode::Unknown, e.to_string()))

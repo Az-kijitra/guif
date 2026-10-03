@@ -12,6 +12,7 @@ import type { ConfirmSpec, FormSpec, ProgressHandle, ProgressSpec } from "$lib/s
 import type { FileOpsConflict, FileOpsItemResolutions, FileOpsSummary } from "$lib/shared/ipc/file-ops";
 import type { ClipboardPort } from "./clipboard-port";
 import { resolvePasteMode } from "./clipboard-mode";
+import { appendPasteNotice, formatCopyCutStatus } from "./clipboard-messages";
 import { createConflictDialogState, runConflictSessionAsync, type ConflictChoice } from "./conflict-flow";
 import { initialCreateState } from "./create-flow";
 import { buildDeleteConfirmContent, resolveDeleteMode, type DeleteMode } from "./delete-flow";
@@ -109,8 +110,8 @@ export function createFileOpsController(deps: FileOpsDeps) {
       status.show(NO_SELECTION_MESSAGE);
       return;
     }
-    await clipboard.set({ paths, origin });
-    status.show(origin === "internal-cut" ? `${paths.length}件を切り取りました` : `${paths.length}件をコピーしました`);
+    const written = await clipboard.set({ paths, origin });
+    status.show(formatCopyCutStatus(origin, paths.length, written.os)); // CB-06: notes an OS write failure
   }
 
   // --- paste (R-19, R-25, R-30~R-35, R-40~R-45) ----------------------------
@@ -211,15 +212,10 @@ export function createFileOpsController(deps: FileOpsDeps) {
     }
 
     const report = buildResultReport(summary, mode);
-    status.show(report.status);
-    // A moved item no longer exists at its old path: drop the cut clipboard,
-    // keeping only the items that failed to move (nothing moved: unchanged).
-    if (mode === "move" && summary.ok > 0) {
-      const failed = new Set(summary.failures.map((f) => f.path));
-      const remaining = clip.paths.filter((p) => failed.has(p));
-      if (remaining.length === 0) await clipboard.clear();
-      else await clipboard.set({ paths: remaining, origin: "internal-cut" });
-    }
+    status.show(appendPasteNotice(report.status, clip.notice)); // CB-13 / R-19-5
+    // A moved item no longer exists at its old path (R-19-6): the port drops the cut, keeping
+    // only the items that failed to move (nothing moved: unchanged).
+    if (mode === "move" && summary.ok > 0) await clipboard.afterMove(summary.failures.map((f) => f.path));
     await deps.reload({ clearSelection: true });
     if (report.failureDialog !== null) await showFailureDialog(report.failureDialog);
   }

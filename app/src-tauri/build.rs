@@ -35,6 +35,9 @@ fn main() {
                 "viewer_read_text",
                 "viewer_read_image",
                 "viewer_navigate",
+                "clipboard_set_files",
+                "clipboard_get_files",
+                "clipboard_clear_if_unchanged",
             ])),
     )
     .expect("failed to run tauri-build");

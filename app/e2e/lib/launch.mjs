@@ -6,6 +6,9 @@
 //  2. the app must print `[config] override dir: <that path>` on stderr; if the line
 //     is missing or names another path, the app is killed BEFORE the page is ever
 //     connected, so not a single input is sent;
+//  2b. REFLEXFILES_E2E_FS_SCOPE = the test folder is passed too (debug builds): the backend then
+//     refuses file operations outside it (SPEC-0400-0001 R-10); the notice `E2E fs scope active: ...`
+//     must be seen on stderr before any input is sent (SPEC-0200-0001 §3.10.17.6);
 //  3. after the run, the real settings folder (%APPDATA%\dev.reflexfiles.successor\)
 //     must be unchanged (modification times compared with a snapshot taken before).
 
@@ -21,6 +24,8 @@ export const IDENTIFIER = "dev.reflexfiles.successor";
 export const REAL_CONFIG_DIR = path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), IDENTIFIER);
 const KEEP_FILE = path.join(os.tmpdir(), "rf-e2e-keep.json");
 const OVERRIDE_LINE = /^\[config\] override dir: (.*)$/;
+// SPEC-0400-0001 R-10-2 / SPEC-0200-0001 §3.10.17.6: the backend's notice that the E2E file scope is active.
+const SCOPE_LINE = /^E2E fs scope active: (.*)$/;
 
 export class AbortRun extends Error {}
 
@@ -125,6 +130,11 @@ function normalizePathForCompare(p) {
   return path.resolve(p.trim()).replace(/[\\/]+$/, "").toLowerCase();
 }
 
+/** SHOULD-178: the backend prints the canonical (verbatim, `\\?\`) form; compare with that prefix stripped on BOTH sides. */
+export function stripExtendedPrefix(p) {
+  return p.trim().replace(/^\\\\\?\\/, "");
+}
+
 function removeDir(dir) {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -143,7 +153,12 @@ function removeDir(dir) {
  * Launches `tauri dev` and returns once the override line has been verified and the main
  * page is listed by the debug port. Throws AbortRun (after killing the app) otherwise.
  */
-export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride }) {
+export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope }) {
+  // R-10: the backend refuses file operations outside this folder (the test folder, realpath form).
+  if (typeof fsScope !== "string" || !path.isAbsolute(fsScope) || !fs.statSync(fsScope).isDirectory()) {
+    throw new AbortRun(`unusable E2E file scope folder: ${fsScope}`);
+  }
+  const scopeRoot = fs.realpathSync.native(fsScope);
   await assertPortsFree([VITE_PORT, cdpPort]);
 
   const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), "rf-e2e-cfg-"));
@@ -172,9 +187,10 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}`,
       WEBVIEW2_USER_DATA_FOLDER: userData,
       REFLEXFILES_CONFIG_DIR: cfgDir,
+      REFLEXFILES_E2E_FS_SCOPE: scopeRoot,
     },
   });
-  const handle = { child, pid: child.pid, cfgDir, userData, logDir, realBefore, cdpPort, attached: false };
+  const handle = { child, pid: child.pid, cfgDir, userData, logDir, realBefore, cdpPort, attached: false, fsScope: scopeRoot };
   let exited = false;
   child.on("exit", () => {
     exited = true;
@@ -210,6 +226,24 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
     await fail(`override dir mismatch: the app reports "${overrideLine}" but the test folder is "${expected}"; no input was sent`);
   }
   log(`verified: the app reports the override folder ${overrideLine}`);
+
+  // (1b) the E2E file scope notice (printed right after the override line); no input before it is verified.
+  let scopeLine;
+  for (;;) {
+    const lines = stderrLines();
+    const found = lines.map((line) => SCOPE_LINE.exec(line)).find((m) => m !== null);
+    if (found) {
+      scopeLine = found[1];
+      break;
+    }
+    if (exited) await fail("the app exited before printing `E2E fs scope active:`; last stderr lines:\n" + lines.slice(-15).join("\n"));
+    if (Date.now() > deadline) await fail("timed out waiting for the `E2E fs scope active:` line on stderr; no input was sent");
+    await sleep(500);
+  }
+  if (normalizePathForCompare(stripExtendedPrefix(scopeLine)) !== normalizePathForCompare(stripExtendedPrefix(scopeRoot))) {
+    await fail(`E2E file scope mismatch: the app reports "${scopeLine}" but the test folder is "${scopeRoot}"; no input was sent`);
+  }
+  log(`verified: the backend limits file operations to ${scopeLine}`);
 
   // (2) the main page.
   let target;
@@ -263,6 +297,11 @@ export async function attachApp({ cdpPort, allowRealConfig, log }) {
   const targets = await listTargets(port);
   const target = targets.find((t) => t.type === "page" && !t.url.includes("/viewer") && t.url.startsWith("http"));
   if (target === undefined) throw new AbortRun("no main page found on the debug port");
+  // S-3: without the recorded backend scope the app cannot be shown to refuse file operations outside the
+  // test folder, and the specs change files: refuse to run at all.
+  if (!kept?.fsScope) {
+    throw new AbortRun("--attach: the backend file scope (REFLEXFILES_E2E_FS_SCOPE) of this app cannot be confirmed; refusing to run specs that change files");
+  }
   return {
     child: undefined,
     pid: kept?.pid,
@@ -272,6 +311,7 @@ export async function attachApp({ cdpPort, allowRealConfig, log }) {
     realBefore: kept?.realBefore ?? snapshotDir(REAL_CONFIG_DIR),
     cdpPort: port,
     attached: true,
+    fsScope: kept?.fsScope,
     target,
   };
 }
@@ -289,6 +329,7 @@ export async function shutdown(handle, { keep }) {
         userData: handle.userData,
         logDir: handle.logDir,
         realBefore: handle.realBefore,
+        fsScope: handle.fsScope,
       }),
     );
     handle.child?.unref();
