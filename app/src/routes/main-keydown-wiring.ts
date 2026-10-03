@@ -27,6 +27,8 @@ export interface MainKeydownWiringDeps {
   modal: { readonly isOpen: boolean };
   history: { readonly isOpen: boolean };
   sortMenu: { readonly isOpen: boolean };
+  // SPEC-0300-0018 / SPEC-0200-0001 §3.9.17.7: the right-click menu (optional).
+  contextMenu?: { readonly isOpen: boolean; handleKey(event: KeydownLikeEvent): boolean };
   search: { readonly active: boolean; readonly inputFocused: boolean };
   onHardcodedShortcut: (action: "exit" | "settings") => boolean;
   onExitAction: (action: string) => boolean;
@@ -72,6 +74,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       searchActive: deps.search.active,
       searchInputFocused: deps.search.inputFocused,
       sortMenuOpen: deps.sortMenu.isOpen,
+      contextMenuOpen: deps.contextMenu?.isOpen ?? false,
       pathBarEditing: deps.pathBar?.editing ?? false,
     });
     const ctx: DispatchContext = {
@@ -86,6 +89,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       onExitAction: deps.onExitAction,
       onOverlayKey: (action, overlayEvent) => {
         if (deps.modal.isOpen) return deps.handleModalKey(overlayEvent);
+        if (deps.contextMenu?.isOpen) return deps.contextMenu.handleKey(overlayEvent);
         if (deps.sortMenu.isOpen) {
           if (action === "sort_menu") {
             deps.sortMenuToggle();

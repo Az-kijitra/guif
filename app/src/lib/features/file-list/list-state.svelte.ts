@@ -33,7 +33,7 @@ import {
   selectAllVisible,
   invertSelectionVisible,
 } from "./selection";
-import { resolveRowClick } from "./click";
+import { resolveContextClick, resolveRestoredSelection, resolveRowClick } from "./click";
 import {
   moveFocusPage,
   moveFocusRow,
@@ -314,6 +314,32 @@ export function createFileListState() {
     if (nextReal !== -1) focusedIndex = nextReal;
   }
 
+  // SPEC-0300-0018 R-1020 / SPEC-0200-0001 §3.9.3: right click on a row (modifiers ignored).
+  function contextClickRow(visible: readonly FsEntry[], path: string): void {
+    if (!visible.some((e) => e.path === path)) return;
+    const result = resolveContextClick(
+      visible.map((e) => e.path),
+      { selected, anchor },
+      path,
+    );
+    selected = new Set(result.selected);
+    anchor = result.anchor;
+    const nextReal = toRealIndex(result.focusedIndex, entries, visible);
+    if (nextReal !== -1) focusedIndex = nextReal;
+  }
+
+  // SPEC-0300-0018 R-1056-1 / SPEC-0200-0001 §3.9.17.2: put the menu targets back just before
+  // an item runs. The focused row is left alone.
+  function restoreDisplayedSelection(visible: readonly FsEntry[], paths: readonly string[]): void {
+    const result = resolveRestoredSelection(
+      visible.map((e) => e.path),
+      { selected, anchor },
+      paths,
+    );
+    selected = new Set(result.selected);
+    anchor = result.anchor;
+  }
+
   // SHOULD-37(a)/SPEC-0300-0009 R-54/R-55/SPEC-0300-0012 R-123: select_all and
   // invert-selection operate on the visible (filtered) entries only. Neither
   // touches `focusedIndex`, so no real<->visual conversion is needed.
@@ -496,6 +522,8 @@ export function createFileListState() {
     selectFocused,
     toggleFocused,
     clickRow,
+    contextClickRow,
+    restoreDisplayedSelection,
     selectAll,
     invertSelection,
     focusIndex,

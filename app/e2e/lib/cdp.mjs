@@ -100,10 +100,19 @@ export class Cdp {
     return this.send("Input.insertText", { text });
   }
 
-  async click(x, y, { button = "left" } = {}) {
+  async click(x, y, { button = "left", modifiers = 0, clickCount = 1 } = {}) {
+    await this.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, modifiers });
+    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, buttons: 1, clickCount, modifiers });
+    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, buttons: 0, clickCount, modifiers });
+  }
+
+  /** Right button press + release (buttons 2 while pressed). SPEC-0200-0001 §3.9.17.6. */
+  async rightClick(x, y, { holdMs = 0, onPressed } = {}) {
     await this.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
-    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, buttons: 1, clickCount: 1 });
-    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, buttons: 0, clickCount: 1 });
+    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "right", buttons: 2, clickCount: 1 });
+    if (onPressed) await onPressed();
+    if (holdMs > 0) await sleep(holdMs);
+    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "right", buttons: 0, clickCount: 1 });
   }
 
   hover(x, y) {

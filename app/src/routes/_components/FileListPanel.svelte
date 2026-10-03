@@ -101,6 +101,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="file-list-frame"
+    data-context-area="list"
     bind:clientWidth={containerWidth}
     bind:clientHeight={containerHeight}
     onclick={handleFrameClick}

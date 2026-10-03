@@ -19,6 +19,7 @@ export interface StatusBarModelDeps {
   search: { readonly active: boolean; readonly query: string };
   history: { readonly isOpen: boolean; readonly mode: "history" | "jump" };
   sortMenu: { readonly isOpen: boolean };
+  contextMenu?: { readonly isOpen: boolean };
   modal: { readonly isOpen: boolean };
   pathEditing: () => boolean;
   filteredEntries: () => readonly { path: string }[];
@@ -43,6 +44,7 @@ export function createStatusBarModel(deps: StatusBarModelDeps) {
         historyOpen: deps.history.isOpen,
         historyMode: deps.history.mode,
         sortMenuOpen: deps.sortMenu.isOpen,
+        contextMenuOpen: deps.contextMenu?.isOpen ?? false,
         pathEditing: deps.pathEditing(),
         domArea,
       }),

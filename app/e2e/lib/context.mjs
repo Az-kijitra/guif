@@ -171,10 +171,25 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     await assertSafeToSend();
     await cdp.type(text);
   };
-  ctx.click = async (x, y) => {
+  ctx.click = async (x, y, options) => {
     await assertSafeToSend();
-    await cdp.click(x, y);
+    await cdp.click(x, y, options);
   };
+  // SPEC-0200-0001 §3.9.17.6: the right button goes through the same safety check as ctx.click.
+  ctx.rightClickAt = async (x, y, options) => {
+    await assertSafeToSend();
+    await cdp.rightClick(x, y, options);
+  };
+  ctx.rightClickSel = async (selector, index = 0, options) => {
+    const c = await m.center(selector, index);
+    if (c === null) throw new Error(`rightClickSel: ${selector}[${index}] not found`);
+    await ctx.rightClickAt(c.x, c.y, options);
+    return c;
+  };
+  /** SPEC-0300-0018 §15: dispatch a synthetic contextmenu; returns dispatchEvent's value (false = preventDefault). */
+  ctx.dispatchContextMenu = (selector, { clientX = 10, clientY = 10, index = 0 } = {}) =>
+    cdp.ev(`(() => { const el = document.querySelectorAll(${JSON.stringify(selector)})[${index}]; if (!el) return "missing";
+      return el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: ${clientX}, clientY: ${clientY} })); })()`);
   ctx.hover = (x, y) => cdp.hover(x, y);
   ctx.wheel = (x, y, dx, dy, mods = 0) => cdp.wheel(x, y, dx, dy, mods);
 

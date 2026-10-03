@@ -48,3 +48,8 @@ export function createTabStopController(deps: TabStopControllerDeps): (direction
     return true;
   };
 }
+
+// SPEC-0200-0001 §3.9.17.7: where the keyboard focus is now (moved out of +page.svelte).
+export function resolveCurrentStop(s: { isTreeFocused: boolean; searchInputFocused: boolean }): TabStopId {
+  return s.isTreeFocused ? "tree" : s.searchInputFocused ? "search" : "list";
+}

@@ -22,11 +22,13 @@ export function computeDispatchOverlayFlags(s: {
   searchActive: boolean;
   searchInputFocused: boolean;
   sortMenuOpen?: boolean;
+  contextMenuOpen?: boolean; // SPEC-0300-0018 R-1083: masks search / path bar like the sort menu
   pathBarEditing?: boolean;
 }) {
   const sortMenuOpen = s.sortMenuOpen ?? false;
-  const masked = s.modalOpen || sortMenuOpen;
-  const isOverlayOpen = s.modalOpen || s.historyOpen || sortMenuOpen;
+  const contextMenuOpen = s.contextMenuOpen ?? false;
+  const masked = s.modalOpen || sortMenuOpen || contextMenuOpen;
+  const isOverlayOpen = s.modalOpen || s.historyOpen || sortMenuOpen || contextMenuOpen;
   return {
     isOverlayOpen,
     isSearchActive: s.searchActive && !masked,
@@ -134,4 +136,14 @@ export function syncSortMenuWithModal(s: {
   sortMenu: { readonly isOpen: boolean; close(): void };
 }): void {
   if (s.modalOpen && s.sortMenu.isOpen) s.sortMenu.close();
+}
+
+// SPEC-0300-0018 R-1104 / AC-1083 (SPEC-0200-0001 §3.9.6): a modal opening
+// while the right-click menu is shown closes the menu (state only, no focus
+// handling; the item is never executed).
+export function syncContextMenuWithModal(s: {
+  modalOpen: boolean;
+  contextMenu: { readonly isOpen: boolean; close(): void };
+}): void {
+  if (s.modalOpen && s.contextMenu.isOpen) s.contextMenu.close();
 }

@@ -3,7 +3,7 @@
 
 import { sortKeyLabel, sortOrderMark, type SortKey, type SortOrder } from "$lib/features/file-list/sort";
 
-export type FocusArea = "dialog" | "history" | "jump" | "sort-menu" | "path" | "search" | "tree" | "list" | "none";
+export type FocusArea = "dialog" | "history" | "jump" | "sort-menu" | "context-menu" | "path" | "search" | "tree" | "list" | "none";
 export type DomFocusArea = "search" | "tree" | "list" | null;
 
 export interface FocusAreaInput {
@@ -11,6 +11,7 @@ export interface FocusAreaInput {
   historyOpen: boolean;
   historyMode: "history" | "jump";
   sortMenuOpen: boolean;
+  contextMenuOpen?: boolean; // SPEC-0300-0018 R-1113
   pathEditing: boolean;
   domArea: DomFocusArea;
 }
@@ -36,6 +37,7 @@ export function resolveFocusArea(input: FocusAreaInput): FocusArea {
   if (input.modalOpen) return "dialog";
   if (input.historyOpen) return input.historyMode === "jump" ? "jump" : "history";
   if (input.sortMenuOpen) return "sort-menu";
+  if (input.contextMenuOpen) return "context-menu";
   if (input.pathEditing) return "path";
   if (input.domArea === "search") return "search";
   if (input.domArea === "tree") return "tree";
@@ -48,6 +50,7 @@ const FOCUS_AREA_LABELS: Record<FocusArea, string> = {
   history: "訪問履歴",
   jump: "ジャンプリスト",
   "sort-menu": "ソートメニュー",
+  "context-menu": "右クリックメニュー",
   path: "パス",
   search: "検索",
   tree: "ツリー",

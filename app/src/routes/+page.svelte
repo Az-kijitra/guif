@@ -32,9 +32,12 @@
   import { createListTreeControllers } from "./list-tree-controllers-wiring";
   import { createOperationControllers } from "./operations-wiring";
   import { createSearchActionHandler } from "./search-wiring";
-  import { createModalFocusController, createModalKeyHandler, syncHistoryWithModal, syncSortMenuWithModal } from "./overlay-wiring";
-  import { closeSortMenu, createSortMenuKeyHandler, createSortMenuToggle } from "./sort-menu-wiring";
-  import { createTabStopController } from "./focus-wiring";
+  import { createHistoryRowHandlers } from "./history-row-wiring";
+  import { createModalWiring } from "./modal-wiring.svelte";
+  import { createSortMenuController } from "./sort-menu-wiring";
+  import { createTabStopController, resolveCurrentStop } from "./focus-wiring";
+  import { createMainContextMenu } from "./context-menu-main.svelte";
+  import ContextMenuHost from "./_components/ContextMenuHost.svelte";
   import { runStartupHydrate } from "./startup-wiring";
   import { createMainViewerOpenController } from "./viewer-open-wiring";
   import { createRowInteractionHandlers } from "./row-interaction-wiring";
@@ -110,6 +113,7 @@
     sortMenu: sortMenuState,
   });
   const { activateSearch, openHistoryList } = overlay;
+  const historyRows = createHistoryRowHandlers({ history: navigationHistoryState, overlay, focusContainer: focus.container });
   // SPEC-0300-0016: path bar (R-710 focus_path, R-720 confirm, R-740 Tab).
   const pathBar = createPathBarController({
     currentPath: () => fileListState.currentPath,
@@ -125,28 +129,7 @@
     nextTick: tick,
   });
 
-  const closeSortMenuNow = () => closeSortMenu({ state: sortMenuState, focusContainer: focus.container });
-  const sortMenuToggle = createSortMenuToggle({
-    state: sortMenuState,
-    currentSortKey: () => fileListState.sortKey(),
-    closeSortMenu: closeSortMenuNow,
-  });
-  const handleSortMenuKey = createSortMenuKeyHandler({
-    state: sortMenuState,
-    applySort: (key) => fileListState.applySort(key),
-    closeSortMenu: closeSortMenuNow,
-  });
-
-  // R-971/R-972: permanent status items (focus area tracked from the DOM, SHOULD-149).
-  const status = createStatusBarModel({
-    fileList: fileListState,
-    search: searchState,
-    history: navigationHistoryState,
-    sortMenu: sortMenuState,
-    modal: modalHost,
-    pathEditing: () => pathBar.state.editing,
-    filteredEntries: () => filteredEntries,
-  });
+  const sortMenu = createSortMenuController({ fileList: fileListState, focus, state: sortMenuState });
 
   const isTreeFocused = () => treeState.hasFocus;
   // Bug fix (coordinator WebView2 finding): TabStopControllerDeps.focus is
@@ -155,7 +138,7 @@
   const onTabStop = createTabStopController({
     treeVisible: () => fileListState.showTree(),
     searchVisible: () => searchState.active,
-    currentStop: () => (isTreeFocused() ? "tree" : searchState.inputFocused ? "search" : "list"),
+    currentStop: () => resolveCurrentStop({ isTreeFocused: isTreeFocused(), searchInputFocused: searchState.inputFocused }),
     focus: { tree: focus.tree, search: focus.searchInput, list: focus.container },
   });
 
@@ -190,7 +173,7 @@
   });
 
   // File ops (Phase 2) + ZIP (Phase 5): displayed entries only (MUST-61).
-  const { fileOps, archive } = createOperationControllers({
+  const { fileOps, archive, clipboard } = createOperationControllers({
     modal: modalHost,
     status: statusMessage,
     currentPath: () => fileListState.currentPath,
@@ -216,35 +199,59 @@
     focusedEntry,
     viewer: viewerOpenController,
     isTreeFocused,
-    sortMenuToggle,
+    sortMenuToggle: sortMenu.toggle,
     focusContainer: focus.container,
     treeFullyVisibleRows: () => treeFullyVisibleRows,
     pathBar,
   });
 
-  const modalFocus = createModalFocusController({
+  // SPEC-0300-0018: right-click menu; delegates to the controllers above (no logic here).
+  const contextMenu = createMainContextMenu({
+    fileList: fileListState,
+    filteredEntries: () => filteredEntries,
+    overlays: [modalHost, navigationHistoryState, sortMenuState],
+    clipboard,
+    focus,
+    fileOps,
+    archive,
+    viewer: viewerOpenController,
+    navigate: (path) => afterUserNavigation(fileListState.navigate(path)),
+    status: statusMessage,
+  });
+  $effect(() => {
+    const path = fileListState.currentPath;
+    untrack(() => contextMenu.onCurrentPathChange(path)); // R-1056: a changed directory closes the menu.
+  });
+
+  const { handleModalKey } = createModalWiring({
+    modal: modalHost,
+    history: navigationHistoryState,
+    sortMenu: sortMenuState,
+    contextMenu: contextMenu.state,
     getDialogEl: () => dialogEl,
     focusContainer: focus.container,
-    nextTick: tick,
-    getActiveElement: () => document.activeElement,
   });
-  const handleModalKey = createModalKeyHandler({ modal: modalHost, focus: modalFocus });
 
-  // §3.3.13-6: focus control runs in $effect (after the DOM update, so the
-  // background is no longer inert when the container is refocused).
-  $effect(() => {
-    const topId = modalHost.topId;
-    untrack(() => void modalFocus.onTopIdChange(topId));
-  });
-  // §3.3.2/§3.6.11.1 exclusion invariants (SHOULD-85/MUST-84 (c)).
-  $effect(() => {
-    syncHistoryWithModal({ modalOpen: modalHost.isOpen, history: navigationHistoryState });
-    syncSortMenuWithModal({ modalOpen: modalHost.isOpen, sortMenu: sortMenuState });
+  // R-971/R-972: permanent status items (focus area tracked from the DOM, SHOULD-149).
+  const status = createStatusBarModel({
+    fileList: fileListState,
+    search: searchState,
+    history: navigationHistoryState,
+    sortMenu: sortMenuState,
+    contextMenu: contextMenu.state,
+    modal: modalHost,
+    pathEditing: () => pathBar.state.editing,
+    filteredEntries: () => filteredEntries,
   });
 
   onMount(() => {
     void bootstrap();
-    return status.attach(document, window);
+    const detachStatus = status.attach(document, window);
+    const detachMenu = contextMenu.attach(document, window);
+    return () => {
+      detachStatus();
+      detachMenu();
+    };
   });
 
   // §3.6.2/§3.6.11.11: startup notices are concatenated (config -> ui-state ->
@@ -271,12 +278,13 @@
         modal: modalHost,
         history: navigationHistoryState,
         sortMenu: sortMenuState,
+        contextMenu: { get isOpen() { return contextMenu.state.isOpen; }, handleKey: contextMenu.handleKey },
         search: searchState,
         onHardcodedShortcut: exitOnly,
         onExitAction: exitOnly,
         handleModalKey,
-        handleSortMenuKey,
-        sortMenuToggle,
+        handleSortMenuKey: sortMenu.handleKey,
+        sortMenuToggle: sortMenu.toggle,
         resolveHistoryIntent: (event, action) => overlay.handleIntent(resolveListKeyIntent(event, action)),
         onTreeAction,
         onListAction,
@@ -339,14 +347,8 @@
       historySelectedIndex={navigationHistoryState.selectedIndex}
       historyLabel={navigationHistoryState.mode === "history" ? "Visit history" : "Jump list"}
       bind:historyListEl
-      onHistoryRowClick={(index) => {
-        navigationHistoryState.selectIndex(index);
-        overlay.handleIntent("confirm");
-      }}
-      onHistoryRemove={(index) => {
-        navigationHistoryState.removeIndex(index);
-        if (!navigationHistoryState.isOpen) focus.container();
-      }}
+      onHistoryRowClick={historyRows.onHistoryRowClick}
+      onHistoryRemove={historyRows.onHistoryRemove}
     />
 
     <FileListBody
@@ -379,10 +381,11 @@
       sortMenuHighlightedKey={sortMenuState.highlightedKey}
       sortMenuCurrentKey={fileListState.sortKey()}
       sortMenuCurrentOrder={fileListState.sortOrder()}
-      onSortMenuClose={closeSortMenuNow}
+      onSortMenuClose={sortMenu.closeNow}
     />
 
     <StatusBar items={status.items} message={statusMessage.text} />
+    <ContextMenuHost menu={contextMenu} />
   {/if}
 </main>
 

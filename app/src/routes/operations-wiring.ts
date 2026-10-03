@@ -37,11 +37,13 @@ export function createOperationControllers(deps: OperationControllerDeps) {
     selected: deps.selected,
     focusedPath: deps.focusedPath,
   });
+  // The menu reads this same instance (SPEC-0200-0001 §3.9.4); it never writes it.
+  const clipboard = createInternalClipboard();
   const fileOps = createFileOpsController({
     ipc: fileOpsIpc,
     modal: deps.modal,
     status: deps.status,
-    clipboard: createInternalClipboard(),
+    clipboard,
     context,
     reload: deps.reload,
   });
@@ -52,5 +54,5 @@ export function createOperationControllers(deps: OperationControllerDeps) {
     context,
     reload: deps.reload,
   });
-  return { fileOps, archive };
+  return { fileOps, archive, clipboard };
 }

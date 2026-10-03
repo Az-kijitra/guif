@@ -57,6 +57,7 @@
 
 <div
   id={entry.path}
+  data-entry-path={entry.path}
   class="file-list-row"
   class:focused
   role="option"

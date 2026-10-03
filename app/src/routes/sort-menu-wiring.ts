@@ -86,3 +86,23 @@ export function createSortMenuKeyHandler(
     }
   };
 }
+
+// SPEC-0200-0001 §3.9.11 extraction (2): the three sort-menu functions assembled once.
+export function createSortMenuController(deps: {
+  fileList: { sortKey(): SortKey; applySort(key: SortKey): void };
+  focus: { container(): void };
+  state: SortMenuToggleDeps["state"] & SortMenuKeyHandlerDeps["state"] & CloseSortMenuDeps["state"];
+}) {
+  const closeNow = () => closeSortMenu({ state: deps.state, focusContainer: deps.focus.container });
+  const toggle = createSortMenuToggle({
+    state: deps.state,
+    currentSortKey: () => deps.fileList.sortKey(),
+    closeSortMenu: closeNow,
+  });
+  const handleKey = createSortMenuKeyHandler({
+    state: deps.state,
+    applySort: (key) => deps.fileList.applySort(key),
+    closeSortMenu: closeNow,
+  });
+  return { closeNow, toggle, handleKey };
+}

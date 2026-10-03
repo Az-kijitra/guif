@@ -13,6 +13,16 @@
 | 2026-09-29 | 未採番(SPEC-0300-0009 第8版 / SPEC-0300-0010 第11版、Phase 7) | PASS(フロント・バック双方) | 以下「## 2026-09-29 Phase 7」セクション参照 | unit-test-writer → code-generator → オーケストレーター(400行超過・ページ移動量を差し戻し) → code-reviewer(差し戻し: ソートメニュー再押下がキーマップ非経由、ツリーのページ移動量) → オーケストレーター(実Tauriで不具合2件を検出) → code-generator(修正) → オーケストレーター(ツリー再描画漏れを修正し実Tauriで確認) |
 | 2026-10-01 | 未採番(SPEC-0300-0016 第2版 ほか連動新版、Phase 8) | PASS(フロント・バック双方) | 以下「## 2026-10-01 Phase 8」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(実Tauriで確認) |
 | 2026-10-03 | 未採番(SPEC-0300-0017 第3版・SPEC-0400-0001 第2版ほか、Phase 9) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 9」セクション参照 | unit-test-writer → code-generator(E2E 作成・実行含む) → code-reviewer(PR作成可、SHOULD 4件) → code-generator(E2E 安全策 S-1/S-2/S-4 修正) → オーケストレーター(実アプリで画面確認) |
+| 2026-10-03 | 未採番(SPEC-0300-0018 右クリックメニュー、0010第13版/0011第7版/0015第4版/0017第4版/0009第12版/0014第4版/SPEC-0400-0001第3版、Phase 10) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 10」セクション参照 | unit-test-writer → code-generator(実機確認・E2E含む) → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(SHOULD対応、実アプリで画面確認) |
+
+## 2026-10-03 Phase 10 右クリックメニュー(SPEC-0300-0018)テスト実行結果
+
+- `npx vitest run`: 109ファイル/2113件全成功。`cargo test`: 727件成功。`npx tsc --noEmit`・`npx svelte-check`エラー0(警告6、既存a11y)、`npx vite build`・`cargo build`成功。`+page.svelte` 399行(上限400、次フェーズ前に分割の検討が必要)。
+- E2E(`npm run e2e`): 85 PASS / 0 FAIL / 9 SKIP(SPEC-0300-0018 分は 33 PASS / 4 SKIP)。SKIP の AC-1027/1040/1041/1042 は一覧の再読込をテストから起こせない(ファイル監視なし・変更系 IPC はスタブ)ため単体テストで担保。R-08(実設定フォルダ無変更)PASS。パスのコピーは SPEC-0400-0001 R-09 どおり OS クリップボードを退避・復元し、実行後も元のテキストのまま。
+- 実機確認(ISS-0191、code-generator): preventDefault で WebView2 標準メニューが止まる(入力欄では出る)、CDP の右クリックで pointerdown(2) が届き contextmenu は右ボタンを離した時に発火、Shift+F10/ContextMenu キー由来は pointerdown が無いことで判別可能(pointerType は mouse のため使えない)、メニューを閉じた後の navigator.clipboard.writeText が成功(外部依存・WebView2設定の追加なし)、ダブルクリック2回目の detail は CDP では検証不可([目視])。
+- オーケストレーターが実アプリ(通常起動)で確認: 行の右クリックでその行を選択してメニュー表示、項目と並び順・区切り・無効項目の理由表示(クリップボードが空です、ZIPファイルではありません)、ステータスバー「フォーカス: 右クリックメニュー」、Escape で閉じて一覧へフォーカス。例外なし。
+- code-reviewer SHOULD(対応済み): traceability の状態更新、AC-1078 の前提と R-958 の食い違いを ISS-0192 に起票、スタブ時代のコメント削除。
+- 未実施: `tests/manual/phase10-context-menu-checklist.md` の目視確認。
 
 ## 2026-10-03 Phase 9 見た目(SPEC-0300-0017 第3版、SPEC-0400-0001 第2版、0016第3版/0009第10・11版/0012第5版/0015第3版)テスト実行結果
 

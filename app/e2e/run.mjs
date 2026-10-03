@@ -10,6 +10,14 @@
 //   --selftest-abort                 expect a different override folder on purpose: the run must stop
 //                                    before sending any input and exit with code 1 (SPEC-0400-0001 AC-08 ii)
 //
+// OS clipboard (SPEC-0400-0001 R-09): the "copy path" checks (AC-1051 / 1052 / 1077) write text to your
+// real clipboard. Before them the clipboard is read from the test side (PowerShell); text or empty is saved and
+// restored afterwards (also on failure); anything else (image, files, HTML, ...) makes those checks SKIP.
+// Copy plain text only before a run if you want them to execute (copying from a browser or IDE often adds
+// "HTML Format" and they are skipped). With Windows clipboard history / cloud sync on, the text written by the
+// test can remain in the history or sync target. The window must be in the foreground for writeText.
+// Self test of the guard: node e2e/lib/clipboard.mjs --selftest
+//
 // Exit code: 0 = no FAIL and the run was not aborted; 1 otherwise.
 
 import os from "node:os";
@@ -51,7 +59,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "viewer", "config"];
+const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "viewer", "config"];
 
 async function loadTests() {
   const all = [];
