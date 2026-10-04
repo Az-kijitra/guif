@@ -1995,9 +1995,10 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 - 現状: E2E の AC-06-8 は SKIP。バックエンド単体テスト(fs_ops/data_safety_tests.rs の ac06_8_* 4件)と FE のテストで担保。
 - 必要アクション: AC-06-8 の検証区分を [単体] に改めるか、E2E 用に存在しない項目の扱いを R-10-6 の例外とするかを次の改訂で決める。非ブロッカー。
 
-### ISS-0200(不足〈検証〉・OPEN・非ブロッカー): Phase 11 のレビュー指摘修正後にクリップボード系 E2E を再実行していない
+### ISS-0200(不足〈検証〉 → **RESOLVED 2026-10-04**): Phase 11 のレビュー指摘修正後にクリップボード系 E2E を再実行していない
 
 - 関連Spec: SPEC-0400-0001 第4版 R-09〜R-11-1、SPEC-0300-0011 第8版 AC-04〜AC-06-13、SPEC-0300-0018 第2版 AC-1024-1 / AC-1052-1
 - 事実(2026-10-04): code-reviewer の SHOULD(S-1 isInside の正規化、S-2 explorerPasteForTest の貼り付け元確認、S-3 attach 時の scope 確認)を修正した後の E2E は 83 PASS / 0 FAIL / 23 SKIP。利用者の OS クリップボードに退避・復元できない形式(HTML Format 等)が入っていたため、クリップボード系 11 件と contextmenu の 2 件、clipboard.mjs の selftest(S-1・S-2 の新ケース含む)が SKIP。修正前の通しでは 96 PASS / 0 FAIL / 10 SKIP。
 - 発注者決定(2026-10-04): 再実行を待たずにコミットする。
 - 必要アクション: クリップボードを空またはテキストのみにした状態で `node e2e/lib/clipboard.mjs --selftest` と `npm run e2e` を再実行し、結果を ledger に追記する。
+- 解消(2026-10-04): クリップボードが退避・復元できる状態になった後に再実行。`node e2e/lib/clipboard.mjs --selftest` は S-1・S-2 の新ケースを含め全 PASS。`npm run e2e` は 96 PASS / 0 FAIL / 10 SKIP(クリップボード系 AC-04/05/06/06-1/06-3/06-4/06-5/06-9/06-13/1024-1/1052-1 は全 PASS、SKIP は従来の9件と AC-06-8〈ISS-0199〉)。実行後にプロセスは残っていない。
