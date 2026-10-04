@@ -26,4 +26,4 @@
 | MCB-11 | R-15 | アプリでコピーした後、アプリを終了してからエクスプローラーで Ctrl+V | 貼り付けられる | | | |
 | MCB-12 | CB-01 | 他のアプリでコピーを繰り返している最中にアプリで Ctrl+C / Ctrl+V | アプリが固まらない。失敗時はステータスに通知 | | | |
 | MCB-13 | ISS-0197(c) | アプリで Ctrl+X → エクスプローラーで Ctrl+V(移動)→ アプリで Ctrl+V | 二重に移動されない(エラーまたは何もしない) | | | |
-| MCB-14 | ISS-0200 | クリップボードを空にしてから `cd app && node e2e/lib/clipboard.mjs --selftest` と `npm run e2e` を実行 | selftest 全 PASS、E2E のクリップボード系がすべて PASS | | | レビュー指摘修正後の再確認 |
+| MCB-14 | ISS-0200 | クリップボードを空にしてから `cd app && node e2e/lib/clipboard.mjs --selftest` と `npm run e2e` を実行 | selftest 全 PASS、E2E のクリップボード系がすべて PASS | OK | オーケストレーター / 2026-10-04 | レビュー指摘修正後の再確認 |
