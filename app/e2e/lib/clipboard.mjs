@@ -63,6 +63,26 @@ function powershell(script, { env } = {}) {
   return result.stdout;
 }
 
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// The OS clipboard is a single global lock: OpenClipboard fails now and then while another program
+// (clipboard history / cloud sync, WebView2, the app under test) holds it for a moment, and
+// Set-Clipboard / Get-Clipboard do not retry (ISS-0203 (a)). Only for IDEMPOTENT operations (read,
+// write, clear): they are retried a few times with a growing pause. A persistent failure still throws.
+function powershellRetry(script, options) {
+  // A time budget, not a fixed count: a clipboard-watching program (seen: "NoteBurner Video Downloader",
+  // which reads every copied URL) was measured holding the clipboard for up to ~6 s in a row.
+  const deadline = Date.now() + 30000;
+  for (let delay = 200; ; delay = Math.min(delay * 2, 2000)) {
+    try {
+      return powershell(script, options);
+    } catch (error) {
+      if (Date.now() + delay >= deadline) throw error;
+      sleepSync(delay);
+    }
+  }
+}
+
 const b64 = (text) => Buffer.from(text, "utf8").toString("base64");
 const fromB64 = (text) => Buffer.from(text, "base64").toString("utf8");
 const sameStrings = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -72,7 +92,7 @@ const sameStrings = (a, b) => a.length === b.length && a.every((x, i) => x === b
  * `effect` is the first DWORD of Preferred DropEffect, or null when that format is absent.
  */
 export function inspectClipboard() {
-  const out = powershell(
+  const out = powershellRetry(
     [
       `$d = [System.Windows.Forms.Clipboard]::GetDataObject();`,
       `if ($d -eq $null) { 'FORMATS:' } else {`,
@@ -102,7 +122,7 @@ export function inspectClipboard() {
 
 /** The clipboard text exactly as stored (CRLF kept, no trailing newline added or removed). */
 export function readClipboardText() {
-  const out = powershell(
+  const out = powershellRetry(
     `$t = Get-Clipboard -Raw; if ($t -eq $null) { $t = '' }; 'B64:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$t))`,
   );
   const line = out.split(/\r?\n/).find((l) => l.startsWith("B64:")) ?? "B64:";
@@ -110,11 +130,11 @@ export function readClipboardText() {
 }
 
 export function writeClipboardTextForTest(text) {
-  powershell(`Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(text)}')))`);
+  powershellRetry(`Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(text)}')))`);
 }
 
 export function clearClipboard() {
-  powershell(`[System.Windows.Forms.Clipboard]::Clear()`);
+  powershellRetry(`[System.Windows.Forms.Clipboard]::Clear()`);
 }
 
 // A file list (in the given order) and, when `effect` is not null, a Preferred DropEffect DWORD.
@@ -149,7 +169,7 @@ export function writeFileDropForTest(paths, effect, { root }) {
   if (!Array.isArray(paths) || paths.length === 0) throw new Error("writeFileDropForTest needs a non-empty list of paths");
   const outside = paths.filter((p) => !isInside(root, p));
   if (outside.length > 0) throw new Error(`refusing to write paths outside the test folder to the OS clipboard (R-09-2): ${outside.join(", ")}`);
-  powershell(setFileDropScript(paths, effect));
+  powershellRetry(setFileDropScript(paths, effect));
 }
 
 /**
@@ -200,7 +220,7 @@ export function readFileDropForTest() {
 
 function restore(saved) {
   if (saved.kind === "text") writeClipboardTextForTest(saved.text);
-  else if (saved.kind === "files") powershell(setFileDropScript(saved.paths, saved.effect));
+  else if (saved.kind === "files") powershellRetry(setFileDropScript(saved.paths, saved.effect));
   else clearClipboard();
 }
 
@@ -220,7 +240,7 @@ function sameContent(a, b) {
 // SHOULD-174 (b): one retry; a restore that still does not take FAILS the test, naming what was lost.
 function restoreVerified(saved) {
   let lastError = "the restored content differs";
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       restore(saved);
       if (sameContent(inspectClipboard(), saved)) return;
