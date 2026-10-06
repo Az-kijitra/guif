@@ -1,4 +1,5 @@
-// SPEC-0300-0017 §16.2: colours (CSS variables) and fonts (AC-904, AC-906, AC-908).
+// SPEC-0300-0017 §16.2: colours (CSS variables) and fonts (AC-904, AC-906 (i), AC-908). AC-906 (ii) / AC-948 / AC-949 are in theme.mjs.
+import { fixedThemeNote } from "../lib/os-theme.mjs";
 import { openFiles, RGB } from "./_util.mjs";
 
 // R-911 + R-924 (strings as in the spec; compared trimmed and lower-cased, §16.0).
@@ -41,18 +42,19 @@ export const tests = [
   },
   {
     id: "AC-906",
-    title: "OS dark mode: body stays light, the container is color-scheme light, html is normal",
+    title: "light pinned (ui_theme = \"light\", no emulation): body #f5f5f5, container color-scheme light, html normal; the OS is ignored",
     async run(t, ctx) {
+      // SPEC-0300-0017 AC-906 (i) as rewritten for the 5th edition: the test config pins the light theme (R-995-1).
+      // No Emulation here: only a real OS that is dark would show the pin working (R-995-2 note 2), so the
+      // report says whether this run could tell.
       await openFiles(ctx, "many100", 100);
-      await ctx.cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }] });
-      try {
-        await ctx.settle();
-        t.eq((await ctx.m.cs("body", ["background-color"]))["background-color"], RGB.bg, "body background in dark mode");
-        t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "light", "container color-scheme");
-        t.eq((await ctx.m.cs("html", ["color-scheme"]))["color-scheme"], "normal", "html color-scheme");
-      } finally {
-        await ctx.cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "" }] });
-      }
+      t.eq(await ctx.ev(`matchMedia("(prefers-color-scheme: dark)").matches`), false, "prefers-color-scheme: dark does not match (the app pins light)");
+      t.eq((await ctx.configDto()).uiTheme, "light", "DTO uiTheme");
+      t.eq((await ctx.m.cs("body", ["background-color"]))["background-color"], RGB.bg, "body background");
+      t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "light", "container color-scheme");
+      t.eq((await ctx.m.cs("html", ["color-scheme"]))["color-scheme"], "normal", "html color-scheme");
+      const note = fixedThemeNote("light", ctx.osTheme ?? null);
+      if (note !== null) t.note(note);
     },
   },
   {

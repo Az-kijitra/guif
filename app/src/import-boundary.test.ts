@@ -485,6 +485,14 @@ describe("Phase 9 visual-design boundaries (SPEC-0300-0017 R-913, SPEC-0200-0001
     expect(planned.filter((f) => !exists(f))).toEqual([]);
   });
 
+  // Phase 12 (SPEC-0200-0001 §3.11.11 / §3.11.12 (6)): the viewer's own stylesheet is a planned artefact, it is
+  // imported by the viewer page only, and the viewer still never reaches app.css (checked just below).
+  it("§3.11.7: routes/viewer/viewer-theme.css exists and is imported by routes/viewer/+page.svelte and by nothing else", () => {
+    expect(exists("routes/viewer/viewer-theme.css")).toBe(true);
+    const importers = edges.filter((e) => e.to.endsWith("viewer-theme.css")).map((e) => e.from.split(sep).join("/"));
+    expect(importers).toEqual(["routes/viewer/+page.svelte"]);
+  });
+
   it("(4) app.css is imported by routes/+page.svelte and by nothing else", () => {
     const importers = edges.filter((e) => e.to === "app.css").map((e) => e.from.split(sep).join("/"));
     expect(importers).toEqual(["routes/+page.svelte"]);

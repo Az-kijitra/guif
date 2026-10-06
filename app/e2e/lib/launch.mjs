@@ -149,11 +149,16 @@ function removeDir(dir) {
 
 // ------------------------------------------------------------------- launch
 
+// R-995-1 / SPEC-0200-0001 §3.11.9: the default test config pins the light theme so the existing
+// assertions hold on a PC whose OS is dark. `configToml: null` writes no config.toml at all; a string is
+// written as is (callers that add `input_keymap_custom` keep the `ui_theme` line themselves).
+export const DEFAULT_CONFIG_TOML = 'ui_theme = "light"\n';
+
 /**
  * Launches `tauri dev` and returns once the override line has been verified and the main
  * page is listed by the debug port. Throws AbortRun (after killing the app) otherwise.
  */
-export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope }) {
+export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML }) {
   // R-10: the backend refuses file operations outside this folder (the test folder, realpath form).
   if (typeof fsScope !== "string" || !path.isAbsolute(fsScope) || !fs.statSync(fsScope).isDirectory()) {
     throw new AbortRun(`unusable E2E file scope folder: ${fsScope}`);
@@ -166,6 +171,17 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
   // MUST-108 launch rule: non-empty, absolute, an existing empty directory.
   if (!cfgDir || !path.isAbsolute(cfgDir) || !fs.statSync(cfgDir).isDirectory() || fs.readdirSync(cfgDir).length !== 0) {
     throw new AbortRun(`unusable temporary config folder: ${cfgDir}`);
+  }
+
+  // Written by the test harness, before the app starts (the app never writes config.toml, R-917-6).
+  if (configToml !== null) {
+    try {
+      fs.writeFileSync(path.join(cfgDir, "config.toml"), configToml, "utf8");
+    } catch (e) {
+      removeDir(cfgDir);
+      removeDir(userData);
+      throw new AbortRun(`could not write the test config.toml: ${e.message}`);
+    }
   }
 
   const realBefore = snapshotDir(REAL_CONFIG_DIR);

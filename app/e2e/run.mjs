@@ -1,14 +1,21 @@
 // E2E runner: drives the REAL app (Tauri + WebView2) over the Chrome DevTools Protocol and checks
 // the [CDP] acceptance criteria of SPEC-0300-0017 (SPEC-0400-0001 R-07 / R-08; design
-// SPEC-0200-0001 §3.8.14, §3.8.17, §3.8.18). Node 22+ built-ins only; no dependencies.
+// SPEC-0200-0001 §3.8.14, §3.8.17, §3.8.18, §3.11.9, §3.11.16). Node 22+ built-ins only; no dependencies.
 //
 //   npm run e2e                      launch `tauri dev` with a throw-away config folder and run everything
-//   npm run e2e -- --filter AC-92    only ACs whose id starts with the prefix
-//   npm run e2e -- --keep            leave the app running afterwards (then use --attach)
-//   npm run e2e:attach               reuse the app left by --keep
+//   npm run e2e -- --filter AC-92    only ACs whose id starts with the prefix (scenario ACs too)
+//   npm run e2e -- --keep            leave the app running afterwards (then use --attach); scenarios are SKIPPED
+//   npm run e2e:attach               reuse the app left by --keep; scenarios are SKIPPED
 //   options: --port 9340  --timeout 600 (seconds)  --shots <dir>  --final-shot <png>
 //   --selftest-abort                 expect a different override folder on purpose: the run must stop
-//                                    before sending any input and exit with code 1 (SPEC-0400-0001 AC-08 ii)
+//                                    before sending any input and exit with code 1 (SPEC-0400-0001 AC-08 ii);
+//                                    scenarios are SKIPPED
+//
+// Theme scenarios (SPEC-0300-0017 Phase 12, specs/theme.mjs): config.toml is read once at startup, so every
+// scenario is its own app start with its own `config.toml` (written by this harness into the throw-away config
+// folder before the start; the default is `ui_theme = "light"`, R-995-1, which keeps every other spec on the
+// light theme whatever the PC's OS theme is). The OS theme is only READ (lib/os-theme.mjs); nothing in the OS is
+// ever changed.
 //
 // OS clipboard (SPEC-0400-0001 R-09 / R-09-1 ~ R-09-3): the clipboard checks ("copy path" AC-1051 / 1052 / 1077
 // and the file-list copy / cut / paste checks of specs/clipboard.mjs) use your real clipboard. Before them it is
@@ -19,11 +26,14 @@
 // IDE often adds "HTML Format" and they are skipped). With Windows clipboard history / cloud sync on, the content
 // written by the test can remain in the history or sync target. The window must be in the foreground for writeText.
 // Self tests (no app needed): node e2e/lib/clipboard.mjs --selftest | node e2e/lib/context.mjs --selftest |
-//                             node e2e/lib/scope.mjs --selftest
+//                             node e2e/lib/scope.mjs --selftest | node e2e/lib/os-theme.mjs --selftest
 //
 // File operations (SPEC-0200-0001 §3.10.17): the page stubs refuse every file-changing command except
 // fs_ops_copy / fs_ops_move inside withScopedFileOps (only paths inside the test folder), and the backend is
 // started with REFLEXFILES_E2E_FS_SCOPE = the test folder so it refuses anything outside it as well.
+//
+// Real settings folder (R-08): its snapshot from BEFORE THE FIRST launch is compared after the last app has
+// ended, also when the run aborts (SPEC-0200-0001 §3.11.16 MUST-124).
 //
 // Exit code: 0 = no FAIL and the run was not aborted; 1 otherwise.
 
@@ -35,6 +45,7 @@ import { Cdp } from "./lib/cdp.mjs";
 import { createContext } from "./lib/context.mjs";
 import { Fixtures } from "./lib/fixtures.mjs";
 import { AbortRun, attachApp, diffSnapshots, launchApp, REAL_CONFIG_DIR, shutdown, snapshotDir } from "./lib/launch.mjs";
+import { readOsAppTheme } from "./lib/os-theme.mjs";
 import { Checks, Report, Skip } from "./lib/report.mjs";
 
 if (Number.parseInt(process.versions.node.split(".")[0], 10) < 22) {
@@ -77,41 +88,35 @@ async function loadTests() {
   return all;
 }
 
+/** specs/theme.mjs: `scenarios = [{ id, title, configToml, tests }]` (one app start each). */
+async function loadScenarios() {
+  const module = await import(pathToFileURL(path.join(here, "specs", "theme.mjs")).href);
+  return module.scenarios;
+}
+
 // ---------------------------------------------------------------------- main
 
 const options = parseArgs(process.argv.slice(2));
 const report = new Report();
 const log = (message) => console.log(`[e2e] ${message}`);
-let handle;
-let cdp;
-let fx;
+let realBefore; // R-08 (3): the snapshot of the FIRST launch is the baseline for the whole run (MUST-124 (2))
+let current; // { handle, cdp, fx, ... } of the app that is running now
+const osTheme = readOsAppTheme(); // read-only; null when unreadable
 
-async function main() {
-  const tests = (await loadTests()).filter((t) => options.filter === undefined || t.id.startsWith(options.filter));
-  if (tests.length === 0) throw new AbortRun(`no test matches --filter ${options.filter}`);
-
-  if (options.attach) {
-    handle = await attachApp({ cdpPort: options.port, allowRealConfig: options.realConfig, log });
-    // the kept app's backend only accepts file operations inside the folder it was started with
-    fx = new Fixtures(handle.fsScope ? { root: handle.fsScope } : {});
-  } else {
-    // The test folder exists BEFORE the launch: it is the backend's E2E file scope (R-10).
-    fx = new Fixtures();
-    handle = await launchApp({
-      appDir,
-      cdpPort: options.port,
-      timeoutMs: options.timeout * 1000,
-      log,
-      fsScope: fx.root,
-      expectOverride: options.selftestAbort ? path.join(os.tmpdir(), "rf-e2e-deliberately-wrong") : undefined,
-    });
-  }
-
-  cdp = await Cdp.connect(handle.target.webSocketDebuggerUrl);
+/**
+ * MUST-124 (1): the common body of the normal run and of every scenario. Connects, installs the refusing stubs
+ * (R-11 fail-closed) and waits for the list, runs `tests`, and verifies the stubs again before it returns.
+ * A failing test never throws; an AbortRun (also from the stub verification) sets report.aborted.
+ */
+async function runWithApp(handle, fx, tests, { scenario, finalShot } = {}) {
+  const cdp = await Cdp.connect(handle.target.webSocketDebuggerUrl);
+  current.cdp = cdp;
   log(`test folder: ${fx.root}`);
   const ctx = createContext({ cdp, fx, shotsDir: options.shots, log });
   ctx.port = handle.cdpPort;
   ctx.handle = handle;
+  ctx.osTheme = osTheme;
+  ctx.scenario = scenario ?? null;
 
   // First contact: install helpers + the refusing stubs, wait for the list. No viewport override
   // yet so the window-size test sees the real initial window (AC-942).
@@ -130,9 +135,9 @@ async function main() {
       if (errors.length > 0) checks.fail(`page errors: ${errors.join(" | ")}`);
       if (checks.failures.length > 0) {
         const shot = await ctx.shot(test.id).catch(() => undefined);
-        report.record("FAIL", test.id, test.title, Date.now() - started, [...checks.failures, ...(shot ? [`screenshot: ${shot}`] : [])]);
+        report.record("FAIL", test.id, test.title, Date.now() - started, [...checks.failures, ...checks.notes, ...(shot ? [`screenshot: ${shot}`] : [])]);
       } else {
-        report.record("PASS", test.id, test.title, Date.now() - started);
+        report.record("PASS", test.id, test.title, Date.now() - started, checks.notes);
       }
     } catch (error) {
       if (error instanceof Skip) {
@@ -153,23 +158,24 @@ async function main() {
   }
 
   // MUST-118 (c): the IPC must still be intercepted (no postMessage fallback; the probe is refused).
-  if (!report.aborted) {
+  // Not possible after a test closed the app on purpose (AC-960): the stubs were verified before that close.
+  if (!report.aborted && !ctx.appClosed) {
     try {
       await ctx.verifyStubs();
     } catch (error) {
       if (!(error instanceof AbortRun)) throw error;
       report.aborted = true;
-      report.record("FAIL", "MUST-118", "IPC stubs still in force at the end of the run", 0, [`ABORT: ${error.message}`]);
+      report.record("FAIL", "MUST-118", `IPC stubs still in force at the end of ${scenario ? "scenario " + scenario.id : "the run"}`, 0, [`ABORT: ${error.message}`]);
     }
   }
 
-  if (options.finalShot && !report.aborted) {
-    await takeFinalShot(ctx, options.finalShot);
+  if (finalShot && !report.aborted && !ctx.appClosed) {
+    await takeFinalShot(ctx, fx, cdp, finalShot);
   }
 }
 
 // A representative picture of the finished look: many files, size + date columns, tree open.
-async function takeFinalShot(ctx, file) {
+async function takeFinalShot(ctx, fx, cdp, file) {
   try {
     const dir = fx.files("final-shot", 150, { prefix: "document_", ext: ".txt", digits: 3 });
     fx.file("final-shot", "averyveryveryverylongname_quarterly_report_final.xlsx", { size: 1_073_636_966 });
@@ -187,6 +193,97 @@ async function takeFinalShot(ctx, file) {
   }
 }
 
+/** Starts one app (the normal run or a scenario), runs `tests` in it, and always shuts it down again. */
+async function launchAndRun(tests, { configToml, scenario, finalShot }) {
+  // The test folder exists BEFORE the launch: it is the backend's E2E file scope (R-10). New for every start.
+  const fx = new Fixtures();
+  current = { handle: undefined, cdp: undefined, fx };
+  try {
+    const launchOptions = {
+      appDir,
+      cdpPort: options.port,
+      timeoutMs: options.timeout * 1000,
+      log,
+      fsScope: fx.root,
+      expectOverride: options.selftestAbort ? path.join(os.tmpdir(), "rf-e2e-deliberately-wrong") : undefined,
+    };
+    if (configToml !== undefined) launchOptions.configToml = configToml; // else launchApp's default (ui_theme = "light")
+    const handle = await launchApp(launchOptions); // checks the override line + the fs scope notice EVERY time
+    current.handle = handle;
+    realBefore ??= handle.realBefore;
+    await runWithApp(handle, fx, tests, { scenario, finalShot });
+  } finally {
+    const { handle, cdp } = current;
+    current = undefined;
+    cdp?.close();
+    try {
+      if (handle) await shutdown(handle, { keep: false });
+    } finally {
+      fx.dispose();
+    }
+  }
+}
+
+/** --attach / --keep: one app, as before (the scenarios are skipped by the caller). */
+async function runWithOneApp(tests) {
+  let handle;
+  let fx;
+  if (options.attach) {
+    handle = await attachApp({ cdpPort: options.port, allowRealConfig: options.realConfig, log });
+    realBefore ??= handle.realBefore;
+    // the kept app's backend only accepts file operations inside the folder it was started with
+    fx = new Fixtures(handle.fsScope ? { root: handle.fsScope } : {});
+    current = { handle, cdp: undefined, fx };
+  } else {
+    fx = new Fixtures();
+    current = { handle: undefined, cdp: undefined, fx };
+    handle = await launchApp({ appDir, cdpPort: options.port, timeoutMs: options.timeout * 1000, log, fsScope: fx.root });
+    current.handle = handle;
+    realBefore ??= handle.realBefore;
+  }
+  await runWithApp(handle, fx, tests, { finalShot: options.finalShot });
+}
+
+function skipScenarios(scenarios, reason) {
+  for (const s of scenarios) for (const t of s.selected) report.record("SKIP", t.id, t.title, 0, [`scenario ${s.id}: ${reason}`]);
+}
+
+async function main() {
+  const matches = (t) => options.filter === undefined || t.id.startsWith(options.filter);
+  const normal = (await loadTests()).filter(matches);
+  const scenarios = (await loadScenarios()).map((s) => ({ ...s, selected: s.tests.filter(matches) })).filter((s) => s.selected.length > 0);
+  const scenarioCount = scenarios.reduce((n, s) => n + s.selected.length, 0);
+  // SHOULD-184 (2): only a filter that matches neither a normal test nor a scenario test is an error.
+  if (normal.length === 0 && scenarioCount === 0) throw new AbortRun(`no test matches --filter ${options.filter}`);
+  log(`OS app theme (read only): ${osTheme ?? "unknown"}`);
+
+  if (options.attach || options.keep) {
+    // SHOULD-184 (3): one app that stays alive and restarts do not mix.
+    if (normal.length > 0) await runWithOneApp(normal);
+    skipScenarios(scenarios, options.attach ? "--attach: the app cannot be restarted with another config.toml" : "--keep: the last app would keep the ports");
+    return;
+  }
+
+  // SHOULD-184 (2): a filter that matches scenario tests only skips the normal start.
+  // --selftest-abort always starts once: the launch is what must be stopped.
+  if (normal.length > 0 || options.selftestAbort) {
+    await launchAndRun(normal, { configToml: undefined, scenario: undefined, finalShot: options.finalShot });
+  }
+  if (options.selftestAbort) {
+    skipScenarios(scenarios, "--selftest-abort");
+    return;
+  }
+  for (const scenario of scenarios) {
+    if (report.aborted) {
+      // MUST-124 (3): after an abort the remaining scenarios are not started.
+      for (const t of scenario.selected) report.record("SKIP", t.id, t.title, 0, [`scenario ${scenario.id} not started: the run was aborted`]);
+      continue;
+    }
+    log(`scenario ${scenario.id}: ${scenario.title}`);
+    await launchAndRun(scenario.selected, { configToml: scenario.configToml, scenario });
+  }
+}
+
 let exitCode = 1;
 try {
   await main();
@@ -196,11 +293,21 @@ try {
   if (!(error instanceof AbortRun)) console.log(error.stack);
 } finally {
   const extra = [];
+  // an app that was still running when an error escaped (launchAndRun cleans up itself; this is the last resort)
   try {
-    if (handle) {
-      // R-08 (3): the real settings folder must be exactly as it was.
+    if (current) {
+      current.cdp?.close();
+      if (current.handle && !current.handle.attached) await shutdown(current.handle, { keep: options.keep });
+      if (!options.keep && !current.handle?.attached) current.fx?.dispose();
+    }
+  } catch (error) {
+    extra.push(`cleanup problem: ${error.message}`);
+  }
+  try {
+    if (realBefore !== undefined) {
+      // R-08 (3): the real settings folder must be exactly as it was before the FIRST launch (also after an abort).
       const after = snapshotDir(REAL_CONFIG_DIR);
-      const problems = diffSnapshots(handle.realBefore, after);
+      const problems = diffSnapshots(realBefore, after);
       if (problems.length > 0) {
         report.record("FAIL", "R-08", "real settings folder unchanged", 0, problems);
       } else {
@@ -210,14 +317,6 @@ try {
   } catch (error) {
     extra.push(`could not verify the real settings folder: ${error.message}`);
     report.aborted = true;
-  }
-  try {
-    cdp?.close();
-    if (handle) await shutdown(handle, { keep: options.keep });
-    // a --keep run leaves the app (and its backend scope = the test folder) alive; an attached run does not own the folder
-    if (!options.keep && !handle?.attached) fx?.dispose();
-  } catch (error) {
-    extra.push(`cleanup problem: ${error.message}`);
   }
   report.summary(extra);
   exitCode = report.exitCode;

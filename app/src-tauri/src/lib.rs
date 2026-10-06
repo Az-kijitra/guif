@@ -7,8 +7,9 @@
 //! - `fs_ops` (SPEC-0300-0011 copy/move/delete/rename/create — Phase 2;
 //!   `fs_ops::commands` registers the commands below, including R-40~R-45
 //!   copy/move progress events and cancellation, ISS-0052)
-//! - `config` (persistence I/O, SPEC-0200-0001 §6; `config/keymap.rs` is the
-//!   sole reader of `config.toml`'s `input_keymap_custom` table, SPEC-0200-0001
+//! - `config` (persistence I/O, SPEC-0200-0001 §6; `config/config_toml.rs` is the
+//!   sole reader of `config.toml` (`input_keymap_custom` + `ui_theme`, read once into
+//!   `config::commands::StartupConfig`), SPEC-0200-0001
 //!   §3.6.11.3 MUST-92 — the former `keymap/` module was removed once
 //!   `config/io.rs`'s deletion left it with no remaining caller)
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
@@ -71,7 +72,9 @@ pub fn run() {
         path: config::paths::viewer_window_path,
     };
 
-    tauri::Builder::default()
+    // SPEC-0200-0001 §3.11.2: `Builder::run(ctx)` is `build(ctx)` + `run()`; the split leaves room for the
+    // theme request between the two (windows are created inside `run()`).
+    let app = tauri::Builder::default()
         // R-42/R-43 (ISS-0052): per-operation-id cancellation flags for
         // in-flight copy/move/ZIP operations (ONE instance shared by fs_ops and archive, §3.4.1).
         .manage(shared::cancel::CancelRegistry::default())
@@ -96,21 +99,34 @@ pub fn run() {
             shared::e2e_scope::init_from_env()?;
             #[cfg(windows)]
             fs_ops::clipboard::commands::register_owner(app);
+            // The main window comes from tauri.conf.json (`visible: false`); a missing one must stop the
+            // start-up rather than leave a hidden process (§3.11.16 SHOULD-182 (2)).
+            let main = app.get_webview_window("main").expect("the main window is created from tauri.conf.json");
+            // R-919-1: the pre-paint background in the window's theme colour. A failure is ignored so that the
+            // window is shown below regardless.
+            let _ = shared::window_theme::apply_background(&main, shared::window_theme::WindowKind::Main);
             // R-428: closing the MAIN window also closes the viewer window,
             // so it never outlives the app (best-effort; does not block the
             // main window's own close).
-            if let Some(main) = app.get_webview_window("main") {
-                let handle = app.handle().clone();
-                main.on_window_event(move |event| {
-                    // SHOULD-171: never open the clipboard with a destroyed (reusable) HWND.
-                    if matches!(event, tauri::WindowEvent::Destroyed) {
-                        handle.state::<fs_ops::clipboard::commands::ClipboardOwner>().set(0);
+            let handle = app.handle().clone();
+            main.on_window_event(move |event| {
+                // SHOULD-171: never open the clipboard with a destroyed (reusable) HWND.
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    handle.state::<fs_ops::clipboard::commands::ClipboardOwner>().set(0);
+                }
+                if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
+                    viewer::window::close_viewer_on_main_exit(&handle);
+                }
+                // R-919-1: an OS theme switch (following the OS) also moves the background that a resize exposes.
+                if matches!(event, tauri::WindowEvent::ThemeChanged(_)) {
+                    if let Some(window) = handle.get_webview_window("main") {
+                        let _ = shared::window_theme::apply_background(&window, shared::window_theme::WindowKind::Main);
                     }
-                    if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
-                        viewer::window::close_viewer_on_main_exit(&handle);
-                    }
-                });
-            }
+                }
+            });
+            // R-919-1: the window is created hidden and shown from here, after the background colour is set.
+            // Rust decides when (no front-end round trip, no `core:window:allow-show`).
+            main.show()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -145,6 +161,19 @@ pub fn run() {
             fs_ops::clipboard::commands::clipboard_get_files,
             fs_ops::clipboard::commands::clipboard_clear_if_unchanged,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // R-917-8: `config.toml` is read here, once, before any window exists. A bad
+    // `REFLEXFILES_CONFIG_DIR` (SPEC-0400-0001 R-06-2) is a start-up error, distinct from an unreadable file.
+    config::paths::config_dir_override().expect("invalid REFLEXFILES_CONFIG_DIR (SPEC-0400-0001 R-06-2)");
+    let startup = config::commands::StartupConfig::load(app.handle());
+    // R-917 / R-918: a fixed theme becomes the event loop's preferred theme, so tao creates the title bar
+    // and the WebView (main and viewer alike) in it and ignores OS switches. Following the OS requests
+    // nothing (never `set_theme(None)`), so the platform keeps tracking the OS.
+    if let Some(theme) = shared::window_theme::requested_theme(startup.theme.setting) {
+        app.set_theme(Some(theme));
+    }
+    app.manage(startup);
+    app.run(|_app, _event| {});
 }

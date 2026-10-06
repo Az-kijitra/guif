@@ -1,50 +1,43 @@
-//! `config/keymap.rs`: reads `config.toml`'s `input_keymap_custom` table at
-//! startup (SPEC-0300-0010 R-45; SPEC-0200-0001 §3.6.11.3, MUST-86
-//! "recommendation A"). This module hands back each entry's RAW value plus a
-//! structural parse error (with a 1-based line number when one can be
-//! recovered) and performs NO per-element validation: no known-action-id
-//! check (R-45-4 (i)), no key-string grammar check (R-45-4-1), no `delete`+
-//! Shift rejection (R-18-2). All of that lives in the TypeScript
-//! `features/keyboard/keymap-validate.ts::validateKeymapEntries` (§6.1:
-//! `config/` may not own key-processing logic; the previous design that put
-//! this validation in Rust was withdrawn by architecture-guardian MUST-86
-//! because it re-implemented the grammar a second time and drifted from the
-//! actual TS-side matcher, see docs/architecture/proposals/SPEC-0200-0001.md
-//! §3.6.11.3).
+//! `config/config_toml.rs` (renamed from `keymap.rs`, SPEC-0200-0001 §3.11.3 H-1): reads `config.toml`
+//! at startup, ONCE, in ONE TOML parse: the `input_keymap_custom` table (SPEC-0300-0010 R-45;
+//! §3.6.11.3, MUST-86 "recommendation A") and the top-level `ui_theme` (SPEC-0300-0017 R-917).
+//! This module hands back each keymap entry's RAW value plus a structural parse error (with a 1-based
+//! line number when one can be recovered) and the RAW `ui_theme`; it performs NO per-element validation:
+//! no known-action-id check (R-45-4 (i)), no key-string grammar check (R-45-4-1), no `delete`+Shift
+//! rejection (R-18-2) -- all of that lives in the TypeScript
+//! `features/keyboard/keymap-validate.ts::validateKeymapEntries` (§6.1: `config/` may not own
+//! key-processing logic; the previous design that put this validation in Rust was withdrawn by
+//! architecture-guardian MUST-86 because it re-implemented the grammar a second time and drifted from
+//! the actual TS-side matcher, see docs/architecture/proposals/SPEC-0200-0001.md §3.6.11.3). Judging the
+//! words of `ui_theme` is `shared::schema::ui_theme::interpret_ui_theme`'s job (R-917-3).
 //!
-//! `config/keymap.rs` is also the ONLY reader of `config.toml` (MUST-92):
-//! there is no `save`/write path for `config.toml` anywhere in this crate
-//! (`config/io.rs`, the former read/write module, was deleted). AC-63/AC-630
-//! ("app operations never change config.toml's bytes or mtime") are
-//! therefore checked against THIS module's `load` alone.
-//!
-//! Planned API (not yet implemented, TDD):
+//! `config/config_toml.rs` is also the ONLY reader of `config.toml` (MUST-92 as rewritten by H-1):
+//! there is no `save`/write path for `config.toml` anywhere in this crate (`config/io.rs`, the former
+//! read/write module, was deleted). AC-63/AC-630/AC-960 ("app operations never change config.toml's
+//! bytes or mtime") are therefore checked against THIS module's `load` alone.
 //!
 //! ```ignore
-//! pub fn load(path: &Path) -> KeymapRawLoadResult
+//! pub fn load(path: &Path) -> ConfigTomlLoadResult
 //! ```
 //!
-//! - Missing file (`NotFound`) => `entries: []`, `parse_error: None` (R-45-1,
-//!   no notice, no file is created).
-//! - A TOML syntax error, OR `input_keymap_custom` present but not a table
-//!   => `entries: []`, `parse_error: Some { message, line }` (R-45-2/R-45-3:
-//!   the file is NEVER renamed, backed up, or rewritten — unlike
-//!   `config::navigation`/`config::ui_state`, there is no `.bak` recovery
-//!   here, because `config.toml` is a human-edited, read-only-to-the-app
-//!   file).
-//! - Non-UTF-8 bytes, and any OTHER I/O error while reading the file (e.g. a
-//!   permission error), are also parse failures; `line` is `None` when no
-//!   byte offset is available (SHOULD-121).
-//! - Otherwise (the file parses as TOML and `input_keymap_custom`, if
-//!   present, is a table): every key of that table becomes one
-//!   `RawKeymapEntry`. `value` is `Some(s)` when the TOML value is a string,
-//!   `None` for any other TOML value type (AC-62 (iv) / MUST-86 (iv), e.g.
-//!   `sort_menu = 123`). A missing/absent `input_keymap_custom` table yields
-//!   `entries: []` with no error (matches R-45's "no custom overrides" case).
+//! - Missing file (`NotFound`) => the default result: no entries, no error, `ui_theme: Missing`
+//!   (R-45-1 / R-917-5 (1): no notice, no file is created).
+//! - The whole file cannot be read (a TOML syntax error, non-UTF-8 bytes, or any other I/O error such as
+//!   a permission error) => `keymap.parse_error: Some { whole_file: true }` and `ui_theme: Missing`
+//!   (R-917-5 (2); the file is NEVER renamed, backed up, or rewritten -- unlike
+//!   `config::navigation`/`config::ui_state`, there is no `.bak` recovery here, because `config.toml` is
+//!   a human-edited, read-only-to-the-app file). `line` is `None` when no byte offset is available
+//!   (SHOULD-121).
+//! - The file parses as TOML but `input_keymap_custom` is not a table => `entries: []`,
+//!   `parse_error: Some { whole_file: false }`, and `ui_theme` is read as usual (R-917-5 (3), 確定 #16).
+//! - Otherwise every key of the table becomes one `RawKeymapEntry`; `value` is `Some(s)` when the TOML
+//!   value is a string, `None` for any other type (AC-62 (iv) / MUST-86 (iv), e.g. `sort_menu = 123`).
 
 use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::shared::schema::ui_theme::UiThemeRaw;
 
 /// One raw `input_keymap_custom` table entry, before any validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,25 +47,46 @@ pub struct RawKeymapEntry {
     pub value: Option<String>,
 }
 
-/// R-45-2: a structural (whole-file) parse failure. `line` is the 1-based
-/// line number derived from the underlying `toml::de::Error`'s byte-offset
-/// span, when one is available.
+/// R-45-2: a structural failure. `line` is the 1-based line number derived from the underlying
+/// `toml::de::Error`'s byte-offset span, when one is available. `whole_file` tells whether the WHOLE
+/// file could not be read (R-917-5 (2): the notice also says the theme fell back to the default) or
+/// only `input_keymap_custom` had the wrong type (R-917-5 (3): the theme is unaffected).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeymapParseError {
     pub message: String,
     pub line: Option<u32>,
+    pub whole_file: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct KeymapRawLoadResult {
     pub entries: Vec<RawKeymapEntry>,
-    /// `Some` only for a whole-file failure (R-45-2/R-45-3); never set
-    /// together with a non-empty `entries`.
+    /// `Some` only for a failure (R-45-2/R-45-3); never set together with a non-empty `entries`.
     pub parse_error: Option<KeymapParseError>,
 }
 
-fn parse_error_from_io(e: &io::Error) -> KeymapParseError {
-    KeymapParseError { message: e.to_string(), line: None }
+/// Everything read from `config.toml` in one go (R-917-8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigTomlLoadResult {
+    pub keymap: KeymapRawLoadResult,
+    pub ui_theme: UiThemeRaw,
+}
+
+impl Default for ConfigTomlLoadResult {
+    fn default() -> Self {
+        Self { keymap: KeymapRawLoadResult::default(), ui_theme: UiThemeRaw::Missing }
+    }
+}
+
+/// R-917-5 (2): the whole file is unreadable; the theme falls back with the keymap.
+fn whole_file_failure(message: String, line: Option<u32>) -> ConfigTomlLoadResult {
+    ConfigTomlLoadResult {
+        keymap: KeymapRawLoadResult {
+            entries: Vec::new(),
+            parse_error: Some(KeymapParseError { message, line, whole_file: true }),
+        },
+        ui_theme: UiThemeRaw::Missing,
+    }
 }
 
 /// Recovers a 1-based line number from a `toml::de::Error`'s byte-offset span
@@ -83,25 +97,25 @@ fn line_number_from_span(err: &toml::de::Error, text: &str) -> Option<u32> {
     Some(text[..offset].matches('\n').count() as u32 + 1)
 }
 
-pub fn load(path: &Path) -> KeymapRawLoadResult {
+/// The top-level `ui_theme` as it is, unjudged (R-917-3).
+fn raw_ui_theme(table: &toml::value::Table) -> UiThemeRaw {
+    match table.get("ui_theme") {
+        None => UiThemeRaw::Missing,
+        Some(toml::Value::String(s)) => UiThemeRaw::Str(s.clone()),
+        Some(_) => UiThemeRaw::WrongType,
+    }
+}
+
+pub fn load(path: &Path) -> ConfigTomlLoadResult {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return KeymapRawLoadResult::default();
-        }
-        Err(e) => {
-            return KeymapRawLoadResult { entries: Vec::new(), parse_error: Some(parse_error_from_io(&e)) };
-        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return ConfigTomlLoadResult::default(),
+        Err(e) => return whole_file_failure(e.to_string(), None),
     };
 
     let text = match String::from_utf8(bytes) {
         Ok(s) => s,
-        Err(e) => {
-            return KeymapRawLoadResult {
-                entries: Vec::new(),
-                parse_error: Some(KeymapParseError { message: e.to_string(), line: None }),
-            };
-        }
+        Err(e) => return whole_file_failure(e.to_string(), None),
     };
     // A leading UTF-8 BOM (a legacy Notepad artifact) must not make an
     // otherwise-valid file look corrupt.
@@ -109,21 +123,13 @@ pub fn load(path: &Path) -> KeymapRawLoadResult {
 
     let value: toml::Value = match text.parse() {
         Ok(v) => v,
-        Err(e) => {
-            let line = line_number_from_span(&e, text);
-            return KeymapRawLoadResult {
-                entries: Vec::new(),
-                parse_error: Some(KeymapParseError { message: e.to_string(), line }),
-            };
-        }
+        Err(e) => return whole_file_failure(e.to_string(), line_number_from_span(&e, text)),
     };
 
-    let table = match value.as_table() {
-        Some(t) => t,
-        None => return KeymapRawLoadResult::default(),
-    };
+    let Some(table) = value.as_table() else { return ConfigTomlLoadResult::default() };
+    let ui_theme = raw_ui_theme(table);
 
-    match table.get("input_keymap_custom") {
+    let keymap = match table.get("input_keymap_custom") {
         None => KeymapRawLoadResult::default(),
         Some(toml::Value::Table(entries_table)) => {
             let entries = entries_table
@@ -140,9 +146,11 @@ pub fn load(path: &Path) -> KeymapRawLoadResult {
             parse_error: Some(KeymapParseError {
                 message: "input_keymap_custom must be a table".to_string(),
                 line: None,
+                whole_file: false,
             }),
         },
-    }
+    };
+    ConfigTomlLoadResult { keymap, ui_theme }
 }
 
 #[cfg(test)]
@@ -161,7 +169,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, Vec::new());
         assert!(r.parse_error.is_none());
@@ -177,7 +185,7 @@ mod tests {
         let bad = "this is = = not toml [[[";
         fs::write(&path, bad).unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, Vec::new());
         assert!(r.parse_error.is_some());
@@ -193,7 +201,7 @@ mod tests {
         // Line 1 is valid; line 3 breaks (unterminated table header).
         fs::write(&path, "ui_show_hidden = false\n\n[input_keymap_custom\n").unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         let err = r.parse_error.expect("must be a parse error");
         assert!(err.line.is_some(), "a line number must be recoverable for this error: {err:?}");
@@ -208,7 +216,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "input_keymap_custom = \"not a table\"\n").unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, Vec::new());
         assert!(r.parse_error.is_some());
@@ -222,7 +230,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "# a comment\nsome_future_setting = 1\n").unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, Vec::new());
         assert!(r.parse_error.is_none());
@@ -240,7 +248,7 @@ mod tests {
         )
         .unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert!(r.parse_error.is_none());
         assert_eq!(
@@ -262,7 +270,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "[input_keymap_custom]\nsort_menu = 123\ntoggle_time = \"Ctrl+Alt+T\"\n").unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert!(r.parse_error.is_none());
         assert_eq!(
@@ -283,7 +291,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "[input_keymap_custom]\nhelp_keymap = \"\"\n").unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, vec![RawKeymapEntry { action_id: "help_keymap".into(), value: Some(String::new()) }]);
     }
@@ -296,7 +304,7 @@ mod tests {
         let bytes: Vec<u8> = vec![0xff, 0xfe, 0x00, 0xc3, 0x28, 0xa0, 0xa1];
         fs::write(&path, &bytes).unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert_eq!(r.entries, Vec::new());
         assert!(r.parse_error.is_some());
@@ -311,7 +319,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::create_dir(&path).unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         let err = r.parse_error.expect("a directory at the path must be reported as a parse error");
         assert!(err.line.is_none());
@@ -327,14 +335,14 @@ mod tests {
         bytes.extend_from_slice(b"[input_keymap_custom]\ntoggle_hidden = \"Ctrl+Alt+H\"\n");
         fs::write(&path, &bytes).unwrap();
 
-        let r = load(&path);
+        let r = load(&path).keymap;
 
         assert!(r.parse_error.is_none(), "a BOM-prefixed valid config.toml must still load: {r:?}");
         assert_eq!(r.entries, vec![RawKeymapEntry { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) }]);
     }
 
     // AC-63/AC-630 (MUST-92): `config.toml`'s content AND mtime are
-    // byte-for-byte unchanged by loading it -- config/keymap.rs is a
+    // byte-for-byte unchanged by loading it -- config/config_toml.rs is a
     // read-only path (R-77-4/R-53). Repeated loads must not touch the file
     // either.
     #[test]

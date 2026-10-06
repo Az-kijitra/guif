@@ -628,3 +628,239 @@ fn cargo_lock_has_no_optional_codec_or_encryption_crates() {
         assert!(!lock.contains(&format!("name = \"{name}\"")), "`{name}` is in Cargo.lock: an optional zip feature is enabled");
     }
 }
+
+// ============================================================ Phase 12 (dark theme)
+//
+// Phase 12 tests (unit-test-writer, 2026-10-06). Source-text guard rails: they read the sources, not any API.
+// Specs: SPEC-0300-0017 R-917-6 / R-917-8 / AC-960 (config.toml is read once and
+// never written), R-919-1; SPEC-0300-0010 R-45 / AC-63; SPEC-0200-0001 §3.11.3, §3.11.12 (5),
+// §3.11.16 SHOULD-181 / SHOULD-182 / SHOULD-183.
+
+/// Production text of a source file: comments removed and everything from an inline `mod tests {` on dropped.
+fn production_code(path: &Path) -> String {
+    let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let head = match text.find("mod tests {") {
+        Some(at) => &text[..at],
+        None => &text[..],
+    };
+    code_only(head)
+}
+
+/// Non-test production sources: every `.rs` under `src/` except `*_tests.rs` / `test_support.rs`.
+fn production_files() -> Vec<PathBuf> {
+    all_rust_files_under("")
+        .into_iter()
+        .filter(|p| {
+            let n = p.file_name().unwrap().to_string_lossy().into_owned();
+            !n.ends_with("_tests.rs") && n != "test_support.rs"
+        })
+        .collect()
+}
+
+// H-1 / §3.11.3: keymap.rs was renamed to config_toml.rs (the sole reader of config.toml).
+#[test]
+fn h1_config_keymap_rs_is_renamed_to_config_toml_rs() {
+    assert!(manifest_dir().join("src/config/config_toml.rs").is_file(), "config/config_toml.rs must exist");
+    assert!(!manifest_dir().join("src/config/keymap.rs").exists(), "config/keymap.rs must be renamed away (git mv)");
+    let mod_rs = code_only(&fs::read_to_string(manifest_dir().join("src/config/mod.rs")).unwrap());
+    assert!(mod_rs.contains("mod config_toml"), "config/mod.rs must declare `config_toml`");
+    assert!(!mod_rs.contains("mod keymap"), "config/mod.rs must no longer declare `keymap`");
+}
+
+// §3.11.3: the comments that named `config/keymap.rs` are updated.
+#[test]
+fn h1_no_source_still_names_config_keymap_rs() {
+    let mut offenders = Vec::new();
+    for path in production_files() {
+        let text = fs::read_to_string(&path).unwrap();
+        if text.contains("config/keymap.rs") {
+            offenders.push(rel(&path));
+        }
+    }
+    assert!(offenders.is_empty(), "these files still mention `config/keymap.rs`:\n  {}", offenders.join("\n  "));
+}
+
+// SHOULD-183 (a): `config_path(` is called from exactly one place, `StartupConfig::load`
+// (config/commands.rs). `config_load_keymap` serves the snapshot and never opens the path (R-917-8).
+#[test]
+fn should183_a_config_path_is_called_in_exactly_one_place_startup_config_load() {
+    let mut calls: Vec<(String, usize)> = Vec::new();
+    for path in production_files() {
+        let code = production_code(&path);
+        let n = code.lines().filter(|l| l.contains("config_path(") && !l.contains("fn config_path(")).count();
+        if n > 0 {
+            calls.push((rel(&path), n));
+        }
+    }
+    let total: usize = calls.iter().map(|(_, n)| n).sum();
+    assert_eq!(total, 1, "`config_path(` must be called exactly once in production code: {calls:?}");
+    assert!(calls[0].0.ends_with("config/commands.rs"), "the one call must be in config/commands.rs: {calls:?}");
+
+    let commands = production_code(&manifest_dir().join("src/config/commands.rs"));
+    let impl_at = commands.find("impl StartupConfig").expect("config/commands.rs must define `impl StartupConfig`");
+    let call_at = commands.find("config_path(").unwrap();
+    assert!(call_at > impl_at, "the `config_path(` call must be inside `impl StartupConfig` (its `load`)");
+}
+
+// SHOULD-183 (b): config_toml.rs has no way to write.
+#[test]
+fn should183_b_config_toml_rs_has_no_write_api() {
+    let code = production_code(&manifest_dir().join("src/config/config_toml.rs"));
+    for token in ["fs::write", "File::create", "OpenOptions", "rename", "atomic::", "remove_file", "set_permissions"] {
+        assert!(!code.contains(token), "config/config_toml.rs must not contain `{token}` (config.toml is read-only, R-917-6)");
+    }
+    assert!(code.contains("fs::read"), "config_toml.rs must read the file with fs::read (sanity: the scan saw the real file)");
+}
+
+// SHOULD-183 (c): `StartupConfig::load` hands the path to `config_toml::load` and to nothing else.
+#[test]
+fn should183_c_startup_config_load_passes_the_path_only_to_config_toml_load() {
+    let commands = production_code(&manifest_dir().join("src/config/commands.rs"));
+    let impl_at = commands.find("impl StartupConfig").expect("impl StartupConfig must exist");
+    let load_at = impl_at + commands[impl_at..].find("fn load(").expect("StartupConfig::load must exist");
+    // The body of `load`: up to the next `fn ` item of the impl (or the end of the production text).
+    let rest = &commands[load_at + "fn load(".len()..];
+    let body = &rest[..rest.find("fn ").unwrap_or(rest.len())];
+    assert!(body.contains("from_path(") || body.contains("config_toml::load("), "StartupConfig::load must go through config_toml::load");
+    for token in ["fs::", "File::", "read_to_string", "OpenOptions", "write("] {
+        assert!(!body.contains(token), "StartupConfig::load must not touch the file itself (`{token}`)");
+    }
+}
+
+// R-917-8: `config_load_keymap` serves the start-up snapshot (State<StartupConfig>), it does not read the file.
+#[test]
+fn r917_8_config_load_keymap_reads_the_snapshot_not_the_file() {
+    let commands = production_code(&manifest_dir().join("src/config/commands.rs"));
+    let at = commands.find("fn config_load_keymap(").expect("config_load_keymap must exist");
+    let rest = &commands[at..];
+    let body = &rest[..rest.find("#[tauri::command").unwrap_or(rest.len())];
+    assert!(body.contains("StartupConfig"), "config_load_keymap must take State<StartupConfig>");
+    assert!(!body.contains("config_toml::load"), "config_load_keymap must not re-read config.toml");
+    assert!(!body.contains("config_path"), "config_load_keymap must not resolve the config.toml path");
+}
+
+// SHOULD-181: `shared/` may name `tauri` in window_theme.rs only; it never uses Manager / State / path resolution.
+#[test]
+fn should181_shared_references_tauri_only_in_window_theme_rs() {
+    let mut offenders = Vec::new();
+    for path in all_rust_files_under("shared") {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if name == "window_theme.rs" || name == "window_theme_tests.rs" {
+            continue;
+        }
+        let code = code_only(&fs::read_to_string(&path).unwrap());
+        if code.contains("tauri::") || code.contains("use tauri") || code.contains("tauri_") {
+            offenders.push(rel(&path));
+        }
+    }
+    assert!(offenders.is_empty(), "only shared/window_theme.rs may reference tauri:\n  {}", offenders.join("\n  "));
+}
+
+#[test]
+fn should181_window_theme_rs_is_a_thin_window_helper() {
+    let path = manifest_dir().join("src/shared/window_theme.rs");
+    assert!(path.is_file(), "shared/window_theme.rs must exist (§3.11.5)");
+    let code = production_code(&path);
+    let feature_uses: Vec<String> = ["config", "viewer", "fs_ops", "archive"].iter().map(|m| format!("{}::{m}", "crate")).collect();
+    for token in ["Manager", "State<", "config::paths"].iter().map(|t| t.to_string()).chain(feature_uses) {
+        assert!(!code.contains(&token), "shared/window_theme.rs must not use `{token}` (SHOULD-181)");
+    }
+    assert!(!code.contains(&unsafe_word()), "no unsafety is added for the theme (§3.11.0)");
+}
+
+fn lib_rs_code() -> String {
+    production_code(&manifest_dir().join("src/lib.rs"))
+}
+
+// §3.11.2 / S-6: `set_theme(` has ONE call site (lib.rs), never `None`, and it sits between build() and run().
+#[test]
+fn s6_set_theme_is_called_once_in_lib_rs_and_never_with_none() {
+    let mut sites = Vec::new();
+    for path in production_files() {
+        let n = production_code(&path).matches("set_theme(").count();
+        if n > 0 {
+            sites.push((rel(&path), n));
+        }
+    }
+    assert_eq!(sites.len(), 1, "set_theme( must appear in one file only: {sites:?}");
+    assert!(sites[0].0.ends_with("lib.rs") && sites[0].1 == 1, "exactly one set_theme( call, in lib.rs: {sites:?}");
+    let lib = lib_rs_code();
+    assert!(!lib.replace(' ', "").contains("set_theme(None"), "set_theme(None) is never called (following the OS is the default)");
+}
+
+#[test]
+fn s6_lib_rs_builds_then_sets_the_theme_then_runs() {
+    let lib = lib_rs_code();
+    let build = lib.find(".build(tauri::generate_context!())").expect("lib.rs must call `.build(tauri::generate_context!())`");
+    let theme = lib.find("set_theme(").expect("lib.rs must call set_theme(");
+    let run = lib.rfind(".run(").expect("lib.rs must call app.run(...)");
+    assert!(build < theme && theme < run, "order must be build() -> set_theme() -> run()");
+    assert!(!lib.contains(".run(tauri::generate_context!())"), "Builder::run(ctx) is replaced by build() + run()");
+    // The theme is requested only through the pure mapping, and only the start-up snapshot decides it.
+    assert!(lib.contains("requested_theme("), "set_theme must be driven by shared::window_theme::requested_theme");
+    let load = lib.find("StartupConfig::load(").expect("the start-up config is read via StartupConfig::load (R-917-8)");
+    assert!(build < load && load < theme, "StartupConfig::load runs after build() and before set_theme()");
+}
+
+// SHOULD-182 (2): `.setup` always shows the (initially hidden) main window; show() is not behind a condition.
+#[test]
+fn should182_setup_shows_the_main_window_unconditionally() {
+    let lib = lib_rs_code();
+    let setup = lib.find(".setup(|app|").expect("lib.rs must have `.setup(|app|`");
+    let body_open = setup + lib[setup..].find('{').unwrap();
+    let anchor = body_open + lib[body_open..].find("config_dir_override()").expect("setup keeps the config_dir_override check");
+    let show = body_open
+        + lib[body_open..].find(".show()").expect("`.setup` must call `.show()` on the main window (visible: false in tauri.conf.json)");
+    let depth_at = |upto: usize| -> i32 {
+        lib[body_open..upto].chars().fold(0, |d, c| match c {
+            '{' => d + 1,
+            '}' => d - 1,
+            _ => d,
+        })
+    };
+    assert_eq!(depth_at(show), depth_at(anchor), "`.show()` must be at the closure's top statement level (not inside if / match / a nested closure)");
+    let line_start = lib[..show].rfind('\n').map_or(0, |i| i + 1);
+    let line = &lib[line_start..show];
+    assert!(!line.contains("if ") && !line.contains("match ") && !line.contains("&&"), "the `.show()` statement must not be conditional: `{line}`");
+    // The main window is obtained with `expect` (a hidden, never-shown process must not be created).
+    let get = lib.find("get_webview_window(\"main\")").expect("setup must get the main window");
+    assert!(lib[get..(get + 80).min(lib.len())].contains(".expect("), "get_webview_window(\"main\") must be followed by .expect(...)");
+}
+
+// SHOULD-182 (2): background-colour failures never stop show(): `let _ = apply_background(..)`.
+#[test]
+fn should182_apply_background_failure_is_ignored_and_runs_before_show() {
+    let lib = lib_rs_code();
+    let bg = lib.find("apply_background(").expect("lib.rs .setup must call apply_background(..) for the main window");
+    let line_start = lib[..bg].rfind('\n').map_or(0, |i| i + 1);
+    assert!(lib[line_start..bg].contains("let _ ="), "apply_background's result must be ignored (`let _ = ...`) so show() always runs");
+    let show = lib.find(".show()").expect("show");
+    assert!(bg < show, "the background colour is set before show() (R-919-1)");
+}
+
+// §3.11.5: the main window follows an OS theme change with its background colour; the viewer sets it before show().
+#[test]
+fn r919_1_windows_apply_the_background_and_follow_theme_changed() {
+    let lib = lib_rs_code();
+    assert!(lib.contains("ThemeChanged"), "lib.rs main window events must handle WindowEvent::ThemeChanged");
+    let viewer = production_code(&manifest_dir().join("src/viewer/window.rs"));
+    assert!(viewer.contains("ThemeChanged"), "viewer/window.rs handle_viewer_window_event must handle ThemeChanged");
+    // Order on the NEW-window path: `.build()` -> `apply_background(..)` -> `window.show()`. (The reuse branch's
+    // `existing.show()` comes earlier in the file and is deliberately not part of this order.)
+    let build = viewer.find(".build()").expect("viewer/window.rs must build the viewer window with .build()");
+    let after_build = &viewer[build..];
+    let bg = after_build.find("apply_background(").expect("viewer/window.rs must call apply_background(..) after build()");
+    let show = after_build.find("window.show()").expect("the new viewer window is shown with window.show() after build()");
+    assert!(bg < show, "the viewer's background colour is set after build() and before it is shown");
+}
+
+// R-919-2 / AC-962: no new command, capability or dependency (belt and braces; the git diff check is a manual step).
+#[test]
+fn ac962_no_new_command_or_capability_for_the_theme() {
+    let lib = lib_rs_code();
+    assert!(!lib.contains("config_load_startup"), "no new command: config_load_keymap keeps its name (§3.11.4)");
+    let cap = fs::read_to_string(manifest_dir().join("capabilities/default.json")).unwrap();
+    assert!(!cap.contains("core:window:allow-show"), "Rust shows the main window; no core:window:allow-show is granted (§3.11.5)");
+    let cargo = fs::read_to_string(manifest_dir().join("Cargo.toml")).unwrap();
+    assert!(!cargo.contains("tauri-plugin-theme") && !cargo.contains("dark-light"), "no theme crate may be added");
+}

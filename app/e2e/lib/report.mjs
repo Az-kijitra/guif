@@ -12,6 +12,8 @@ export class Skip extends Error {
 export class Checks {
   failures = [];
   count = 0;
+  /** Informational lines printed under a PASS (e.g. "the fixed theme equals the OS, so it is not discriminating"). */
+  notes = [];
 
   #fmt(value) {
     return typeof value === "string" ? JSON.stringify(value) : JSON.stringify(value) ?? String(value);
@@ -35,6 +37,10 @@ export class Checks {
   ok(condition, label, detail = "") {
     this.count++;
     if (!condition) this.failures.push(`${label}${detail ? ": " + detail : ""}`);
+  }
+
+  note(message) {
+    this.notes.push(`note: ${message}`);
   }
 
   fail(label) {

@@ -71,3 +71,66 @@ describe("AC-931: --ui-muted on --ui-surface (R-916)", () => {
     expect(contrastRatio(cssVar(css, "--ui-muted"), cssVar(css, "--ui-selected"))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 12 (SPEC-0300-0017 第5版) AC-956 / R-916-1: the DARK values, read from the
+// `@media (prefers-color-scheme: dark)` block of app.css (never duplicated here).
+// Design: SPEC-0200-0001 §3.11.12 (2). The light AC-931 tests above are unchanged
+// (`cssVar` finds the first definition = the light `:root`).
+// ---------------------------------------------------------------------------
+
+function darkBlock(css: string): string {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const m = /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{/.exec(stripped);
+  if (!m) throw new Error("app.css has no `@media (prefers-color-scheme: dark)` block");
+  let depth = 1;
+  let i = m.index + m[0].length;
+  const start = i;
+  while (i < stripped.length && depth > 0) {
+    if (stripped[i] === "{") depth++;
+    else if (stripped[i] === "}") depth--;
+    i++;
+  }
+  return stripped.slice(start, i - 1);
+}
+
+function darkVar(name: string): string {
+  return cssVar(darkBlock(readFileSync(APP_CSS, "utf-8")), name);
+}
+
+describe("AC-956 / R-916-1: dark theme contrast (WCAG 2.1)", () => {
+  const AA_TEXT: [string, string][] = [
+    ["--ui-fg", "--ui-bg"],
+    ["--ui-fg", "--ui-surface"],
+    ["--ui-muted", "--ui-surface"],
+    ["--ui-muted", "--ui-selected"],
+    ["--ui-error", "--ui-surface"],
+  ];
+  const AA_UI: [string, string][] = [
+    ["--ui-focused", "--ui-surface"],
+    ["--ui-focused", "--ui-selected"],
+  ];
+
+  it("the dark block defines every colour used below as a hex value", () => {
+    for (const n of new Set([...AA_TEXT, ...AA_UI].flat())) expect(darkVar(n)).toMatch(/^#/);
+  });
+
+  for (const [fg, bg] of AA_TEXT) {
+    it(`${fg} on ${bg} is at least 4.5:1`, () => {
+      expect(contrastRatio(darkVar(fg), darkVar(bg))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  for (const [fg, bg] of AA_UI) {
+    it(`${fg} on ${bg} is at least 3:1 (non-text focus frame)`, () => {
+      expect(contrastRatio(darkVar(fg), darkVar(bg))).toBeGreaterThanOrEqual(3);
+    });
+  }
+
+  it("R-916-1's stated approximations hold (fg/bg ~13:1, muted/surface ~8.8:1, muted/selected ~5.8:1, error/surface ~6.0:1)", () => {
+    expect(contrastRatio(darkVar("--ui-fg"), darkVar("--ui-bg"))).toBeGreaterThan(12);
+    expect(contrastRatio(darkVar("--ui-muted"), darkVar("--ui-surface"))).toBeGreaterThan(8.5);
+    expect(contrastRatio(darkVar("--ui-muted"), darkVar("--ui-selected"))).toBeGreaterThan(5.5);
+    expect(contrastRatio(darkVar("--ui-error"), darkVar("--ui-surface"))).toBeGreaterThan(5.8);
+  });
+});

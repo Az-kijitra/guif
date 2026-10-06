@@ -24,7 +24,7 @@ export function configSaveNavigation(data: NavigationData): Promise<void> {
 }
 
 // SPEC-0300-0010 R-45; SPEC-0200-0001 §3.6.2/§3.6.11.3: `config.toml`'s
-// `input_keymap_custom` table, read-only, once at startup. Raw entries only
+// `input_keymap_custom` table and `ui_theme`, read-only, a snapshot taken once at startup. Raw entries only
 // (no per-element validation, MUST-86 recommendation A) --
 // `features/keyboard/keymap-validate.ts::validateKeymapEntries` does that.
 export interface RawKeymapEntryDto {
@@ -35,11 +35,18 @@ export interface RawKeymapEntryDto {
 export interface KeymapParseErrorDto {
   message: string;
   line: number | null;
+  // R-917-5: true when the WHOLE file could not be read (the theme fell back too); false when only
+  // `input_keymap_custom` had the wrong type.
+  wholeFile: boolean;
 }
 
 export interface KeymapRawLoadResultDto {
   entries: RawKeymapEntryDto[];
   parseError: KeymapParseErrorDto | null;
+  // SPEC-0300-0017 R-917-4; SPEC-0200-0001 §3.11.4: the interpreted `ui_theme`. A public value for
+  // verification only (the screen's brightness is decided by CSS), and whether to report it.
+  uiTheme: "system" | "light" | "dark";
+  uiThemeInvalid: boolean;
 }
 
 export function configLoadKeymap(): Promise<KeymapRawLoadResultDto> {

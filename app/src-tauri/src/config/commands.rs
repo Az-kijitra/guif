@@ -13,6 +13,7 @@
 //! lock type, the DTO mapping, and the lock+save serialization pattern the
 //! commands are specified to use.
 
+use std::path::Path;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -28,9 +29,10 @@ use crate::shared::schema::navigation::NavigationData;
 // mentions of `config/ui_state.rs` for this lock were a documentation
 // inconsistency the guardian flagged; this file is the single source of
 // truth for IoLock types).
-use super::keymap::{self, KeymapRawLoadResult};
+use super::config_toml::{self, ConfigTomlLoadResult, KeymapParseError, KeymapRawLoadResult};
 use super::ui_state::{self, UiStateLoadResult};
 use crate::shared::schema::ui_state::UiStateData;
+use crate::shared::schema::ui_theme::{interpret_ui_theme, ThemeResolution, ThemeSetting, UiThemeRaw};
 
 /// Serializes navigation.toml load/save (MUST-48(c)).
 pub struct NavigationIoLock(pub Mutex<()>);
@@ -104,10 +106,75 @@ pub fn config_save_navigation(
 }
 
 // ---------------------------------------------------------------------
-// SPEC-0300-0010 R-45 (SPEC-0200-0001 §3.6.1/§3.6.11.3): `config.toml`'s
-// `input_keymap_custom`, read-only, once at startup. No IoLock (§3.6.1:
-// "起動時に1回だけ呼ぶ想定であり、複数コマンドが競合しないため").
+// SPEC-0300-0010 R-45 / SPEC-0300-0017 R-917 (SPEC-0200-0001 §3.6.1/§3.11.2/§3.11.4): `config.toml` is
+// read ONCE at startup (`StartupConfig::load`, R-917-8), read-only; `config_load_keymap` serves that
+// snapshot. No IoLock (nothing is written and nothing re-reads the file).
 // ---------------------------------------------------------------------
+
+/// The start-up snapshot of `config.toml` (`.manage()`d by `lib.rs` after the one and only read).
+/// Changes made to the file while the app runs are not applied until a restart (R-917-2), and a page
+/// reload does not read the file again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupConfig {
+    pub loaded: ConfigTomlLoadResult,
+    pub theme: ThemeResolution,
+}
+
+impl StartupConfig {
+    /// The single place that resolves the `config.toml` path (SHOULD-183 (a)); the path goes to
+    /// `from_path` and nowhere else (SHOULD-183 (c)). A path-resolution failure is handled like an
+    /// unreadable file (R-917-5 (2)); an invalid `REFLEXFILES_CONFIG_DIR` was already rejected by `lib.rs`.
+    pub fn load(app: &AppHandle) -> Self {
+        match paths::config_path(app) {
+            Ok(path) => Self::from_path(&path),
+            Err(e) => Self::unreadable(e.to_string()),
+        }
+    }
+
+    pub fn from_path(path: &Path) -> Self {
+        Self::from_loaded(config_toml::load(path))
+    }
+
+    pub fn from_loaded(loaded: ConfigTomlLoadResult) -> Self {
+        let theme = interpret_ui_theme(&loaded.ui_theme);
+        Self { loaded, theme }
+    }
+
+    /// R-917-5 (2) without a file read: the whole file counts as unreadable and the theme follows the OS.
+    pub fn unreadable(message: String) -> Self {
+        Self::from_loaded(ConfigTomlLoadResult {
+            keymap: KeymapRawLoadResult {
+                entries: Vec::new(),
+                parse_error: Some(KeymapParseError { message, line: None, whole_file: true }),
+            },
+            ui_theme: UiThemeRaw::Missing,
+        })
+    }
+
+    /// What `config_load_keymap` returns: a copy of the snapshot, no file access.
+    pub fn to_dto(&self) -> KeymapLoadResultDto {
+        let keymap = &self.loaded.keymap;
+        KeymapLoadResultDto {
+            entries: keymap
+                .entries
+                .iter()
+                .map(|e| KeymapRawEntryDto { action_id: e.action_id.clone(), value: e.value.clone() })
+                .collect(),
+            parse_error: keymap.parse_error.as_ref().map(|e| KeymapParseErrorDto {
+                message: e.message.clone(),
+                line: e.line,
+                whole_file: e.whole_file,
+            }),
+            ui_theme: match self.theme.setting {
+                ThemeSetting::System => "system",
+                ThemeSetting::Light => "light",
+                ThemeSetting::Dark => "dark",
+            }
+            .to_string(),
+            ui_theme_invalid: self.theme.invalid,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,33 +188,25 @@ pub struct KeymapRawEntryDto {
 pub struct KeymapParseErrorDto {
     pub message: String,
     pub line: Option<u32>,
+    pub whole_file: bool,
 }
 
+/// The command keeps its name (§3.11.4) although it now carries the whole `config.toml` snapshot.
+/// `ui_theme` is the interpreted value, a public value for verification only (the screen's brightness is
+/// decided by CSS, not by this).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeymapLoadResultDto {
     pub entries: Vec<KeymapRawEntryDto>,
+    pub ui_theme: String,
+    pub ui_theme_invalid: bool,
     pub parse_error: Option<KeymapParseErrorDto>,
 }
 
-impl From<KeymapRawLoadResult> for KeymapLoadResultDto {
-    fn from(r: KeymapRawLoadResult) -> Self {
-        Self {
-            entries: r
-                .entries
-                .into_iter()
-                .map(|e| KeymapRawEntryDto { action_id: e.action_id, value: e.value })
-                .collect(),
-            parse_error: r.parse_error.map(|e| KeymapParseErrorDto { message: e.message, line: e.line }),
-        }
-    }
-}
-
-// SHOULD-116: file I/O, so async like `archive`/`fs_ops`/`viewer`'s commands.
+// Serves the snapshot taken at startup; it never opens `config.toml` (R-917-8).
 #[tauri::command(async)]
-pub fn config_load_keymap(app: AppHandle) -> Result<KeymapLoadResultDto, String> {
-    let path = paths::config_path(&app).map_err(|e| e.to_string())?;
-    Ok(keymap::load(&path).into())
+pub fn config_load_keymap(startup: State<StartupConfig>) -> Result<KeymapLoadResultDto, String> {
+    Ok(startup.to_dto())
 }
 
 // ---------------------------------------------------------------------
@@ -335,7 +394,7 @@ mod tests {
 
     #[test]
     fn keymap_dto_conversion_preserves_entries_and_maps_non_string_values_to_none() {
-        use crate::config::keymap::{KeymapRawLoadResult, RawKeymapEntry};
+        use crate::config::config_toml::RawKeymapEntry;
         let r = KeymapRawLoadResult {
             entries: vec![
                 RawKeymapEntry { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) },
@@ -343,7 +402,7 @@ mod tests {
             ],
             parse_error: None,
         };
-        let dto: KeymapLoadResultDto = r.into();
+        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing }).to_dto();
         assert_eq!(dto.entries.len(), 2);
         assert_eq!(dto.entries[0], KeymapRawEntryDto { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) });
         assert_eq!(dto.entries[1], KeymapRawEntryDto { action_id: "sort_menu".into(), value: None });
@@ -352,10 +411,9 @@ mod tests {
 
     #[test]
     fn keymap_dto_carries_the_parse_error_with_its_line_number() {
-        use crate::config::keymap::{KeymapParseError, KeymapRawLoadResult};
-        let r = KeymapRawLoadResult { entries: vec![], parse_error: Some(KeymapParseError { message: "bad toml".into(), line: Some(3) }) };
-        let dto: KeymapLoadResultDto = r.into();
-        assert_eq!(dto.parse_error, Some(KeymapParseErrorDto { message: "bad toml".into(), line: Some(3) }));
+        let r = KeymapRawLoadResult { entries: vec![], parse_error: Some(KeymapParseError { message: "bad toml".into(), line: Some(3), whole_file: true }) };
+        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing }).to_dto();
+        assert_eq!(dto.parse_error, Some(KeymapParseErrorDto { message: "bad toml".into(), line: Some(3), whole_file: true }));
     }
 
     // Wire format is camelCase (shared/ipc/config.ts's configLoadKeymap()).
@@ -363,7 +421,9 @@ mod tests {
     fn keymap_dto_serializes_with_camel_case_keys() {
         let dto = KeymapLoadResultDto {
             entries: vec![KeymapRawEntryDto { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) }],
-            parse_error: Some(KeymapParseErrorDto { message: "x".into(), line: None }),
+            parse_error: Some(KeymapParseErrorDto { message: "x".into(), line: None, whole_file: false }),
+            ui_theme: "system".into(),
+            ui_theme_invalid: false,
         };
         let s = toml::to_string(&dto).expect("serialize");
         assert!(s.contains("actionId"));

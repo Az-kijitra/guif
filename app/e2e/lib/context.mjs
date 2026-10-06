@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MOD, sleep } from "./cdp.mjs";
+import { listTargets, MOD, sleep } from "./cdp.mjs";
 import { measureApi, PAGE_HELPERS } from "./measure.mjs";
 import { AbortRun } from "./launch.mjs";
 import { withClipboardGuard } from "./clipboard.mjs";
@@ -261,6 +261,39 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     await ctx.pageReady();
     ctx.fakeFs = false;
     await ctx.setViewport(1000, 700);
+  };
+
+  // SPEC-0200-0001 §3.11.9: `Emulation.setEmulatedMedia` for prefers-color-scheme on THIS page target ("" = clear).
+  // Callers clear it in a finally. Never used to prove a fixed theme (it overrides the fixed one, R-995-2 note 2).
+  ctx.emulateColorScheme = (value, target = cdp) =>
+    target.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value }] });
+
+  /** The startup snapshot of config.toml as the page got it (read-only command; DTO incl. uiTheme, SHOULD-185). */
+  ctx.configDto = () => cdp.ev(`window.__TAURI_INTERNALS__.invoke("config_load_keymap")`);
+
+  /**
+   * SHOULD-186 (3): the harness's forced kill skips the app's save at exit, so AC-960 asks the main window to close
+   * (the same close request as the title bar's X: the page's onCloseRequested flush runs) and waits for the process.
+   * After this the page is gone: run.mjs sees `ctx.appClosed` and skips the end-of-run stub verification.
+   */
+  ctx.requestMainWindowClose = async () => {
+    ctx.appClosed = true;
+    await cdp.ev(`window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" }).catch(() => {}); true`);
+  };
+  ctx.appClosed = false;
+  ctx.waitForAppExit = async (timeoutMs = 30000) => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      let listening = true;
+      try {
+        await listTargets(ctx.port);
+      } catch {
+        listening = false;
+      }
+      if (!listening) return true;
+      if (Date.now() > deadline) return false;
+      await sleep(300);
+    }
   };
 
   ctx.setViewport = async (w, h) => {

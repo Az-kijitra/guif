@@ -51,3 +51,17 @@ describe("tauri.conf.json: product and window (AC-946, R-991~R-993)", () => {
     expect(main.zoomHotkeysEnabled).toBe(false);
   });
 });
+
+// Phase 12 (SPEC-0300-0017 R-919-1, SPEC-0200-0001 §3.11.5 / §3.11.12 (5)): the main window is created hidden
+// so that Rust can set the theme background colour in `.setup` and only then `show()` it. Without this the
+// default white WebView2 background would show first (a flash of the wrong theme beyond 0.2 s).
+describe("tauri.conf.json: main window starts hidden (R-919-1, §3.11.5)", () => {
+  it("the main window has `visible: false` (Rust shows it in .setup after the background colour is set)", () => {
+    expect(main.visible).toBe(false);
+  });
+
+  it("R-991 / R-992 are untouched (size and title still set)", () => {
+    expect(main.width).toBe(1000);
+    expect(main.title).toBe("ReflexFiles");
+  });
+});

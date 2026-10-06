@@ -84,3 +84,91 @@ export async function setSort(ctx, key, order) {
   now = await currentSort(ctx);
   if (now.key !== key || now.order !== order) throw new Error(`could not set the sort to ${key} ${order} (now ${now.key} ${now.order})`);
 }
+
+/** R-911-1 dark values as getComputedStyle prints them (SPEC-0300-0017 AC-949). */
+export const RGB_DARK = {
+  bg: "rgb(30, 31, 34)",
+  fg: "rgb(230, 230, 230)",
+  surface: "rgb(43, 45, 49)",
+  border: "rgb(58, 61, 68)",
+  selected: "rgb(58, 74, 99)",
+  hover: "rgb(58, 74, 99)",
+  focused: "rgb(122, 167, 255)",
+  muted: "rgb(207, 207, 207)",
+  error: "rgb(255, 138, 128)",
+  backdrop: "rgba(0, 0, 0, 0.35)",
+};
+
+// ------------------------------------------------------------------ viewer helpers
+// SPEC-0300-0015 viewer window: a separate page target (/viewer) on the same debug port.
+
+import { Cdp, listTargets, sleep } from "../lib/cdp.mjs";
+
+export async function findViewerTarget(ctx, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const target = (await listTargets(ctx.port)).find((x) => x.type === "page" && x.url.includes("/viewer"));
+    if (target !== undefined) return target;
+    if (Date.now() > deadline) return undefined;
+    await sleep(500);
+  }
+}
+
+/**
+ * Opens the viewer for the list entry `downs` rows below the first (Down x downs, Enter), in the folder the
+ * main window shows. A viewer window that is already open is reused by the app. Returns a connected Cdp
+ * (the caller closes it) or undefined (a failed check is recorded).
+ */
+export async function openViewerWindow(t, ctx, { downs = 0 } = {}) {
+  await ctx.focusList();
+  for (let i = 0; i < downs; i++) await ctx.press.down();
+  await ctx.press.enter();
+  const target = await findViewerTarget(ctx);
+  t.ok(target !== undefined, "the viewer page appears on the debug port");
+  if (target === undefined) return undefined;
+  const viewer = await Cdp.connect(target.webSocketDebuggerUrl);
+  for (let i = 0; i < 80; i++) {
+    if (await viewer.ev(`!!document.querySelector('.viewer')`)) break;
+    await sleep(250);
+  }
+  return viewer;
+}
+
+const VIEWER_KIND_SELECTOR = {
+  text: ".viewer-body .text-view",
+  error: ".viewer-body .placeholder.error",
+  markdown: ".viewer-body .markdown-html, .viewer-body .text-view",
+  image: ".viewer-body .image-view img",
+};
+
+/**
+ * Waits until the viewer shows `fileName` AND its body is really rendered (kind: text | error | markdown | image).
+ * Guards against the one-off "No file selected" that never filled in (seen once by the orchestrator, not
+ * reproduced): when the body is still the placeholder after the timeout a failed check says REPRODUCED.
+ */
+export async function waitViewerShows(t, viewer, fileName, kind, { timeout = 20000, contains } = {}) {
+  const selector = VIEWER_KIND_SELECTOR[kind];
+  const probe = `(() => {
+    const name = document.querySelector('.viewer .filename')?.textContent ?? null;
+    const placeholder = document.querySelector('.viewer-body .placeholder')?.textContent ?? null;
+    const pos = document.querySelector('.viewer .position')?.textContent ?? null;
+    const text = document.querySelector('.viewer-body')?.textContent ?? '';
+    return { text, pos, name, shown: !!document.querySelector(${JSON.stringify(selector)}), placeholder };
+  })()`;
+  const deadline = Date.now() + timeout;
+  let last;
+  for (;;) {
+    last = await viewer.ev(probe);
+    // the error display clears the file name header (hasFile is false), so only the body is judged there
+    // `contains` guards against a viewer window that still shows a same-named file from an earlier folder
+    if ((kind === "error" || last.name === fileName) && last.shown && (contains === undefined || last.text.includes(contains))) return true;
+    if (Date.now() > deadline) break;
+    await sleep(200);
+  }
+  const stuck = last.placeholder === "No file selected";
+  t.fail(
+    `${stuck ? "REPRODUCED: the viewer stayed on \"No file selected\" and never showed the content. " : ""}` +
+      `expected ${kind} view of ${fileName}, got name=${JSON.stringify(last.name)} placeholder=${JSON.stringify(last.placeholder)} shown=${last.shown} position=${JSON.stringify(last.pos)}${contains === undefined ? "" : ` (wanted text ${JSON.stringify(contains)}, body starts ${JSON.stringify(last.text.slice(0, 40))})`}`,
+  );
+  return false;
+}

@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 // [静的] Spec: SPEC-0300-0017 AC-905 (no colour literals outside app.css's `:root`
 // variables and the viewer), AC-904 (static part: app.css defines every R-911
-// variable, with the spec's exact strings), AC-906 (static part: no dark-theme
-// plumbing), R-910 / R-912 / R-913, SPEC-0200-0001 §3.8.1, §3.8.15 G6 (colour NAMES
+// variable, with the spec's exact strings), R-910 / R-912 / R-913, SPEC-0200-0001 §3.8.1, §3.8.15 G6 (colour NAMES
 // are judged only in CSS value positions), §3.8.17 SHOULD-154(d) (no `@import` in
 // component styles, no `additionalData` in vite config).
+// Phase 12 (SPEC-0300-0017 第5版, SPEC-0200-0001 §3.11.6 / §3.11.12): app.css now holds the light `:root`
+// block AND `@media (prefers-color-scheme: dark) { :root {...} .ui-root { color-scheme: dark } }`.
+// `splitThemes` separates the two so each is compared on its own: AC-904 (light), AC-948 (dark: all 19
+// colour variables with R-911-1's strings), R-912-1 (`.ui-root` colour-scheme light / dark, never on
+// html / body / :root). The old AC-906 static part (`ui_theme-dark` / `set_window_theme` absent) was
+// removed because R-912 was replaced (design §3.11.12).
 // (`app.css` being imported only by routes/+page.svelte lives in
 // import-boundary.test.ts, SHOULD-158.)
 
@@ -134,6 +139,34 @@ function readAppCss(): string {
   return readFileSync(APP_CSS, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
+// Splits the stylesheet into the light part (everything outside the dark media block) and the CONTENT of
+// the `@media (prefers-color-scheme: dark) { ... }` block (brace-matched). `dark` is "" if there is none.
+function splitThemes(css: string): { light: string; dark: string; darkBlocks: number } {
+  const re = /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{/g;
+  let light = "";
+  let dark = "";
+  let blocks = 0;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(css)) !== null) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    while (i < css.length && depth > 0) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") depth--;
+      i++;
+    }
+    light += css.slice(last, m.index);
+    dark += css.slice(start, i - 1);
+    blocks++;
+    last = i;
+    re.lastIndex = i;
+  }
+  light += css.slice(last);
+  return { light, dark, darkBlocks: blocks };
+}
+
 function rules(css: string): { selector: string; body: string }[] {
   const out: { selector: string; body: string }[] = [];
   const re = /([^{}]+)\{([^{}]*)\}/g;
@@ -188,7 +221,7 @@ const R911: Record<string, string> = {
 
 describe("AC-904 (static part) / R-911 / R-924: app.css :root variables", () => {
   it("defines every variable of the R-911 table and --list-row-height with the spec's exact strings", () => {
-    const vars = rootVars(readAppCss());
+    const vars = rootVars(splitThemes(readAppCss()).light);
     const norm = (v: string | undefined) => (v === undefined ? "<missing>" : v.trim().toLowerCase());
     const actual: Record<string, string> = {};
     for (const k of Object.keys(R911)) actual[k] = norm(vars.get(k));
@@ -196,7 +229,7 @@ describe("AC-904 (static part) / R-911 / R-924: app.css :root variables", () => 
   });
 
   it("R-920 / R-921 fonts: --ui-font and --ui-font-mono carry the specified stacks (design §3.8.1 names)", () => {
-    const vars = rootVars(readAppCss());
+    const vars = rootVars(splitThemes(readAppCss()).light);
     expect(vars.get("--ui-font")?.trim()).toBe('"Segoe UI", "Meiryo", sans-serif');
     expect(vars.get("--ui-font-mono")?.trim()).toBe(
       'ui-monospace, "Cascadia Mono", "Consolas", "Menlo", "Monaco", "Courier New", monospace',
@@ -205,16 +238,19 @@ describe("AC-904 (static part) / R-911 / R-924: app.css :root variables", () => 
 });
 
 describe("R-912 / R-913 / design §3.8.1: app.css never styles the whole document", () => {
-  it(":root defines custom properties only (no color-scheme / font / color)", () => {
-    const css = readAppCss();
-    const rootRules = rules(css).filter((r) => r.selector.split(",").some((s) => s.trim() === ":root"));
-    expect(rootRules.length).toBeGreaterThan(0);
-    const nonVars = rootRules.flatMap((r) => declarations(r.body)).filter((d) => !d.prop.startsWith("--"));
-    expect(nonVars.map((d) => d.prop)).toEqual([]);
+  it(":root defines custom properties only (no color-scheme / font / color), in the light part and in the dark media block", () => {
+    const { light, dark } = splitThemes(readAppCss());
+    for (const css of [light, dark]) {
+      const rootRules = rules(css).filter((r) => r.selector.split(",").some((s) => s.trim() === ":root"));
+      expect(rootRules.length).toBeGreaterThan(0);
+      const nonVars = rootRules.flatMap((r) => declarations(r.body)).filter((d) => !d.prop.startsWith("--"));
+      expect(nonVars.map((d) => d.prop)).toEqual([]);
+    }
   });
 
   it("html / body rules are limited to the .app-shell document (:has) and never set color-scheme / font / color", () => {
-    const css = readAppCss();
+    const { light, dark } = splitThemes(readAppCss());
+    const css = light + "\n" + dark;
     const forbidden = /^(color-scheme|font|font-family|font-size|font-weight|color)$/;
     const bad: string[] = [];
     for (const r of rules(css)) {
@@ -228,24 +264,87 @@ describe("R-912 / R-913 / design §3.8.1: app.css never styles the whole documen
   });
 });
 
-describe("AC-906 (static part) / R-912: no dark-theme plumbing in the sources", () => {
-  const needles = ["ui_theme-dark", "set_window_theme"];
-  const files = [
-    ...walk(SRC).filter((f) => /\.(ts|svelte|css)$/.test(f) && !isTest(f)),
-    ...walk(join(APP_ROOT, "src-tauri", "src")).filter((f) => /\.rs$/.test(f)),
-  ];
+// R-911-1 table (strings exactly as in the spec; compared after trim + lower-case, AC-948).
+const R911_DARK: Record<string, string> = {
+  "--ui-bg": "#1e1f22",
+  "--ui-fg": "#e6e6e6",
+  "--ui-surface": "#2b2d31",
+  "--ui-surface-2": "#2b2d31",
+  "--ui-surface-3": "#3a4a63",
+  "--ui-border": "#3a3d44",
+  "--ui-border-strong": "#3a3d44",
+  "--ui-border-muted": "#3a3d44",
+  "--ui-muted": "#cfcfcf",
+  "--ui-muted-2": "#999",
+  "--ui-hover": "#3a4a63",
+  "--ui-selected": "#3a4a63",
+  "--ui-focused": "#7aa7ff",
+  "--ui-row-head": "#333741",
+  "--ui-link": "#7ab4ff",
+  "--ui-error": "#ff8a80",
+  "--ui-backdrop": "rgba(0,0,0,.35)",
+  "--ui-shadow-1": "rgba(0,0,0,.4)",
+  "--ui-shadow-2": "rgba(0,0,0,.45)",
+};
 
-  it("the scan includes the frontend and the Rust sources", () => {
-    expect(files.some((f) => f.endsWith("+page.svelte"))).toBe(true);
-    expect(files.some((f) => f.endsWith("lib.rs"))).toBe(true);
+describe("AC-948 / R-911-1: the dark theme block of app.css (SPEC-0200-0001 §3.11.6)", () => {
+  it("app.css has exactly one `@media (prefers-color-scheme: dark)` block (no html attribute / class marker is used)", () => {
+    expect(splitThemes(readAppCss()).darkBlocks).toBe(1);
   });
 
-  it("neither `ui_theme-dark` nor `set_window_theme` appears in any source", () => {
-    const bad = files.filter((f) => {
-      const text = readFileSync(f, "utf-8");
-      return needles.some((n) => text.includes(n));
-    });
-    expect(bad.map((f) => relative(APP_ROOT, f))).toEqual([]);
+  it("the dark :root block defines all 19 colour variables with R-911-1's exact strings (unchanged ones included)", () => {
+    const vars = rootVars(splitThemes(readAppCss()).dark);
+    const norm = (v: string | undefined) => (v === undefined ? "<missing>" : v.trim().toLowerCase());
+    const actual: Record<string, string> = {};
+    for (const k of Object.keys(R911_DARK)) actual[k] = norm(vars.get(k));
+    expect(actual).toEqual(R911_DARK);
+    expect(Object.keys(R911_DARK)).toHaveLength(19);
+  });
+
+  it("the dark block holds exactly the 19 colour variables: no --list-row-height / fonts (light-only, AC-948)", () => {
+    const vars = rootVars(splitThemes(readAppCss()).dark);
+    expect([...vars.keys()].sort()).toEqual(Object.keys(R911_DARK).sort());
+  });
+
+  it("the light part keeps --list-row-height = 28px (R-924)", () => {
+    expect(rootVars(splitThemes(readAppCss()).light).get("--list-row-height")?.trim()).toBe("28px");
+  });
+
+  it("the dark block is not a copy of the light values (guards a vacuous block)", () => {
+    const { light, dark } = splitThemes(readAppCss());
+    expect(rootVars(dark).get("--ui-bg")).toBeDefined();
+    expect(rootVars(dark).get("--ui-bg")).not.toBe(rootVars(light).get("--ui-bg"));
+  });
+});
+
+describe("R-912-1: color-scheme follows the theme on .ui-root only", () => {
+  const colorSchemeOf = (css: string, selector: string): string[] =>
+    rules(css)
+      .filter((r) => r.selector.split(",").some((s) => s.trim() === selector))
+      .flatMap((r) => declarations(r.body))
+      .filter((d) => d.prop === "color-scheme")
+      .map((d) => d.value.trim());
+
+  it("light: `.ui-root { color-scheme: light }`", () => {
+    expect(colorSchemeOf(splitThemes(readAppCss()).light, ".ui-root")).toEqual(["light"]);
+  });
+
+  it("dark: `.ui-root { color-scheme: dark }` inside the dark media block", () => {
+    expect(colorSchemeOf(splitThemes(readAppCss()).dark, ".ui-root")).toEqual(["dark"]);
+  });
+
+  it("no color-scheme is written on :root / html / body in either part (html stays `normal`)", () => {
+    const { light, dark } = splitThemes(readAppCss());
+    for (const part of [light, dark]) {
+      for (const sel of [":root", "html", "body"]) expect(colorSchemeOf(part, sel)).toEqual([]);
+    }
+  });
+});
+
+describe("R-910 / AC-905 (app.css side): no hard-coded colours outside the --ui-* variable declarations", () => {
+  it("every colour literal in app.css sits in a `--ui-*` custom-property declaration (rules use var())", () => {
+    const withoutVarDecls = readAppCss().replace(/--ui-[\w-]+\s*:[^;}]+;?/g, "");
+    expect(colourViolations(withoutVarDecls)).toEqual([]);
   });
 });
 

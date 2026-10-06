@@ -16,6 +16,7 @@ import { configLoadKeymap } from "$lib/shared/ipc/config";
 import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
 import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
 import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
+import { buildThemeNotice } from "$lib/shared/theme-notice";
 
 export interface StartupHydrateDeps {
   loadUiState: () => Promise<{ notice: string | null }>;
@@ -44,10 +45,19 @@ export async function runStartupHydrate(deps: StartupHydrateDeps): Promise<void>
 }
 
 // Keymap load for `runStartupHydrate`'s `loadKeymap` (SPEC-0200-0001 §3.10.1 S1): applies the
-// validated effective keymap to the feature state, then returns only the notice text.
+// validated effective keymap to the feature state, then returns only the notice text. The config.toml part
+// of the startup message is the keymap notice followed by the theme notice, as separate sentences joined
+// with one space (SPEC-0300-0017 R-917-4 / AC-958; SPEC-0200-0001 §3.11.4). The theme itself is applied by
+// the platform and CSS, not here.
 export async function loadKeymapForStartup(): Promise<{ notice: string | null }> {
   const raw = await configLoadKeymap();
   const validated = validateKeymapEntries(raw.entries);
   keymapState.hydrate(validated.effective);
-  return { notice: buildKeymapLoadNotice(raw.parseError, validated.invalidActions) };
+  const parts = [
+    buildKeymapLoadNotice(raw.parseError, validated.invalidActions, {
+      alsoDefaultsTheme: raw.parseError?.wholeFile === true,
+    }),
+    buildThemeNotice(raw.uiThemeInvalid),
+  ].filter((n): n is string => n !== null);
+  return { notice: parts.length > 0 ? parts.join(" ") : null };
 }

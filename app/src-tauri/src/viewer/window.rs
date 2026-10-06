@@ -11,6 +11,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 use crate::shared::schema::viewer_window::ViewerWindowData;
+use crate::shared::window_theme;
 
 use super::geometry::{self, Rect};
 use super::nav_guard;
@@ -183,6 +184,8 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
             .build();
 
         let Ok(window) = build_result else { return };
+        // R-919-1: the pre-paint background in the viewer's theme colour, before anything is shown.
+        let _ = window_theme::apply_background(&window, window_theme::WindowKind::Viewer);
         if has_saved {
             let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
             let _ = window.set_size(tauri::PhysicalSize::new(rect.width, rect.height));
@@ -215,6 +218,13 @@ fn current_session_title(app: &AppHandle) -> String {
 
 fn handle_viewer_window_event(app: &AppHandle, generation: u64, event: &WindowEvent) {
     match event {
+        // R-919-1: an OS theme switch (following the OS) also moves the base colour a resize exposes.
+        // A fixed theme never sends this event.
+        WindowEvent::ThemeChanged(_) => {
+            if let Some(window) = app.get_webview_window(VIEWER_WINDOW_LABEL) {
+                let _ = window_theme::apply_background(&window, window_theme::WindowKind::Viewer);
+            }
+        }
         WindowEvent::CloseRequested { .. } => {
             if let Some(window) = app.get_webview_window(VIEWER_WINDOW_LABEL) {
                 persist_current_geometry(&window, app);

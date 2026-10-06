@@ -10,6 +10,7 @@
   import { resolveViewerKeyAction, shouldSuppressWebviewDefault } from "$lib/features/viewer/viewer-keys";
   import type { ViewerContent } from "$lib/features/viewer/viewer-controller";
   import { initializeViewer, listenPendingChanged, viewerContentLoader } from "./viewer-wiring";
+  import "./viewer-theme.css";
 
   let content: ViewerContent = $state({ status: "loading" });
   let fileName = $state("");
@@ -178,7 +179,7 @@
   });
 </script>
 
-<!-- R-511: dark theme fixed, never follows the main window. -->
+<!-- R-511 / R-913: the viewer follows the main window's theme; colours come from viewer-theme.css. -->
 <div class="viewer">
   <header class="viewer-header">
     <button onclick={() => void navigate("prev")} disabled={total <= 1}>◀ Prev</button>
@@ -241,16 +242,12 @@
 </div>
 
 <style>
-  :global(html),
-  :global(body) {
-    background: #1e1e1e;
-  }
   .viewer {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: #1e1e1e;
-    color: #ddd;
+    background: var(--vw-bg);
+    color: var(--vw-fg);
     font-family: sans-serif;
   }
   .viewer-header {
@@ -258,8 +255,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.25rem 0.5rem;
-    background: #2a2a2a;
-    border-bottom: 1px solid #444;
+    background: var(--vw-header-bg);
+    border-bottom: 1px solid var(--vw-border);
   }
   .filename {
     font-weight: bold;
@@ -273,8 +270,8 @@
   .truncation-banner {
     margin: 0;
     padding: 0.25rem 0.5rem;
-    background: #4a3b00;
-    color: #ffd866;
+    background: var(--vw-banner-bg);
+    color: var(--vw-banner-fg);
   }
   .viewer-body {
     flex: 1;
@@ -282,10 +279,10 @@
     padding: 0.5rem;
   }
   .placeholder {
-    color: #999;
+    color: var(--vw-muted);
   }
   .placeholder.error {
-    color: #ff8080;
+    color: var(--vw-error);
   }
   .text-view {
     white-space: pre;
@@ -299,7 +296,7 @@
   .lineno {
     display: inline-block;
     width: 4em;
-    color: #777;
+    color: var(--vw-lineno);
     user-select: none;
   }
   .markdown-html {

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 //   new thin invoke() wrappers, same shape as the existing
 //   configLoadNavigation/configSaveNavigation), §3.6.11.11 SHOULD-116/117.
 //
-// Module under test (not yet implemented / to be extended):
+// Module under test:
 // ./config.ts's new configLoadKeymap()/uiStateLoad()/uiStateSave(data)
 // exports (the existing configLoadNavigation/configSaveNavigation, tested
 // implicitly via their real callers elsewhere, are unaffected).
@@ -13,7 +13,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { configLoadKeymap, uiStateLoad, uiStateSave, type UiStateData } from "./config";
+import {
+  configLoadKeymap,
+  uiStateLoad,
+  uiStateSave,
+  type KeymapRawLoadResultDto,
+  type UiStateData,
+} from "./config";
 
 afterEach(() => {
   vi.mocked(invoke).mockReset();
@@ -25,6 +31,27 @@ describe("configLoadKeymap (SPEC-0300-0010 R-45)", () => {
     vi.mocked(invoke).mockResolvedValueOnce(result);
 
     await expect(configLoadKeymap()).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("config_load_keymap");
+  });
+});
+
+// SPEC-0300-0017 R-917-4 / R-917-5; SPEC-0200-0001 §3.11.4 (Phase 12): the DTO carries `wholeFile`
+// on parseError and `uiTheme` / `uiThemeInvalid` next to it. The command name is unchanged.
+describe("configLoadKeymap: Phase 12 theme fields (SPEC-0200-0001 §3.11.4)", () => {
+  it("passes wholeFile / uiTheme / uiThemeInvalid through untouched, typed", async () => {
+    const result: KeymapRawLoadResultDto = {
+      entries: [],
+      parseError: { message: "bad toml", line: 2, wholeFile: true },
+      uiTheme: "system",
+      uiThemeInvalid: false,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(result);
+
+    const got = await configLoadKeymap();
+    expect(got).toEqual(result);
+    expect(got.parseError?.wholeFile).toBe(true);
+    expect(got.uiTheme).toBe("system");
+    expect(got.uiThemeInvalid).toBe(false);
     expect(invoke).toHaveBeenCalledWith("config_load_keymap");
   });
 });

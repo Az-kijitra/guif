@@ -15,6 +15,19 @@
 | 2026-10-03 | 未採番(SPEC-0300-0017 第3版・SPEC-0400-0001 第2版ほか、Phase 9) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 9」セクション参照 | unit-test-writer → code-generator(E2E 作成・実行含む) → code-reviewer(PR作成可、SHOULD 4件) → code-generator(E2E 安全策 S-1/S-2/S-4 修正) → オーケストレーター(実アプリで画面確認) |
 | 2026-10-03 | 未採番(SPEC-0300-0018 右クリックメニュー、0010第13版/0011第7版/0015第4版/0017第4版/0009第12版/0014第4版/SPEC-0400-0001第3版、Phase 10) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 10」セクション参照 | unit-test-writer → code-generator(実機確認・E2E含む) → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(SHOULD対応、実アプリで画面確認) |
 | 2026-10-04 | 未採番(SPEC-0300-0011 第8版 / SPEC-0300-0018 第2版 / SPEC-0400-0001 第4版、Phase 11) | PASS(フロント・バック・E2E。ISS-0200 は 2026-10-04 に再実行して解消) | 以下「## 2026-10-04 Phase 11」セクション参照 | code-generator(先行作業: 既存E2Eのfail-closed化・+page.svelte分割・実機最小確認) → unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 4件) → code-generator(S-1〜S-3等修正) → オーケストレーター(実アプリでレイアウト確認) |
+| 2026-10-06 | 未採番(SPEC-0300-0017 第5版 / SPEC-0300-0015 第5版 / SPEC-0300-0018 第3版 / SPEC-0300-0010 第14版・第15版 / SPEC-0300-0009 第13版・第14版 / SPEC-0900-0001 追補・第3版、Phase 12) | PASS(フロント・バック・E2E) | 以下「## 2026-10-06 Phase 12」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、MUST なし、S-1 ～ S-2・M-1 ～ M-4 修正済み) → オーケストレーター(実アプリでテーマ確認) |
+
+## 2026-10-06 Phase 12 ダークテーマ(SPEC-0300-0017 第5版ほか、ISS-0201/0202 承認)テスト実行結果
+
+- `cargo test`: 930件全成功。`npx vitest run`: 117ファイル/2297件全成功。`npx tsc --noEmit`・`npx svelte-check`エラー0(警告6、既存a11y)、`npx vite build`・`cargo build --release`成功。
+- code-reviewer(PR作成可、MUST なし): S-1(viewer の背景色テストの強化、変異テストで確認)・S-2(記述の整理)・M-1(トレーサビリティの更新)・M-2(AC 検証区分)・M-4(注記の整理)は修正済み。
+- **E2E(`npm run e2e`、3回目実行)**: 108 PASS / 8 FAIL / 10 SKIP / ABORT なし。R-08 PASS。テーマ系はすべて PASS。実行ライト固定(AC-904/906/907/955/1062/1063)、S1 dark 固定(AC-948/906-ii/949/907-ii/955-ii/957-reverse/960)、S2 config なし(AC-959-i/951/953/953-1/957)、S3 AC-917-system、S4 ～ S7 (AC-958-i/ii/iii/tail)、S8 AC-959-ii、S9 AC-959-iii)。
+- FAIL 8件は既存クリップボード系(AC-04/05/06/06-4/06-9/1024-1/1052-1/1077)で `Set-Clipboard : Requested Clipboard operation did not succeed`。実行ごとに失敗 ID が変わる(7/5/8件)。単独実行では PASS、クリップボードの内容は保持。環境起因の FLAKY として ISS-0203 を起票(クリップボード操作の競合。リトライ/判定の見直しを test-debugger で検討、ブロッカーではない)。
+- SKIP 10件は従来どおり。
+- 判別力の注記: この PC の OS はライトのため、ライト固定側の AC(AC-904/906/907/955/1062/1063)は判別力なし(ダーク固定・追従の機能部分で担保。`docs/architecture/traceability.md` に note 記録済み)。
+- オーケストレーターによる実アプリ確認(tauri dev、OS ライト、テスト用設定フォルダに ui_theme="dark"): メインはダーク値(body rgb(30,31,34)、文字 rgb(230,230,230)、color-scheme dark、html normal)、ビューアもダーク(rgb(30,30,30)/rgb(221,221,221))、Emulation でライトにすると両方ライト値。ビューアを新規に開く操作3回とも本文表示。起動直後の最初の1回だけ "No file selected" のまま本文が出なかったことがあり、E2E 3回の全体実行では再現せず(本文表示を待つ検査を追加済み、再現時は REPRODUCED と出る)。観察事項として ISS-0203 に追記。
+- 仕様への申し送り: SPEC-0300-0017 AC-949 の「body と画面全体のコンテナの…文字色 = rgb(230,230,230)」は、実装・既存規約(body に color を書かない)ではコンテナのみ。E2E はコンテナで検査。表現の確認を ISS-0203 に記録。
+- 未実施: `tests/manual/phase12-dark-theme-checklist.md` の目視確認。
 
 ## 2026-10-04 Phase 11 OS クリップボード連携(SPEC-0300-0011 第8版ほか)テスト実行結果
 
