@@ -67,6 +67,41 @@ describe("computeGoParentTarget (SPEC-0300-0009 R-63, AC-47)", () => {
     const target = computeGoParentTarget({ currentPath: "C:/", visibleCount: 0 });
     expect(target.shouldNavigate).toBe(false);
   });
+
+  // Regression (2026-10-06, user report): "C:\Users" went up to "C:" (no separator), which Windows
+  // resolves as the process's CURRENT directory on drive C; opening a folder there then produced the
+  // drive-relative "C:src", from which go_parent could not move at all.
+  it("a direct child of a drive root goes up to the root WITH its separator", () => {
+    expect(computeGoParentTarget({ currentPath: "C:\\Users", visibleCount: 3 })).toEqual({ shouldNavigate: true, path: "C:\\" });
+    expect(computeGoParentTarget({ currentPath: "C:\\Users\\", visibleCount: 3 })).toEqual({ shouldNavigate: true, path: "C:\\" });
+    expect(computeGoParentTarget({ currentPath: "d:/data", visibleCount: 0 })).toEqual({ shouldNavigate: true, path: "d:/" });
+  });
+
+  it("deeper Windows paths keep going up one level at a time", () => {
+    expect(computeGoParentTarget({ currentPath: "C:\\Users\\toshi", visibleCount: 1 })).toEqual({ shouldNavigate: true, path: "C:\\Users" });
+  });
+
+  it("drive roots in every spelling are roots", () => {
+    for (const root of ["C:\\", "C:", "\\\\?\\C:\\", "\\\\.\\C:\\"]) {
+      expect(computeGoParentTarget({ currentPath: root, visibleCount: 0 }).shouldNavigate).toBe(false);
+    }
+  });
+
+  it("UNC: a share is a root, and its direct child goes up to the share root with its separator", () => {
+    expect(computeGoParentTarget({ currentPath: "\\\\server\\share\\", visibleCount: 0 }).shouldNavigate).toBe(false);
+    expect(computeGoParentTarget({ currentPath: "\\\\server\\share", visibleCount: 0 }).shouldNavigate).toBe(false);
+    expect(computeGoParentTarget({ currentPath: "\\\\server\\share\\dir", visibleCount: 0 })).toEqual({ shouldNavigate: true, path: "\\\\server\\share\\" });
+    expect(computeGoParentTarget({ currentPath: "\\\\server\\share\\dir\\sub", visibleCount: 0 })).toEqual({ shouldNavigate: true, path: "\\\\server\\share\\dir" });
+  });
+
+  it("namespace paths: a direct child of \\\\?\\C:\\ goes up to that root with its separator", () => {
+    expect(computeGoParentTarget({ currentPath: "\\\\?\\C:\\dir", visibleCount: 0 })).toEqual({ shouldNavigate: true, path: "\\\\?\\C:\\" });
+  });
+
+  it("never navigates to or from a drive-relative path such as C:src", () => {
+    expect(computeGoParentTarget({ currentPath: "C:src", visibleCount: 3 }).shouldNavigate).toBe(false);
+    expect(computeGoParentTarget({ currentPath: "C:src\\sub", visibleCount: 3 }).shouldNavigate).toBe(false);
+  });
 });
 
 describe("resolveOpenTarget (SPEC-0300-0009 R-61, §8.1 / SPEC-0300-0010 AC-09)", () => {

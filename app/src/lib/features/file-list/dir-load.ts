@@ -32,21 +32,44 @@ export interface GoParentTarget {
   path?: string;
 }
 
+// Root prefixes, each including its trailing separator: drive ("C:\"), the
+// `\\?\` / `\\.\` namespace forms, UNC share ("\\server\share\") and POSIX "/".
+// Longest match wins so the namespace forms beat the generic UNC form.
+const ROOT_PREFIXES: readonly RegExp[] = [
+  /^[A-Za-z]:[\\/]/,
+  /^\\\\[?.]\\[A-Za-z]:\\/,
+  /^\\\\\?\\UNC\\[^\\]+\\[^\\]+\\/i,
+  /^\\\\[?.]\\Volume\{[^}\\]+\}\\/i,
+  /^\\\\[^\\?.][^\\]*\\[^\\]+\\/,
+  /^\//,
+];
+
+function rootPrefix(path: string): string | null {
+  let best: string | null = null;
+  for (const pattern of ROOT_PREFIXES) {
+    const m = pattern.exec(path);
+    if (m !== null && (best === null || m[0].length > best.length)) best = m[0];
+  }
+  return best;
+}
+
 // R-63/AC-47: go_parent works even when the current listing is empty, and is
 // a no-op once already at a filesystem root (e.g. a drive root like "C:/").
+// The parent of a root's direct child is the root WITH its separator: "C:"
+// alone is drive-relative on Windows (the process's current directory on C),
+// so it must never be produced. A path without a root (relative or
+// drive-relative such as "C:src") never navigates.
 export function computeGoParentTarget(input: { currentPath: string; visibleCount: number }): GoParentTarget {
-  const normalized = input.currentPath.replace(/[\\/]+$/, "");
+  const path = input.currentPath;
+  // "C:" / "\\server\share" without the separator still name a root.
+  const root = rootPrefix(path) ?? rootPrefix(path + "\\");
+  if (root === null) return { shouldNavigate: false };
 
-  if (/^[A-Za-z]:$/.test(normalized) || normalized === "" || normalized === "/") {
-    return { shouldNavigate: false };
-  }
+  const normalized = path.replace(/[\\/]+$/, "");
+  if (normalized.length < root.length) return { shouldNavigate: false };
 
   const lastSlash = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
-  if (lastSlash <= 0) {
-    return { shouldNavigate: false };
-  }
-
-  const parent = normalized.slice(0, lastSlash);
+  const parent = lastSlash < root.length ? root : normalized.slice(0, lastSlash);
   return { shouldNavigate: true, path: parent };
 }
 
