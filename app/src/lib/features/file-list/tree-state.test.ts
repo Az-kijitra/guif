@@ -192,6 +192,37 @@ describe("load failures (SPEC-0300-0009 R-40-2/R-40-3, AC-604/AC-605)", () => {
     expect(onLoadFailureNotice).toHaveBeenCalledTimes(1);
   });
 
+  // SPEC-0300-0009 第14版 AC-645 / R-40-3 注記 / R-70-2 / T-05 (unit-test-writer, 2026-10-07): an `invalid_path`
+  // failure of a child fetch is "any other failure" -> NOTIFIED (once), unlike access_denied / not_found.
+  it("AC-645: an invalid_path child fetch leaves the node childless/collapsed and notifies exactly once", async () => {
+    const listDir = vi.fn((path: string) =>
+      path === "C:\\A" ? Promise.reject(Object.assign(new Error("invalid"), { code: "invalid_path" })) : Promise.resolve([{ path: "C:\\A", name: "A" }]),
+    );
+    const { state, onLoadFailureNotice } = makeState({ listDir });
+    await state.followTo("C:\\A");
+    await flush();
+    state.toggleExpand("C:\\A");
+    await flush();
+
+    const rows = state.visibleRows();
+    const node = rows.find((r) => r.path === "C:\\A");
+    expect(node).toBeDefined();
+    expect(node?.expanded).toBe(false);
+    expect(rows.some((r) => r.path.startsWith("C:\\A\\"))).toBe(false);
+    expect(onLoadFailureNotice).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC-645: several invalid_path failures in one build still produce a single notice", async () => {
+    const listDir = vi.fn((path: string) =>
+      path === "C:\\" || path === "C:\\A" ? Promise.reject(Object.assign(new Error("invalid"), { code: "invalid_path" })) : Promise.resolve([]),
+    );
+    const { state, onLoadFailureNotice } = makeState({ listDir });
+    await state.followTo("C:\\A\\B");
+    await flush();
+
+    expect(onLoadFailureNotice).toHaveBeenCalledTimes(1);
+  });
+
   it("AC-605/AC-605-1: when a deeper path segment cannot be fetched, the deepest reachable node is highlighted instead of erroring", async () => {
     const listDir = vi.fn((path: string) => (path === "C:\\A" ? notFound() : Promise.resolve([{ path: "C:\\A", name: "A" }])));
     const { state } = makeState({ listDir });

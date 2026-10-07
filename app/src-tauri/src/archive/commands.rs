@@ -15,19 +15,17 @@
 //! that was requested before the work started, code `canceled`); `Ok` from
 //! `archive_extract` = writing started, and `outcome` says how it ended.
 
-use super::create::{check_create, create_zip, CreateHooks};
+use super::create::CreateHooks;
 use super::error::ArchiveErrorDto;
-use super::extract::{extract, ExtractHooks, ExtractOutcome, ExtractResult, Resolution};
-use super::extract_plan::{build_plan, ExtractEnv};
-use super::path_rules::strip_verbatim_prefix;
+use super::extract::{ExtractHooks, ExtractOutcome, ExtractResult, Resolution};
+use super::extract_plan::ExtractEnv;
+use super::guarded::{check_create_guarded, create_guarded, detect_conflicts_guarded, display, extract_guarded};
 use super::progress::{should_emit, ArchiveProgressDto, ProgressEvent, EMIT_INTERVAL};
 use crate::shared::cancel::CancelGuard;
 use crate::shared::cancel::CancelRegistry;
-use crate::shared::e2e_scope::{self, ScopeViolation, VIOLATION_CODE};
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, State};
@@ -78,20 +76,6 @@ pub struct ExtractResultDto {
     pub destination: String,
     pub outcome: String,
     pub error: Option<ArchiveErrorDto>,
-}
-
-/// Debug-only E2E scope refusal (SPEC-0400-0001 R-10-3): rejected before anything is read or written.
-fn scope_error(violation: ScopeViolation) -> ArchiveErrorDto {
-    ArchiveErrorDto { code: VIOLATION_CODE.to_string(), message: violation.0, entry_path: None }
-}
-
-/// Path text for the UI: no `\\?\` prefix (SHOULD-90).
-fn display(path: &Path) -> String {
-    strip_verbatim_prefix(&path.to_string_lossy())
-}
-
-fn to_paths(items: Vec<String>) -> Vec<PathBuf> {
-    items.into_iter().map(PathBuf::from).collect()
 }
 
 impl From<ExtractResult> for ExtractResultDto {
@@ -173,7 +157,7 @@ pub fn archive_check_create(
     output_path: String,
     base_dir: String,
 ) -> Result<CheckCreateDto, ArchiveErrorDto> {
-    let checked = check_create(&to_paths(items), &output_path, Path::new(&base_dir))?;
+    let checked = check_create_guarded(&items, &output_path, &base_dir)?;
     Ok(CheckCreateDto { output_path: display(&checked.output_path), overwrite_required: checked.overwrite_required })
 }
 
@@ -188,10 +172,6 @@ pub fn archive_create(
     base_dir: String,
     overwrite: bool,
 ) -> Result<CreateResultDto, ArchiveErrorDto> {
-    // R-10: output folder = container; items and base_dir are read sources.
-    e2e_scope::check_container(Path::new(&output_path).parent().unwrap_or(Path::new(""))).map_err(scope_error)?;
-    items.iter().try_for_each(|item| e2e_scope::check_source(Path::new(item))).map_err(scope_error)?;
-    e2e_scope::check_source(Path::new(&base_dir)).map_err(scope_error)?;
     // Registers the id (an early cancel is kept, R-387-2) and unregisters on exit.
     let guard = CancelGuard::new(cancel_registry.inner(), &operation_id);
     let throttle = Throttle::default();
@@ -205,7 +185,7 @@ pub fn archive_create(
         guard.flag().load(Ordering::Relaxed)
     };
     let hooks = CreateHooks { should_cancel: &should_cancel, on_progress: &on_progress, ..CreateHooks::none() };
-    let result = create_zip(&to_paths(items), &output_path, Path::new(&base_dir), overwrite, &hooks)?;
+    let result = create_guarded(&items, &output_path, &base_dir, overwrite, &hooks)?;
     Ok(CreateResultDto {
         output_path: display(&result.output_path),
         entries: result.entries,
@@ -220,7 +200,7 @@ pub fn archive_detect_conflicts(
     destination: String,
     base_dir: String,
 ) -> Result<DetectConflictsDto, ArchiveErrorDto> {
-    let plan = build_plan(Path::new(&zip_path), Path::new(&destination), Path::new(&base_dir), &ExtractEnv::real())?;
+    let plan = detect_conflicts_guarded(&zip_path, &destination, &base_dir, &ExtractEnv::real())?;
     Ok(DetectConflictsDto {
         destination: display(&plan.destination),
         total_entries: plan.total_entries,
@@ -239,9 +219,6 @@ pub fn archive_extract(
     base_dir: String,
     resolutions: Option<HashMap<String, String>>,
 ) -> Result<ExtractResultDto, ArchiveErrorDto> {
-    // R-10: destination = container; the ZIP is a read source.
-    e2e_scope::check_container(Path::new(&destination)).map_err(scope_error)?;
-    e2e_scope::check_source(Path::new(&zip_path)).map_err(scope_error)?;
     // Registers the id (an early cancel is kept, R-387-2) and unregisters on exit.
     let guard = CancelGuard::new(cancel_registry.inner(), &operation_id);
     let throttle = Throttle::default();
@@ -255,10 +232,10 @@ pub fn archive_extract(
         guard.flag().load(Ordering::Relaxed)
     };
     let hooks = ExtractHooks { should_cancel: &should_cancel, on_progress: &on_progress, ..ExtractHooks::none() };
-    let result = extract(
-        Path::new(&zip_path),
-        Path::new(&destination),
-        Path::new(&base_dir),
+    let result = extract_guarded(
+        &zip_path,
+        &destination,
+        &base_dir,
         &ExtractEnv::real(),
         &resolutions_from_wire(resolutions),
         &hooks,

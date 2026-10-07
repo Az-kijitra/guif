@@ -202,7 +202,8 @@ fn archive_does_not_use_other_feature_modules() {
 // §3.4.1 / §3.4.10: `shared/` is below every feature.
 #[test]
 fn shared_does_not_use_any_feature_module() {
-    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive"];
+    // SPEC-0200-0001 §3.12.8 (g) / MINOR-12: `viewer` joins the list (`shared/abs_path.rs` is also called from viewer/).
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "viewer"];
     let mut offenders = Vec::new();
     for path in all_rust_files_under("shared") {
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -513,67 +514,6 @@ fn the_e2e_scope_variable_is_only_referenced_inside_the_debug_only_imp_module() 
     }
 }
 
-fn fn_body<'a>(source: &'a str, name: &str) -> Option<&'a str> {
-    let at = source.find(&format!("pub fn {name}("))?;
-    let rest = &source[at..];
-    let end = rest[1..]
-        .find("#[tauri::command")
-        .into_iter()
-        .chain(rest[1..].find("#[cfg(test)]"))
-        .min()
-        .map_or(rest.len(), |e| e + 1);
-    Some(&rest[..end])
-}
-
-// SHOULD-180 (c) / MUST-123: the nine commands that change files or launch apps check the scope.
-#[test]
-fn the_nine_mutating_commands_call_e2e_scope_checks() {
-    let cases: [(&str, &[&str]); 3] = [
-        (
-            "src/fs_ops/commands.rs",
-            &["fs_ops_copy", "fs_ops_move", "fs_ops_delete_trash", "fs_ops_delete_permanently", "fs_ops_rename", "fs_ops_create"],
-        ),
-        ("src/archive/commands.rs", &["archive_create", "archive_extract"]),
-        ("src/viewer/commands.rs", &["viewer_os_open_path"]),
-    ];
-    let mut missing = Vec::new();
-    let mut total = 0;
-    for (file, names) in cases {
-        let text = fs::read_to_string(manifest_dir().join(file)).unwrap();
-        let code = code_only(&text);
-        for name in names {
-            total += 1;
-            match fn_body(&code, name) {
-                Some(body) if body.contains("e2e_scope::check_") => {}
-                Some(_) => missing.push(format!("{file}: {name} does not call e2e_scope::check_*")),
-                None => missing.push(format!("{file}: {name} not found")),
-            }
-        }
-    }
-    assert_eq!(total, 9);
-    assert!(missing.is_empty(), "{}", missing.join("\n"));
-}
-
-// R-10-5 / SHOULD-179: viewer_os_open_path asks the always-reject launch check, not the path check.
-#[test]
-fn viewer_os_open_path_uses_the_external_launch_check() {
-    let code = code_only(&fs::read_to_string(manifest_dir().join("src/viewer/commands.rs")).unwrap());
-    let body = fn_body(&code, "viewer_os_open_path").expect("viewer_os_open_path");
-    assert!(body.contains("e2e_scope::check_external_launch"), "SHOULD-179: always reject while the scope is active");
-}
-
-// R-10-6: copy / move / ZIP sources and the ZIP to extract are checked with `check_source`.
-#[test]
-fn read_sources_are_checked_with_check_source() {
-    let fs_ops = code_only(&fs::read_to_string(manifest_dir().join("src/fs_ops/commands.rs")).unwrap());
-    for name in ["fs_ops_copy", "fs_ops_move"] {
-        assert!(fn_body(&fs_ops, name).expect(name).contains("e2e_scope::check_source"), "{name}: items");
-    }
-    let archive = code_only(&fs::read_to_string(manifest_dir().join("src/archive/commands.rs")).unwrap());
-    for name in ["archive_create", "archive_extract"] {
-        assert!(fn_body(&archive, name).expect(name).contains("e2e_scope::check_source"), "{name}: sources / zip_path");
-    }
-}
 
 // R-10-1 / §3.10.17.6: an invalid value stops start-up, right after the config override check.
 #[test]

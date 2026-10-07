@@ -259,3 +259,41 @@ fn command_parameters_are_named_so_that_the_wire_names_are_camel_case() {
     assert!(code.contains("State<ClipboardOwner>") || code.contains("State<'_, ClipboardOwner>"), "owner HWND state");
     assert_eq!(code.matches("rename_all = \"camelCase\"").count() >= 2, true, "both DTOs are camelCase");
 }
+
+// ------------------------------------------------------------ AC-86 (SPEC-0300-0011 第9版)
+// unit-test-writer, 2026-10-07.
+
+// AC-86: `["C:\a.txt", "b.txt"]` -> ok:false / invalid_path; the fake saw NOTHING (no open, no empty).
+#[test]
+fn ac86_a_relative_path_gives_invalid_path_and_the_fake_is_never_touched() {
+    let mut ops = Ops::new();
+    let dto = set_files_with(&mut ops, vec![r"C:\a.txt".into(), "b.txt".into()], "copy", None);
+    assert_eq!(dto, ClipboardWriteDto { ok: false, sequence: 0, error: Some("invalid_path".into()) });
+    assert_eq!(ops.opens, 0, "open must not be called");
+    assert_eq!(ops.touched, 0, "no call at all (empty / set_hdrop / close / sequence either)");
+}
+
+#[test]
+fn ac86_a_single_absolute_path_is_still_written() {
+    let mut ops = Ops::new();
+    let dto = set_files_with(&mut ops, vec![r"C:\a.txt".into()], "copy", None);
+    assert_eq!(dto, ClipboardWriteDto { ok: true, sequence: 11, error: None });
+}
+
+// §3.12.4: `invalid_effect` (argument shape, looks at no path) is judged first.
+#[test]
+fn ac86_invalid_effect_wins_over_a_relative_path() {
+    let mut ops = Ops::new();
+    let dto = set_files_with(&mut ops, vec!["b.txt".into()], "cut", None);
+    assert_eq!(dto.error.as_deref(), Some("invalid_effect"));
+    assert_eq!(ops.touched, 0);
+}
+
+// `[]` stays `no_paths` (first_relative of nothing is None).
+#[test]
+fn ac86_an_empty_list_stays_no_paths() {
+    let mut ops = Ops::new();
+    let dto = set_files_with(&mut ops, vec![], "copy", None);
+    assert_eq!(dto.error.as_deref(), Some("no_paths"));
+    assert_eq!(ops.touched, 0);
+}

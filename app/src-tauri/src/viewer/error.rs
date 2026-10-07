@@ -30,11 +30,13 @@ pub enum ViewerErrorCode {
     ViewerImageTooLarge,
     IoError,
     Unknown,
+    /// R-89-2 / R-440: a path argument that is not an absolute path (SPEC-0300-0011 R-85-4).
+    InvalidPath,
 }
 
 impl ViewerErrorCode {
     /// Every code, for exhaustive contract tests (mirrors `ArchiveErrorCode::ALL`).
-    pub const ALL: [ViewerErrorCode; 7] = [
+    pub const ALL: [ViewerErrorCode; 8] = [
         ViewerErrorCode::NotFound,
         ViewerErrorCode::NotAFile,
         ViewerErrorCode::PermissionDenied,
@@ -42,6 +44,7 @@ impl ViewerErrorCode {
         ViewerErrorCode::ViewerImageTooLarge,
         ViewerErrorCode::IoError,
         ViewerErrorCode::Unknown,
+        ViewerErrorCode::InvalidPath,
     ];
 }
 
@@ -74,6 +77,7 @@ impl ViewerErrorCode {
             ViewerErrorCode::ViewerImageTooLarge => "viewer_image_too_large",
             ViewerErrorCode::IoError => "io_error",
             ViewerErrorCode::Unknown => "unknown",
+            ViewerErrorCode::InvalidPath => "invalid_path",
         }
     }
 }

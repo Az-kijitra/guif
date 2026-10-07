@@ -65,3 +65,11 @@ mod commands_tests;
 mod boundary_tests;
 #[cfg(test)]
 mod cp932_experiment_tests;
+
+// SPEC-0200-0001 §3.12.3 / §3.12.5: the inner layer of the `archive_*` commands (absolute-path check),
+// SPEC-0300-0014 第5版 AC-387..391, SPEC-0300-0011 AC-88.
+mod guarded;
+#[cfg(test)]
+mod guarded_tests;
+#[cfg(test)]
+mod input_resolution_tests;

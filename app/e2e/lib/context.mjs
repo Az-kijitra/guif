@@ -418,6 +418,30 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     await ctx.settle();
   };
 
+  /**
+   * SPEC-0300-0009 AC-642: Backspace (go to the parent) and Enter ON A FOLDER ROW only change the SHOWN folder; they
+   * are the only keys allowed while the app shows a folder OUTSIDE the test folder (a drive root or a first-level
+   * folder, read only). Like ctx.nav it never changes a file: any other key is refused here, Enter needs the
+   * focused row to be a folder (not a file: that would open it), no dialog / overlay may be open, and the IPC
+   * stubs must still be in force (the file-changing commands are refused by the page and by the backend scope anyway).
+   */
+  ctx.viewKey = async (key) => {
+    if (key !== "Backspace" && key !== "Enter") throw new AbortRun(`viewKey only sends Backspace / Enter on a folder row (got ${key})`);
+    const fallback = await cdp.ev(`window.__e2e ? window.__e2e.ipcFallback === true : "missing"`);
+    if (fallback !== false) throw new AbortRun("refusing to send input: the IPC stubs are not in force");
+    const state = await cdp.ev(`(() => {
+      const input = document.querySelector('.path-bar-row input');
+      const row = document.querySelector('.file-list-row.focused');
+      return { editing: !!input && document.activeElement === input,
+        overlay: !!document.querySelector('.ui-dialog, [role=dialog], .nav-history-list, .ctx-menu, .sort-menu, .search-bar'),
+        listFocused: document.activeElement === document.querySelector('.app-shell [role=listbox]'),
+        focusedIsFolder: !!row && (row.querySelector('.name-text')?.textContent ?? '').startsWith('📁') };
+    })()`);
+    if (state.editing || state.overlay || !state.listFocused) throw new AbortRun(`refusing ${key}: the file list is not the plain focus target (${JSON.stringify(state)})`);
+    if (key === "Enter" && !state.focusedIsFolder) throw new AbortRun("refusing Enter: the focused row is not a folder");
+    await cdp.key(key);
+  };
+
   // -------------------------------------------------------------- view modes
 
   ctx.viewState = () =>

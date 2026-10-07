@@ -28,3 +28,8 @@ mod e2e_scope_tests;
 // Phase 12 (SPEC-0300-0017): `window_theme` tests (pure mapping, background colour drift against the CSS).
 #[cfg(test)]
 mod window_theme_tests;
+
+// SPEC-0200-0001 §3.12 (Rust-side absolute-path check, SPEC-0300-0011 R-89): the one judgement.
+pub mod abs_path;
+#[cfg(test)]
+mod abs_path_tests;

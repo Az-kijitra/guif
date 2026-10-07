@@ -540,3 +540,56 @@ fn a_panic_inside_any_step_still_closes_the_clipboard_exactly_once() {
     assert!(r.is_err());
     assert_eq!(f.closes, 1, "clear panic: {:?}", f.calls);
 }
+
+// ===================================================================== AC-86 / R-89-1 #20 (T-07)
+// SPEC-0300-0011 第9版 AC-86 / R-15-4 注記 / T-07; SPEC-0200-0001 §3.12.3 #20 / §3.12.4
+// (unit-test-writer, 2026-10-07).
+// `abs_path::first_relative` before `build_hdrop` and before any `ops` call.
+
+// AC-86: ONE path that is not absolute refuses the whole write; the fake is never touched (not even `open`).
+#[test]
+fn ac86_a_relative_path_among_absolute_ones_fails_with_invalid_path_and_touches_nothing() {
+    let mut f = Fake::new();
+    let out = write_files(&mut f, &paths(&[r"C:\a.txt", "b.txt"]), Effect::Copy, None);
+    assert_eq!(out, WriteOutcome::Failed(WriteFailure::InvalidPath));
+    assert!(f.calls.is_empty(), "no open / empty / set_hdrop / close / sequence: {:?}", f.calls);
+}
+
+#[test]
+fn ac86_every_non_absolute_form_is_refused_wherever_it_stands_in_the_list() {
+    for bad in ["b.txt", "C:", "C:src", r"\foo", "", r".\x", "..", "C:/foo", r"\\server", r"\\.\pipe\x", r"\\.\PhysicalDrive0"] {
+        for list in [paths(&[bad]), paths(&[bad, r"C:\ok"]), paths(&[r"C:\ok", bad]), paths(&[r"C:\ok", bad, r"C:\ok2"])] {
+            let mut f = Fake::new();
+            let out = write_files(&mut f, &list, Effect::Move, None);
+            assert_eq!(out, WriteOutcome::Failed(WriteFailure::InvalidPath), "{list:?}");
+            assert!(f.calls.is_empty(), "{list:?} touched the clipboard: {:?}", f.calls);
+        }
+    }
+}
+
+// The check is before the conditional-write comparison: `expectedSequence` does not reach the OS either.
+#[test]
+fn ac86_the_refusal_comes_before_the_expected_sequence_comparison() {
+    let mut f = Fake::new();
+    let out = write_files(&mut f, &paths(&[r"C:\a.txt", "b.txt"]), Effect::Move, Some(7));
+    assert_eq!(out, WriteOutcome::Failed(WriteFailure::InvalidPath), "not Skipped");
+    assert!(f.calls.is_empty(), "{:?}", f.calls);
+}
+
+#[test]
+fn ac86_all_absolute_paths_are_written_as_before_including_the_extended_and_unc_forms() {
+    let mut f = Fake::new();
+    let list = paths(&[r"C:\a.txt", r"\\server\share\b", r"\\?\C:\long\c", r"\\.\C:\d"]);
+    let out = write_files(&mut f, &list, Effect::Copy, None);
+    assert_eq!(out, WriteOutcome::Written { sequence: 200 });
+    assert_eq!(f.names(), ["open", "empty", "set_hdrop", "set_drop_effect", "close", "sequence"]);
+    f.assert_balanced();
+}
+
+// An empty list stays `no_paths` (first_relative of nothing is None), also without any OS call.
+#[test]
+fn ac86_an_empty_list_is_still_no_paths() {
+    let mut f = Fake::new();
+    assert_eq!(write_files(&mut f, &[], Effect::Copy, None), WriteOutcome::Failed(WriteFailure::NoPaths));
+    assert!(f.calls.is_empty());
+}

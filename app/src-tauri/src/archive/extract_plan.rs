@@ -98,25 +98,29 @@ fn io_failure(err: &io::Error) -> ArchiveError {
     ArchiveError::new(classify_io_error(err), err.to_string())
 }
 
+/// R-341-1 / R-343-1 (pure: no filesystem access): the first half of `resolve_destination`. Empty ->
+/// `invalid_path`; absolute -> as given; drive-relative / root-relative -> `invalid_path`; relative -> joined
+/// to `base_dir` (which must itself be absolute).
+pub(crate) fn join_destination(destination: &Path, base_dir: &Path) -> Result<PathBuf, ArchiveError> {
+    let has_prefix = matches!(destination.components().next(), Some(Component::Prefix(_)));
+    if destination.as_os_str().is_empty() {
+        Err(ArchiveError::new(Code::InvalidPath, "the destination is empty"))
+    } else if destination.is_absolute() {
+        Ok(destination.to_path_buf())
+    } else if destination.has_root() || has_prefix {
+        Err(ArchiveError::new(Code::InvalidPath, "a drive-relative or root-relative destination is ambiguous"))
+    } else if base_dir.is_absolute() {
+        Ok(base_dir.join(destination))
+    } else {
+        Err(ArchiveError::new(Code::InvalidPath, "the base directory is not an absolute path"))
+    }
+}
+
 /// R-341-1 / R-343-1 / R-343-2: resolves `destination` against `base_dir`,
 /// rejects an existing non-directory and normalizes (the missing tail gets the
 /// R-363 checks). Shared by `build_plan` and the re-check in `extract`.
 pub(crate) fn resolve_destination(destination: &Path, base_dir: &Path) -> Result<PathBuf, ArchiveError> {
-    let has_prefix = matches!(destination.components().next(), Some(Component::Prefix(_)));
-    let joined = if destination.as_os_str().is_empty() {
-        return Err(ArchiveError::new(Code::InvalidPath, "the destination is empty"));
-    } else if destination.is_absolute() {
-        destination.to_path_buf()
-    } else if destination.has_root() || has_prefix {
-        return Err(ArchiveError::new(
-            Code::InvalidPath,
-            "a drive-relative or root-relative destination is ambiguous",
-        ));
-    } else if base_dir.is_absolute() {
-        base_dir.join(destination)
-    } else {
-        return Err(ArchiveError::new(Code::InvalidPath, "the base directory is not an absolute path"));
-    };
+    let joined = join_destination(destination, base_dir)?;
     if let Ok(meta) = fs::metadata(&joined) {
         if !meta.is_dir() {
             return Err(ArchiveError::new(Code::DestinationNotDir, "the destination is an existing file"));

@@ -7,3 +7,8 @@ pub mod win_drives;
 
 #[cfg(test)]
 mod win_drives_tests;
+
+
+// SPEC-0200-0001 §3.12.3 #1 (`list_dir_checked`), SPEC-0300-0009 AC-643.
+#[cfg(test)]
+mod list_dir_checked_tests;

@@ -10,7 +10,7 @@
 // `normalizeArchiveError` set) — otherwise `list-state.svelte.ts`'s existing
 // `e instanceof Error ? e.message : String(e)` catch clause would display
 // "[object Object]".
-export type FsListDirErrorCode = "access_denied" | "not_found" | "not_a_directory" | "other";
+export type FsListDirErrorCode = "access_denied" | "not_found" | "not_a_directory" | "invalid_path" | "other";
 
 export class FsListDirError extends Error {
   code: FsListDirErrorCode;
@@ -22,7 +22,7 @@ export class FsListDirError extends Error {
   }
 }
 
-const KNOWN_CODES: readonly FsListDirErrorCode[] = ["access_denied", "not_found", "not_a_directory", "other"];
+const KNOWN_CODES: readonly FsListDirErrorCode[] = ["access_denied", "not_found", "not_a_directory", "invalid_path", "other"];
 
 // Never throws: any rejected value becomes an FsListDirError. Accepts the 3
 // input shapes MUST-95 requires: a structured DTO object, a bare string (an

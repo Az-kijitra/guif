@@ -115,3 +115,43 @@ describe("resolveOpenTarget (SPEC-0300-0009 R-61, §8.1 / SPEC-0300-0010 AC-09)"
     expect(target).toEqual({ action: "noop" });
   });
 });
+
+// SPEC-0300-0009 第14版 AC-640 / AC-641 (R-63-1 / R-63-2): the parts of the two tables that the tests above do not
+// pin yet (unit-test-writer, 2026-10-07). `computeGoParentTarget` was fixed in fd0f15f; these pass today.
+describe("AC-640: the parent of a root's direct child is the root WITH its separator", () => {
+  it.each([
+    ["C:\\Users", "C:\\"],
+    ["C:\\Users\\", "C:\\"],
+    ["D:\\a\\b", "D:\\a"],
+    ["\\\\server\\share\\dir", "\\\\server\\share\\"],
+    ["\\\\?\\C:\\X", "\\\\?\\C:\\"],
+    ["\\\\?\\UNC\\server\\share\\X", "\\\\?\\UNC\\server\\share\\"],
+    ["\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\X", "\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\"],
+    ["\\\\.\\C:\\X", "\\\\.\\C:\\"],
+  ])("%s -> %s", (current, expected) => {
+    expect(computeGoParentTarget({ currentPath: current, visibleCount: 2 })).toEqual({ shouldNavigate: true, path: expected });
+  });
+
+  it("no result is ever the separator-less `C:` or `\\\\server\\share`", () => {
+    for (const current of ["C:\\Users", "c:\\a", "\\\\server\\share\\dir", "\\\\?\\C:\\X", "\\\\.\\C:\\X"]) {
+      const target = computeGoParentTarget({ currentPath: current, visibleCount: 0 });
+      expect(target.shouldNavigate).toBe(true);
+      if (target.shouldNavigate) {
+        expect(target.path).not.toMatch(/^[A-Za-z]:$/);
+        expect(target.path).not.toBe("\\\\server\\share");
+      }
+    }
+  });
+});
+
+describe("AC-641: roots and paths without a root do not move", () => {
+  it.each(["C:\\", "\\\\server\\share\\", "\\\\server\\share", "\\\\?\\C:\\"])("(i) the root %s does not move", (root) => {
+    expect(computeGoParentTarget({ currentPath: root, visibleCount: 0 }).shouldNavigate).toBe(false);
+  });
+
+  // 2026-10-07 MINOR-1: a separator-less `C:` is a DRIVE-RELATIVE path (not an absolute path, SPEC-0300-0016 R-722-3),
+  // classified with the rootless paths; the result (no move) is the same as for a root.
+  it.each(["C:", "C:src", "src", ".\\src", "\\foo", ""])("(ii) the path without a root %j does not move", (rootless) => {
+    expect(computeGoParentTarget({ currentPath: rootless, visibleCount: 3 }).shouldNavigate).toBe(false);
+  });
+});

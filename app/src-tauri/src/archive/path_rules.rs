@@ -181,3 +181,10 @@ pub fn strip_verbatim_prefix(path: &str) -> String {
     }
     path.to_string()
 }
+
+/// T-14 (SPEC-0200-0001 §3.12.5): `/` in the user's INPUT text of an output path / destination is a
+/// separator like `\`. Nothing else changes. Applied to those two inputs only, never to `items`,
+/// `zip_path` or `base_dir`.
+pub fn normalize_input_separators(input: &str) -> String {
+    input.replace('/', "\\")
+}

@@ -22,6 +22,8 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 const COMMANDS_RS: &str = include_str!("commands.rs");
+// SPEC-0200-0001 §3.12.3: the inner layer holding the real calls (the command fns are thin).
+const GUARDED_RS: &str = include_str!("guarded.rs");
 const EXTRACT_RS: &str = include_str!("extract.rs");
 const CREATE_RS: &str = include_str!("create.rs");
 
@@ -161,7 +163,9 @@ fn r386_the_progress_event_name_is_archive_progress() {
 #[test]
 fn r371_detect_and_extract_call_the_same_build_plan() {
     let code = strip_line_comments(COMMANDS_RS);
-    assert!(fn_text(&code, "archive_detect_conflicts").contains("build_plan("), "detect must call build_plan");
+    assert!(fn_text(&code, "archive_detect_conflicts").contains("detect_conflicts_guarded("), "detect goes through the inner layer");
+    let guarded = strip_line_comments(GUARDED_RS);
+    assert!(fn_text(&guarded, "detect_conflicts_guarded").contains("build_plan("), "detect must call build_plan");
     let extract_code = strip_line_comments(EXTRACT_RS);
     assert!(extract_code.contains("build_plan("), "extract::extract must re-run build_plan right before writing");
 }
@@ -170,9 +174,13 @@ fn r371_detect_and_extract_call_the_same_build_plan() {
 #[test]
 fn the_commands_are_thin_wrappers_over_create_and_extract() {
     let code = strip_line_comments(COMMANDS_RS);
-    assert!(fn_text(&code, "archive_check_create").contains("check_create("));
-    assert!(fn_text(&code, "archive_create").contains("create_zip("));
-    assert!(fn_text(&code, "archive_extract").contains("extract("));
+    assert!(fn_text(&code, "archive_check_create").contains("check_create_guarded("));
+    assert!(fn_text(&code, "archive_create").contains("create_guarded("));
+    assert!(fn_text(&code, "archive_extract").contains("extract_guarded("));
+    let guarded = strip_line_comments(GUARDED_RS);
+    assert!(fn_text(&guarded, "check_create_guarded").contains("check_create("));
+    assert!(fn_text(&guarded, "create_guarded").contains("create_zip("));
+    assert!(fn_text(&guarded, "extract_guarded").contains("extract("));
     // the creation / extraction modules do not know about Tauri
     for (label, src) in [("create.rs", CREATE_RS), ("extract.rs", EXTRACT_RS)] {
         assert!(!strip_line_comments(src).contains("tauri"), "{label} must stay framework-agnostic");

@@ -12,6 +12,7 @@ export type ViewerDisplayErrorCode =
   | "image_decode_failed" // R-485 (frontend-only: <img> failed to decode)
   | "unsupported_kind" // R-493 (frontend-only: navigated to an OS-open file)
   | "io_error"
+  | "invalid_path" // R-89-2 / R-447: a path argument that is not absolute (same wording as shared/error-text.ts)
   | "unknown";
 
 const MESSAGES: Record<ViewerDisplayErrorCode, string> = {
@@ -23,6 +24,7 @@ const MESSAGES: Record<ViewerDisplayErrorCode, string> = {
   image_decode_failed: "画像を表示できません。",
   unsupported_kind: "このファイルはビューアで表示できません。",
   io_error: "読み込み中にエラーが発生しました。",
+  invalid_path: "パスが正しくありません。",
   unknown: "不明なエラーが発生しました。",
 };
 

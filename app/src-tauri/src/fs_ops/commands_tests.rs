@@ -7,6 +7,7 @@
 //! §3.3.13-7 (SHOULD-80).
 
 use super::*;
+use std::path::PathBuf;
 use crate::fs_ops::test_support::*;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

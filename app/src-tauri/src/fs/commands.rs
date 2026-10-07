@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 
 use super::query::{self, EntryType};
+use crate::shared::abs_path;
 
 // SPEC-0200-0001 §3.6.11.6 (MUST-89): `fs_list_dir`'s error is structured so
 // the frontend can implement R-40-3 ("access-denied/not-found are silent,
@@ -95,8 +96,28 @@ pub fn fs_list_dir(
     sort_key: String,
     sort_order: String,
 ) -> Result<Vec<FsEntryDto>, FsListDirErrorDto> {
-    let path_buf = PathBuf::from(path);
-    query::fs_list_dir(&path_buf, show_hidden, &sort_key, &sort_order)
+    list_dir_checked(&path, show_hidden, &sort_key, &sort_order)
+}
+
+impl FsListDirErrorDto {
+    /// SPEC-0300-0011 R-89-2 / R-85-4: `path` is not an absolute path. The code is the shared
+    /// `invalid_path`; `From<io::Error>` never produces it (no `io::ErrorKind` maps to it).
+    pub fn invalid_path(path: &str) -> Self {
+        Self { code: abs_path::INVALID_PATH_CODE.to_string(), message: format!("not an absolute path: {path}") }
+    }
+}
+
+/// Inner layer of `fs_list_dir` (R-89-6-1): `abs(path)` -> `query::fs_list_dir`. No Tauri types.
+pub(crate) fn list_dir_checked(
+    path: &str,
+    show_hidden: bool,
+    sort_key: &str,
+    sort_order: &str,
+) -> Result<Vec<FsEntryDto>, FsListDirErrorDto> {
+    if abs_path::first_relative([path]).is_some() {
+        return Err(FsListDirErrorDto::invalid_path(path));
+    }
+    query::fs_list_dir(&PathBuf::from(path), show_hidden, sort_key, sort_order)
         .map(|entries| entries.into_iter().map(FsEntryDto::from).collect())
         .map_err(FsListDirErrorDto::from)
 }

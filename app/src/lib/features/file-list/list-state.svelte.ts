@@ -94,6 +94,8 @@ export function createFileListState() {
         return translateErrorCode("not_found") ?? err.message;
       case "not_a_directory":
         return translateErrorCode("not_a_directory") ?? err.message;
+      case "invalid_path":
+        return translateErrorCode("invalid_path") ?? err.message;
       default:
         return err.message;
     }

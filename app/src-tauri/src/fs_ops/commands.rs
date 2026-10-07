@@ -47,19 +47,14 @@
 //! are not in `items` are ignored (`resolve_item_resolution`).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use super::create;
-use super::delete;
-use super::preflight::MutatePreflightError;
-use super::rename;
+use super::guarded;
 use super::transfer::{self, ConflictResolution, OpSummary, ProgressEvent};
 use crate::shared::cancel::CancelRegistry;
-use crate::shared::e2e_scope::{self, ScopeViolation, VIOLATION_CODE};
 
 /// Serializable counterpart of `transfer::Failure` for the IPC boundary.
 #[derive(Debug, Clone, Serialize)]
@@ -129,36 +124,6 @@ pub(crate) fn resolve_item_resolution(
     }
 }
 
-fn mutate_error_code(err: MutatePreflightError) -> String {
-    match err {
-        MutatePreflightError::Required => "invalid_name".to_string(),
-        MutatePreflightError::InvalidName => "invalid_name".to_string(),
-        MutatePreflightError::AlreadyExists => "already_exists".to_string(),
-        MutatePreflightError::ParentNotFound => "parent_not_found".to_string(),
-        MutatePreflightError::InvalidKind => "invalid_kind".to_string(),
-    }
-}
-
-/// Debug-only E2E scope (SPEC-0400-0001 R-10-3): every item fails with `e2e_scope_violation`
-/// and nothing is touched.
-fn scope_refusal(paths: &[String], violation: &ScopeViolation) -> OpSummaryDto {
-    let count = paths.len() as u32;
-    OpSummaryDto {
-        ok: 0,
-        failed: count,
-        total: count,
-        skipped: 0,
-        failures: paths
-            .iter()
-            .map(|path| FailureDto { path: path.clone(), code: VIOLATION_CODE.to_string(), message: violation.0.clone() })
-            .collect(),
-    }
-}
-
-fn to_path_bufs(items: Vec<String>) -> Vec<PathBuf> {
-    items.into_iter().map(PathBuf::from).collect()
-}
-
 /// R-40~R-45 (ISS-0052): the Tauri event name `fs_ops_copy`/`fs_ops_move`
 /// broadcast per-item progress notifications under (see this module's doc
 /// comment for the architecture-mapper follow-up note on this convention).
@@ -225,9 +190,8 @@ impl From<transfer::Conflict> for ConflictDto {
 /// error value is the preflight code (e.g. `destination_not_found`).
 #[tauri::command(async)]
 pub fn fs_ops_detect_conflicts(items: Vec<String>, destination: String) -> Result<Vec<ConflictDto>, String> {
-    transfer::detect_conflicts(&to_path_bufs(items), &PathBuf::from(destination))
+    guarded::detect_conflicts_guarded(&items, &destination)
         .map(|conflicts| conflicts.into_iter().map(ConflictDto::from).collect())
-        .map_err(|err| transfer::preflight_error_code(err).to_string())
 }
 
 /// R-21/R-40~R-44: batch copy (`items` into `destination`), broadcasting
@@ -247,18 +211,12 @@ pub fn fs_ops_copy(
     resolution: String,
     item_resolutions: Option<HashMap<String, String>>,
 ) -> OpSummaryDto {
-    // R-10 (debug builds with a scope only): destination = container, items = read sources.
-    let scope = e2e_scope::check_container(Path::new(&destination))
-        .and_then(|_| items.iter().try_for_each(|item| e2e_scope::check_source(Path::new(item))));
-    if let Err(violation) = scope {
-        return scope_refusal(&items, &violation);
-    }
     let cancel_flag = cancel_registry.register(&operation_id);
     let event_operation_id = operation_id.clone();
     let default_resolution = resolution_from_str(&resolution);
-    let summary = transfer::copy_batch_with_resolver(
-        &to_path_bufs(items),
-        &PathBuf::from(destination),
+    let summary = guarded::copy_guarded(
+        &items,
+        &destination,
         |item| resolve_item_resolution(&item.to_string_lossy(), default_resolution, item_resolutions.as_ref()),
         move || cancel_flag.load(Ordering::Relaxed),
         move |event| {
@@ -284,21 +242,12 @@ pub fn fs_ops_move(
     resolution: String,
     item_resolutions: Option<HashMap<String, String>>,
 ) -> OpSummaryDto {
-    // R-10: destination = container; items are moved (entry rule) and read (source rule).
-    let scope = e2e_scope::check_container(Path::new(&destination)).and_then(|_| {
-        items.iter().try_for_each(|item| {
-            e2e_scope::check_entry(Path::new(item)).and_then(|_| e2e_scope::check_source(Path::new(item)))
-        })
-    });
-    if let Err(violation) = scope {
-        return scope_refusal(&items, &violation);
-    }
     let cancel_flag = cancel_registry.register(&operation_id);
     let event_operation_id = operation_id.clone();
     let default_resolution = resolution_from_str(&resolution);
-    let summary = transfer::move_batch_with_resolver(
-        &to_path_bufs(items),
-        &PathBuf::from(destination),
+    let summary = guarded::move_guarded(
+        &items,
+        &destination,
         |item| resolve_item_resolution(&item.to_string_lossy(), default_resolution, item_resolutions.as_ref()),
         move || cancel_flag.load(Ordering::Relaxed),
         move |event| {
@@ -322,38 +271,25 @@ pub fn fs_ops_cancel(cancel_registry: State<CancelRegistry>, operation_id: Strin
 /// R-50/R-51: batch delete to the OS-standard trash bin.
 #[tauri::command(async)]
 pub fn fs_ops_delete_trash(paths: Vec<String>) -> OpSummaryDto {
-    if let Err(violation) = paths.iter().try_for_each(|p| e2e_scope::check_entry(Path::new(p))) {
-        return scope_refusal(&paths, &violation);
-    }
-    delete::delete_to_trash(&to_path_bufs(paths)).into()
+    guarded::delete_trash_guarded(&paths).into()
 }
 
 /// R-56/R-56-3: batch permanent delete.
 #[tauri::command(async)]
 pub fn fs_ops_delete_permanently(paths: Vec<String>) -> OpSummaryDto {
-    if let Err(violation) = paths.iter().try_for_each(|p| e2e_scope::check_entry(Path::new(p))) {
-        return scope_refusal(&paths, &violation);
-    }
-    delete::delete_permanently(&to_path_bufs(paths)).into()
+    guarded::delete_permanently_guarded(&paths).into()
 }
 
 /// R-64: rename a single entry; returns the entry's new full path.
 #[tauri::command(async)]
 pub fn fs_ops_rename(path: String, new_name: String) -> Result<String, String> {
-    // R-10: the entry itself, and the folder it stays in (the new name's parent).
-    let scope = e2e_scope::check_entry(Path::new(&path))
-        .and_then(|_| e2e_scope::check_container(Path::new(&path).parent().unwrap_or(Path::new(""))));
-    scope.map_err(|violation| violation.to_command_error())?;
-    rename::rename_entry(&PathBuf::from(path), &new_name)
-        .map(|new_path| new_path.to_string_lossy().into_owned())
-        .map_err(mutate_error_code)
+    guarded::rename_guarded(&path, &new_name)
 }
 
 /// R-78: create a single new entry.
 #[tauri::command(async)]
 pub fn fs_ops_create(parent: String, name: String, kind: String) -> Result<(), String> {
-    e2e_scope::check_container(Path::new(&parent)).map_err(|violation| violation.to_command_error())?;
-    create::create_entry(&PathBuf::from(parent), &name, &kind).map_err(mutate_error_code)
+    guarded::create_guarded(&parent, &name, &kind)
 }
 
 #[cfg(test)]

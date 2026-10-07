@@ -409,3 +409,46 @@ fn without_an_active_scope_every_check_allows_everything() {
     ok(check_source(anywhere), "check_source");
     ok(check_external_launch(anywhere), "check_external_launch (only active scopes reject)");
 }
+
+// ============================================================== test override (AC-88 support)
+
+// SPEC-0200-0001 §3.12.9 AC-88 / MINOR-11: `set_test_scope` activates a scope for the free
+// `check_*` fns of THIS thread; `ScopeGuard::drop` always restores the previous value.
+#[test]
+fn set_test_scope_activates_the_scope_for_the_free_check_fns_until_the_guard_drops() {
+    let e = env();
+    let outside_file = e.outside.join("out.txt");
+    {
+        let _guard = super::e2e_scope::set_test_scope(e.scope.clone());
+        denied(check_container(&e.outside), "outside container while the override is active");
+        denied(check_source(&outside_file), "outside source while the override is active");
+        denied(check_external_launch(&e.root), "launch is always refused while a scope is active");
+        ok(check_container(&e.root), "the scope root itself");
+    }
+    // dropped: back to "scope off"
+    ok(check_container(&e.outside), "after the guard dropped");
+    ok(check_external_launch(&e.root), "after the guard dropped (launch)");
+}
+
+#[test]
+fn nested_test_scopes_restore_the_previous_one_in_reverse_order() {
+    let a = env();
+    let b = env();
+    let _outer = super::e2e_scope::set_test_scope(a.scope.clone());
+    {
+        let _inner = super::e2e_scope::set_test_scope(b.scope.clone());
+        ok(check_container(&b.root), "inner scope root");
+        denied(check_container(&a.root), "outer root is outside the inner scope");
+    }
+    ok(check_container(&a.root), "outer scope is back after the inner guard dropped");
+    denied(check_container(&b.root), "inner root is outside the outer scope");
+}
+
+#[test]
+fn a_test_scope_does_not_leak_to_other_threads() {
+    let e = env();
+    let _guard = super::e2e_scope::set_test_scope(e.scope.clone());
+    let outside = e.outside.clone();
+    let seen_by_other_thread = std::thread::spawn(move || check_container(&outside).is_ok()).join().unwrap();
+    assert!(seen_by_other_thread, "another thread has no override (scope off)");
+}

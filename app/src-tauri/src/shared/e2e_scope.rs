@@ -218,15 +218,61 @@ pub fn init_from_env() -> Result<(), ScopeError> {
     Ok(())
 }
 
+/// The scope the free `check_*` fns consult: the test override of this thread first
+/// (`set_test_scope`, tests only), then the process-wide one set by `init_from_env`.
+fn with_scope(f: impl Fn(&Scope) -> Result<(), ScopeViolation>) -> Result<(), ScopeViolation> {
+    #[cfg(test)]
+    {
+        if let Some(result) = test_override::TEST_SCOPE.with(|cell| cell.borrow().as_ref().map(&f)) {
+            return result;
+        }
+    }
+    SCOPE.get().map_or(Ok(()), f)
+}
+
 pub fn check_container(path: &Path) -> Result<(), ScopeViolation> {
-    SCOPE.get().map_or(Ok(()), |s| s.check_container(path))
+    with_scope(|s| s.check_container(path))
 }
 pub fn check_entry(path: &Path) -> Result<(), ScopeViolation> {
-    SCOPE.get().map_or(Ok(()), |s| s.check_entry(path))
+    with_scope(|s| s.check_entry(path))
 }
 pub fn check_source(path: &Path) -> Result<(), ScopeViolation> {
-    SCOPE.get().map_or(Ok(()), |s| s.check_source(path))
+    with_scope(|s| s.check_source(path))
 }
 pub fn check_external_launch(path: &Path) -> Result<(), ScopeViolation> {
-    SCOPE.get().map_or(Ok(()), |s| s.check_external_launch(path))
+    with_scope(|s| s.check_external_launch(path))
+}
+
+/// SPEC-0200-0001 §3.12.9 AC-88 / MINOR-11 (unit-test-writer): a `#[cfg(test)]` thread-local scope
+/// override, OUTSIDE `mod imp`. `ScopeGuard::drop` always restores the previous value, so a test
+/// never leaks a scope into another test (even with `--test-threads=1`, which reuses threads).
+#[cfg(test)]
+mod test_override {
+    use super::Scope;
+    use std::cell::RefCell;
+
+    thread_local! {
+        pub(super) static TEST_SCOPE: RefCell<Option<Scope>> = const { RefCell::new(None) };
+    }
+}
+
+/// Restores the previous thread-local scope on drop.
+#[cfg(test)]
+pub struct ScopeGuard {
+    previous: Option<Scope>,
+}
+
+#[cfg(test)]
+impl Drop for ScopeGuard {
+    fn drop(&mut self) {
+        let previous = self.previous.take();
+        test_override::TEST_SCOPE.with(|cell| *cell.borrow_mut() = previous);
+    }
+}
+
+/// Activates `scope` for the free `check_*` fns on THIS thread until the guard is dropped.
+#[cfg(test)]
+pub fn set_test_scope(scope: Scope) -> ScopeGuard {
+    let previous = test_override::TEST_SCOPE.with(|cell| cell.replace(Some(scope)));
+    ScopeGuard { previous }
 }

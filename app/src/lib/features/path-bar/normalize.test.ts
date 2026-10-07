@@ -180,3 +180,73 @@ describe("isPathBarRoot (R-721-1: the 7 root forms, and non-roots)", () => {
     }
   });
 });
+
+// SPEC-0300-0016 第4版 AC-758 (R-722, R-722-3) and SPEC-0200-0001 §3.12.2 (unit-test-writer, 2026-10-07).
+// The SAME representative values as AC-757 are held by the Rust side in
+// `app/src-tauri/src/shared/abs_path_tests.rs` (`ac757_accepted` / `ac757_rejected`): keep the two tables in step
+// (a function cannot be shared across the languages; M-4 records why a shared data file was not adopted).
+// Excluded from the comparison (AC-758): values the form check normalises first (R-721: a trailing separator, `/`,
+// a bare `C:`), the length limit (the path bar has none, R-722-3 M-2 (a)) and the strict GUID shape (MINOR-9).
+// Those are listed below WITH the front end's own result so the difference stays visible and intentional.
+describe("AC-758: the path bar accepts/rejects the same representative values as the backend (abs_path_tests.rs, AC-757)", () => {
+  const GUID = "01234567-89ab-cdef-0123-456789abcdef";
+  // [value, backend accepts (AC-757)]: only values that need no normalisation.
+  const COMPARED: ReadonlyArray<readonly [string, boolean]> = [
+    ["C:\\", true],
+    ["C:\\Users", true],
+    ["\\\\server\\share", true],
+    ["\\\\server\\share\\", true],
+    ["\\\\server\\share\\a", true],
+    ["\\\\?\\C:\\a", true],
+    ["\\\\?\\UNC\\server\\share\\a", true],
+    [`\\\\?\\Volume{${GUID}}\\`, true],
+    ["\\\\.\\C:\\a", true],
+    [`\\\\.\\Volume{${GUID}}\\a`, true],
+    ["C:src", false],
+    ["src", false],
+    [".\\src", false],
+    ["..", false],
+    ["\\foo", false],
+    ["/foo", false],
+    ["\\\\server", false],
+    ["\\\\server\\", false],
+    ["\\\\.\\PhysicalDrive0", false],
+    ["\\\\.\\pipe\\x", false],
+    ["\\\\.\\", false],
+    ["\\\\?\\", false],
+    // T-12 (known limitation, fixed on the backend by AC-757): `\\?\` device paths are accepted by both.
+    ["\\\\?\\PhysicalDrive0", true],
+    ["\\\\?\\pipe\\x", true],
+    ["\\\\?\\C:", true],
+  ];
+
+  it.each(COMPARED)("%j: front end accepts === backend accepts (%s)", (value, backendAccepts) => {
+    expect(normalizePathBarInput(value).kind === "path").toBe(backendAccepts);
+  });
+
+  it("the empty string is not a path for the front end either ('empty', R-722-1), as on the backend", () => {
+    expect(normalizePathBarInput("").kind).not.toBe("path");
+  });
+
+  it("the table covers every AC-757 value except the excluded ones (12 accepted + 16 rejected + 3 T-12 = 31; 6 excluded here)", () => {
+    // accepted by the backend: 12 - {c:\a\, C:\a/b} (normalised) = 10 compared; T-12: 3
+    // rejected by the backend: 16 - {"", C:, 32,768-unit, C:/foo} = 12 compared
+    expect(COMPARED.filter(([, accepts]) => accepts).length).toBe(10 + 3);
+    expect(COMPARED.filter(([, accepts]) => !accepts).length).toBe(12);
+  });
+
+  // The excluded values: the front end NORMALISES first (R-721) and so answers differently from the raw backend check
+  // (which then never sees them, because the path bar hands the normalised string over).
+  it("excluded: a trailing separator, `/` and a bare `C:` are normalised and then accepted by the front end", () => {
+    expect(normalizePathBarInput("c:\\a\\")).toEqual({ kind: "path", path: "c:\\a" });
+    expect(normalizePathBarInput("C:\\a/b")).toEqual({ kind: "path", path: "C:\\a\\b" });
+    expect(normalizePathBarInput("C:")).toEqual({ kind: "path", path: "C:\\" });
+    expect(normalizePathBarInput("C:/foo")).toEqual({ kind: "path", path: "C:\\foo" });
+  });
+
+  it("excluded: the path bar has no length limit; the strict GUID shape is looser on the front end", () => {
+    const long = `C:\\${"a".repeat(32_768 - 3)}`;
+    expect(normalizePathBarInput(long).kind).toBe("path");
+    expect(normalizePathBarInput("\\\\.\\Volume{abc}\\x").kind).toBe("path");
+  });
+});

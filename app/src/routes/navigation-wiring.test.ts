@@ -10,6 +10,7 @@ import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import {
   createAfterUserNavigation,
   createCloseRequestHandler,
+  createNavigationFollowers,
   createOverlayController,
   loadInitialDirectory,
 } from "./navigation-wiring";
@@ -126,6 +127,68 @@ describe("loadInitialDirectory (§3.7.2, MUST-96, MUST-105)", () => {
   it("homeDir failure -> failed result (no throw)", async () => {
     const d = deps({ homeDir: vi.fn(async () => { throw new Error("no tauri"); }) });
     expect((await loadInitialDirectory(d as never)).status).toBe("failed");
+  });
+});
+
+// SPEC-0300-0013 第6版 R-238-4 / R-246-1 / R-210-1 / R-242-3 (+ the post-approval note of SHOULD-189), AC-256 / AC-257;
+// SPEC-0300-0009 第14版 R-70-2 (unit-test-writer, 2026-10-07). The backend now refuses a path that is not absolute
+// (`invalid_path`); the front end must treat it as an ordinary failed move. No production change is needed: these
+// document and pin that the existing wiring already does the right thing.
+describe("invalid_path in the navigation wiring (R-238-4, R-246-1, R-210-1, R-242-3; AC-256 / AC-257)", () => {
+  type R = { status: "success"; path: string } | { status: "stale" } | { status: "failed"; code: string; message: string };
+  const invalidPath = (): R => ({ status: "failed", code: "invalid_path", message: "パスが正しくありません。" });
+  const NOT_ABSOLUTE = ["C:src", "src", "\\foo", ".\\src"];
+
+  // R-246-1 / AC-256: the first (last-visited) load fails with invalid_path -> the home folder is shown instead.
+  it.each(NOT_ABSOLUTE)("AC-256: a last-visited %s that fails with invalid_path falls back to the home folder", async (lastVisited) => {
+    const d = {
+      lastVisited,
+      load: vi.fn(async (): Promise<R> => invalidPath()),
+      currentSequence: vi.fn(() => 3),
+      loadIfNoNewerRequest: vi.fn(async (p: string, _s: number): Promise<R> => ({ status: "success", path: p })),
+      homeDir: vi.fn(async () => "C:\\Users\\home"),
+    };
+    expect(await loadInitialDirectory(d as never)).toEqual({ status: "success", path: "C:\\Users\\home" });
+    expect(d.load).toHaveBeenCalledWith(lastVisited);
+    expect(d.loadIfNoNewerRequest).toHaveBeenCalledWith("C:\\Users\\home", 3);
+  });
+
+  // R-242-3 / AC-256: the item is NOT removed or rewritten by hydrate, and the (silent) failed initial load adds nothing.
+  it("AC-256: the unusable item stays in the visit history after the failed initial load (not removed, not rewritten, nothing recorded)", async () => {
+    const history = createNavigationHistoryState();
+    history.hydrate(["C:src", "C:\\Users\\a"], []);
+    const { afterInitialLoad } = createNavigationFollowers({ recordVisit: (p) => history.recordVisit(p), followTree: () => {}, notify: () => {} });
+    await afterInitialLoad(Promise.resolve(invalidPath()));
+    expect(history.visitHistory).toEqual(["C:src", "C:\\Users\\a"]);
+  });
+
+  // R-238-4 / R-238-1 / R-238-2 / R-210-1 / AC-257: confirming an unusable item fails like a path that does not exist.
+  it.each(NOT_ABSOLUTE)("AC-257: confirming the %s item notifies, keeps every item and does not move it to the front", async (bad) => {
+    const history = createNavigationHistoryState();
+    const list = ["C:\\Users\\first", bad, "C:\\Users\\last"];
+    history.hydrate(list, []);
+    const before = [...history.visitHistory];
+    const notified: string[] = [];
+    const { afterUserNavigation } = createNavigationFollowers({
+      recordVisit: (p) => history.recordVisit(p),
+      followTree: () => {},
+      notify: (m) => notified.push(m),
+    });
+    const result = await afterUserNavigation(Promise.resolve(invalidPath()));
+    expect(result.status).toBe("failed");
+    expect(notified).toEqual(["パスが正しくありません。"]);
+    expect(history.visitHistory).toEqual(before);
+    expect(history.visitHistory[0]).toBe("C:\\Users\\first");
+    expect(history.visitHistory).toContain(bad);
+  });
+
+  it("AC-257: the jump list is left untouched by a failed confirmation as well", async () => {
+    const history = createNavigationHistoryState();
+    history.hydrate([], ["C:src", "C:\\ok"]);
+    const { afterUserNavigation } = createNavigationFollowers({ recordVisit: (p) => history.recordVisit(p), followTree: () => {}, notify: () => {} });
+    await afterUserNavigation(Promise.resolve(invalidPath()));
+    expect(history.jumpList).toEqual(["C:src", "C:\\ok"]);
+    expect(history.visitHistory).toEqual([]);
   });
 });
 

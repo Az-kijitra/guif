@@ -88,10 +88,17 @@ async function loadTests() {
   return all;
 }
 
-/** specs/theme.mjs: `scenarios = [{ id, title, configToml, tests }]` (one app start each). */
+// Scenario modules: `scenarios = [{ id, title, configToml?, navigationToml?, tests }]` (one app start each).
+// theme.mjs: config.toml scenarios (Phase 12); history-invalid.mjs: navigation.toml scenarios (AC-256 / AC-257).
+const SCENARIO_FILES = ["theme", "history-invalid"];
+
 async function loadScenarios() {
-  const module = await import(pathToFileURL(path.join(here, "specs", "theme.mjs")).href);
-  return module.scenarios;
+  const all = [];
+  for (const name of SCENARIO_FILES) {
+    const module = await import(pathToFileURL(path.join(here, "specs", `${name}.mjs`)).href);
+    all.push(...module.scenarios);
+  }
+  return all;
 }
 
 // ---------------------------------------------------------------------- main
@@ -194,7 +201,7 @@ async function takeFinalShot(ctx, fx, cdp, file) {
 }
 
 /** Starts one app (the normal run or a scenario), runs `tests` in it, and always shuts it down again. */
-async function launchAndRun(tests, { configToml, scenario, finalShot }) {
+async function launchAndRun(tests, { configToml, navigationToml, scenario, finalShot }) {
   // The test folder exists BEFORE the launch: it is the backend's E2E file scope (R-10). New for every start.
   const fx = new Fixtures();
   current = { handle: undefined, cdp: undefined, fx };
@@ -206,7 +213,9 @@ async function launchAndRun(tests, { configToml, scenario, finalShot }) {
       log,
       fsScope: fx.root,
       expectOverride: options.selftestAbort ? path.join(os.tmpdir(), "rf-e2e-deliberately-wrong") : undefined,
+      fx,
     };
+    if (navigationToml !== undefined) launchOptions.navigationToml = navigationToml; // (fx) => string | null, written before the spawn
     if (configToml !== undefined) launchOptions.configToml = configToml; // else launchApp's default (ui_theme = "light")
     const handle = await launchApp(launchOptions); // checks the override line + the fs scope notice EVERY time
     current.handle = handle;
@@ -280,7 +289,7 @@ async function main() {
       continue;
     }
     log(`scenario ${scenario.id}: ${scenario.title}`);
-    await launchAndRun(scenario.selected, { configToml: scenario.configToml, scenario });
+    await launchAndRun(scenario.selected, { configToml: scenario.configToml, navigationToml: scenario.navigationToml, scenario });
   }
 }
 

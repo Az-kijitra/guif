@@ -77,3 +77,9 @@ mod session_tests;
 mod siblings_tests;
 #[cfg(test)]
 mod text_tests;
+
+// SPEC-0200-0001 §3.12.3 #15..#18 / §3.12.6 (inner layer `guarded.rs`), SPEC-0300-0015 第6版 AC-514 / AC-515,
+// SPEC-0300-0011 AC-88.
+mod guarded;
+#[cfg(test)]
+mod guarded_tests;

@@ -77,6 +77,31 @@ describe("navigate: result values (SPEC-0200-0001 §3.7.2, SHOULD-133)", () => {
     expect(r).toEqual({ status: "failed", code, message: text });
   });
 
+  // SPEC-0300-0009 第14版 R-70-1 / R-70-2 / AC-644 (unit-test-writer, 2026-10-07). The cast keeps this file
+  // type-checking before `FsListDirErrorCode` gains "invalid_path" (SPEC-0200-0001 §3.12.7 (1)).
+  it("AC-644: code invalid_path -> 「パスが正しくありません。」 (not the OS message, not [object Object])", async () => {
+    mocked().mockRejectedValueOnce(new FsListDirError("invalid_path" as string as FsListDirError["code"], "not an absolute path: C:src"));
+    const r = await createFileListState().navigate("C:src");
+    expect(r).toEqual({ status: "failed", code: "invalid_path", message: "パスが正しくありません。" });
+  });
+
+  it("AC-644: an invalid_path failure leaves the current path, the entries, the selection and the error banner as they were", async () => {
+    mocked().mockResolvedValueOnce([entry("a"), entry("b")]);
+    const s = createFileListState();
+    await s.navigate("C:\\x");
+    const pathBefore = s.currentPath;
+    const entriesBefore = s.entries.map((e) => e.path);
+    const selectedBefore = [...s.selected];
+    mocked().mockRejectedValueOnce(new FsListDirError("invalid_path" as string as FsListDirError["code"], "raw"));
+    const r = await s.navigate("src");
+    expect(r.status).toBe("failed");
+    expect(s.currentPath).toBe(pathBefore);
+    expect(s.entries.map((e) => e.path)).toEqual(entriesBefore);
+    expect([...s.selected]).toEqual(selectedBefore);
+    expect(s.error).toBeNull();
+    expect(s.loading).toBe(false);
+  });
+
   it("R-731: 'other' shows the OS message as-is", async () => {
     mocked().mockRejectedValueOnce(new FsListDirError("other", "OS says no"));
     const r = await createFileListState().navigate("C:\\f");

@@ -194,4 +194,56 @@ export const tests = [
       t.ok(!treeTexts.some((x) => /[📁📄]/u.test(x)), "no icons in the tree");
     },
   },
+  {
+    // SPEC-0300-0009 第14版 AC-642 (regression of fd0f15f: Backspace on a drive-root folder went to "C:" = the process's
+    // current folder). READ ONLY: the app only SHOWS C:\ and a folder below it; no file is changed (SPEC-0400-0001 R-08).
+    // The front end stops this one first, so the backend's rejection is NOT what this test distinguishes (AC-643 / 83 / 387 do).
+    id: "AC-642",
+    title: "Backspace in a drive-root folder goes to the separator-terminated root (not the process's folder); at the root it does not move; opening a folder keeps the C:\ prefix",
+    async run(t, ctx) {
+      const root = `${(process.env.SystemDrive ?? "C:").toUpperCase()}\\`;
+      const cwdFiles = ["Cargo.toml", "tauri.conf.json"].filter((n) => !fs.existsSync(root + n)); // names that would only come from app\\src-tauri
+      const listed = () => ctx.ev(`[...document.querySelectorAll('.file-list-row')].map((r) => ({ title: r.querySelector('.name').title, folder: (r.querySelector('.name-text')?.textContent ?? '').startsWith('📁') }))`);
+      const shown = async () => (await ctx.pathBarState())?.value ?? "";
+      const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+      try {
+        await ctx.nav(root);
+        const top = await listed();
+        const folder = ["Users", "Windows"].find((n) => top.some((r) => r.folder && r.title === n)) ?? top.find((r) => r.folder)?.title;
+        t.ok(folder !== undefined, `a folder directly below ${root} exists`);
+        if (folder === undefined) return;
+        const dir = root + folder;
+        await ctx.nav(dir);
+        t.ok((await shown()).toLowerCase().startsWith(root.toLowerCase()), `showing ${dir}`, await shown());
+        await ctx.focusList();
+        await ctx.viewKey("Backspace");
+        await ctx.waitFor(`!document.querySelector('.list-notice') && document.querySelector('.path-bar-row input')?.value === ${JSON.stringify(root)}`, { label: "the path bar to show the drive root", timeout: 8000 }).catch(() => {});
+        t.ok(same(await shown(), root), "after Backspace the path bar shows the root WITH its separator", await shown());
+        await ctx.settle(300);
+        const atRoot = await listed();
+        t.ok(atRoot.some((r) => r.folder && r.title === folder), `the list holds the origin folder "${folder}" (drive-root content)`);
+        t.ok(!atRoot.some((r) => cwdFiles.includes(r.title)), "the list is not the process's current folder (no Cargo.toml / tauri.conf.json)", atRoot.slice(0, 8).map((r) => r.title).join(", "));
+
+        await ctx.focusList();
+        await ctx.viewKey("Backspace");
+        await ctx.settle(700);
+        t.ok(same(await shown(), root), "Backspace at the root does not move", await shown());
+        t.eq((await listed()).length, atRoot.length, "the list is unchanged after the second Backspace");
+
+        // "open a folder": Enter on the focused row, only when it is a folder row
+        await ctx.focusList();
+        const focusedFolder = await ctx.ev(`(document.querySelector('.file-list-row.focused .name-text')?.textContent ?? '').startsWith('📁')`);
+        if (!focusedFolder) {
+          t.fail("the focused row at the root is not a folder row, cannot open a folder with Enter");
+        } else {
+          await ctx.viewKey("Enter");
+          await ctx.waitFor(`!document.querySelector('.list-notice') && (document.querySelector('.path-bar-row input')?.value ?? '') !== ${JSON.stringify(root)}`, { label: "the folder to open", timeout: 8000 }).catch(() => {});
+          const now = await shown();
+          t.ok(now.toLowerCase().startsWith(root.toLowerCase()) && now.length > root.length, `opening a folder shows an absolute path starting with ${root}`, now);
+        }
+      } finally {
+        await ctx.nav(ctx.fx.mkdir("ac642-back")); // leave the drive: the next tests start from the test folder
+      }
+    },
+  },
 ];

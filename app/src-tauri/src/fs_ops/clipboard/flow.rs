@@ -11,6 +11,7 @@ pub use super::hdrop::Effect;
 use super::hdrop::{build_hdrop, HdropError};
 use super::paths::adopt_paths;
 use super::retry::open_with_retry;
+use crate::shared::abs_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Access {
@@ -44,7 +45,7 @@ pub trait ClipboardOps {
 pub enum WriteFailure {
     /// `paths` empty.
     NoPaths,
-    /// A path contains NUL.
+    /// A path is not absolute (R-89-1 #20), or contains NUL.
     InvalidPath,
     /// Could not open after the retries (or `empty` etc. never reached).
     CannotOpen,
@@ -103,6 +104,10 @@ fn open_guarded<O: ClipboardOps>(ops: &mut O, access: Access) -> Option<Opened<'
 /// CF_HDROP, write the DropEffect (roll back with `empty` on failure), close, then read the
 /// sequence number.
 pub fn write_files<O: ClipboardOps>(ops: &mut O, paths: &[String], effect: Effect, expected: Option<u32>) -> WriteOutcome {
+    // R-89-1 #20 / AC-86: one path that is not absolute refuses the whole write, before any clipboard call.
+    if abs_path::first_relative(paths.iter().map(String::as_str)).is_some() {
+        return WriteOutcome::Failed(WriteFailure::InvalidPath);
+    }
     let bytes = match build_hdrop(paths) {
         Ok(bytes) => bytes,
         Err(HdropError::Empty) => return WriteOutcome::Failed(WriteFailure::NoPaths),

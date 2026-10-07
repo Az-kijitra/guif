@@ -112,6 +112,26 @@ describe("set (R-15-3, R-16, CB-06)", () => {
     expect(await t.port.get()).toEqual({ paths: [B], origin: "internal-copy", notice: "cut-write-failed" });
   });
 
+  // SPEC-0300-0011 第9版 R-15-4 注記 / R-89-1 #20 / T-07 / AC-86 (unit-test-writer, 2026-10-07): the backend refuses to
+  // write a list with a path that is not absolute (`error: "invalid_path"`). The front end treats it like every other
+  // OS write failure (R-15-3 / CB-06): the app clipboard is kept, the caller is told the OS write failed.
+  it("T-07: error 'invalid_path' => { os: 'failed' } and the app content is kept", async () => {
+    const t = make();
+    t.ipc.setFiles.mockResolvedValueOnce({ ok: false, sequence: 0, error: "invalid_path" });
+    expect(await t.port.set({ paths: [A], origin: "internal-cut" })).toEqual({ os: "failed" });
+    expect(t.internal.peek()).toEqual({ paths: [A], origin: "internal-cut" });
+  });
+
+  it("T-07: after an invalid_path write the next cut is pasted as a copy with cut-write-failed (like 'rejected')", async () => {
+    const t = make();
+    t.ipc.setFiles.mockResolvedValueOnce({ ok: true, sequence: 5 });
+    await t.port.set({ paths: [A], origin: "internal-cut" });
+    t.ipc.setFiles.mockResolvedValueOnce({ ok: false, sequence: 0, error: "invalid_path" });
+    await t.port.set({ paths: [B], origin: "internal-cut" });
+    t.ipc.getFiles.mockResolvedValue(os("none", 5));
+    expect(await t.port.get()).toEqual({ paths: [B], origin: "internal-copy", notice: "cut-write-failed" });
+  });
+
   it("a record with sequence 0 (written, unknown) never matches: cut => copy + cut-changed", async () => {
     const t = make();
     t.ipc.setFiles.mockResolvedValueOnce({ ok: true, sequence: 0 });

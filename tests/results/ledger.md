@@ -16,6 +16,15 @@
 | 2026-10-03 | 未採番(SPEC-0300-0018 右クリックメニュー、0010第13版/0011第7版/0015第4版/0017第4版/0009第12版/0014第4版/SPEC-0400-0001第3版、Phase 10) | PASS(フロント・バック・E2E) | 以下「## 2026-10-03 Phase 10」セクション参照 | unit-test-writer → code-generator(実機確認・E2E含む) → code-reviewer(PR作成可、SHOULD 3件) → オーケストレーター(SHOULD対応、実アプリで画面確認) |
 | 2026-10-04 | 未採番(SPEC-0300-0011 第8版 / SPEC-0300-0018 第2版 / SPEC-0400-0001 第4版、Phase 11) | PASS(フロント・バック・E2E。ISS-0200 は 2026-10-04 に再実行して解消) | 以下「## 2026-10-04 Phase 11」セクション参照 | code-generator(先行作業: 既存E2Eのfail-closed化・+page.svelte分割・実機最小確認) → unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 4件) → code-generator(S-1〜S-3等修正) → オーケストレーター(実アプリでレイアウト確認) |
 | 2026-10-06 | 未採番(SPEC-0300-0017 第5版 / SPEC-0300-0015 第5版 / SPEC-0300-0018 第3版 / SPEC-0300-0010 第14版・第15版 / SPEC-0300-0009 第13版・第14版 / SPEC-0900-0001 追補・第3版、Phase 12) | PASS(フロント・バック・E2E) | 以下「## 2026-10-06 Phase 12」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、MUST なし、S-1 ～ S-2・M-1 ～ M-4 修正済み) → オーケストレーター(実アプリでテーマ確認) |
+| 2026-10-07 | 未採番(SPEC-0300-0011 第9版 / 0016 第4版 / 0009 第14版 / 0013 第6版 / 0014 第5版 / 0015 第6版、絶対パス検査の二重防御・ISS-0204〜0206) | PASS(フロント・バック・E2E) | 以下「## 2026-10-07 絶対パス検査の二重防御」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
+
+## 2026-10-07 絶対パス検査の二重防御(SPEC-0300-0011 第9版ほか5本、ISS-0204〜0206)テスト実行結果
+
+- 発端: ユーザー報告(2026-10-06)。ドライブ直下で Backspace を押すと親を「C:」と計算し、Windows がプロセスのカレントフォルダとして解決 →「C:src」に入り込み上へ戻れない。フロントは fd0f15f で修正。
+- 単体: cargo test 1054 件すべて成功(abs_path_tdd ゲート除去済み)、vitest 118 ファイル 2382 件すべて成功、svelte-check 0 エラー(既存 a11y 警告 6)。viewer/guarded_tests.rs の ac514_classify の期待値をオーケストレーターが既存挙動(R-410: 既知拡張子は読まずに判定)に合わせて修正。
+- code-reviewer: PR作成可(MUST なし)。SHOULD-1(traceability の状態)対応済み。SHOULD-2(copy/move/archive の取消登録が拒否より前)は設計 §3.12 MINOR-14 どおりとして記録。MINOR の空行は修正。
+- E2E npm run e2e 全体: 106 PASS / 0 FAIL / 23 SKIP、R-08 PASS。AC-642(ドライブ直下の Backspace → `C:\`、ルートでは移動しない)PASS、AC-256(履歴先頭の C:src → ホームへフォールバック、項目は残る)PASS、AC-257(履歴・ジャンプリストの不正項目 →「パスが正しくありません。」、移動しない、一覧不変)PASS。SKIP のうち 18 件はクリップボード系で、実行時のユーザーのクリップボードが復元できない画像(Bitmap/PNG)だったため R-09 により SKIP(保護は不変)。
+- オーケストレーター実アプリ確認(2026-10-06、fd0f15f): `C:\Users\toshi` → BS → `C:\Users` → BS → `C:\` → BS で移動しない。
 
 ## 2026-10-06 Phase 12 ダークテーマ(SPEC-0300-0017 第5版ほか、ISS-0201/0202 承認)テスト実行結果
 

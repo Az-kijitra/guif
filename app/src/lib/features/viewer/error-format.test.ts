@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 //     | "io_error" | "unknown";
 //   formatViewerError(code: ViewerDisplayErrorCode): string
 
+import { translateErrorCode } from "$lib/shared/error-text";
 import { formatViewerError } from "./error-format";
 
 const ALL_CODES = [
@@ -62,5 +63,32 @@ describe("formatViewerError (R-447)", () => {
     // Deliberately outside the known union (a hypothetical future backend
     // code this frontend build does not know about yet) -- must not throw.
     expect(() => formatViewerError("something_new" as never)).not.toThrow();
+  });
+});
+
+// SPEC-0300-0015 第6版 R-440 / R-447 / R-513, AC-514 / AC-515 (unit-test-writer, 2026-10-07):
+// `invalid_path` (the backend refuses a path that is not absolute) is a documented viewer code.
+// The cast keeps this file type-checking before `ViewerDisplayErrorCode` gains "invalid_path"
+// (SPEC-0200-0001 §3.12.6).
+describe("formatViewerError: invalid_path (R-447, SPEC-0200-0001 §3.12.6)", () => {
+  const INVALID_PATH = "invalid_path" as string as Parameters<typeof formatViewerError>[0];
+
+  it("has its own message", () => {
+    expect(formatViewerError(INVALID_PATH)).toBe("パスが正しくありません。");
+  });
+
+  it("is the same text as shared/error-text.ts (the viewer table is the only place that translates, but the wording must not drift)", () => {
+    expect(formatViewerError(INVALID_PATH)).toBe(translateErrorCode("invalid_path"));
+  });
+
+  it("is distinct from every other viewer message and never leaks the raw code or the internal `code=` form", () => {
+    const m = formatViewerError(INVALID_PATH);
+    for (const code of ALL_CODES) expect(formatViewerError(code)).not.toBe(m);
+    expect(m).not.toBe("invalid_path");
+    expect(m.startsWith("code=")).toBe(false);
+  });
+
+  it("a viewer-side invalid_path is not the 'unknown' fallback", () => {
+    expect(formatViewerError(INVALID_PATH)).not.toBe(formatViewerError("unknown"));
   });
 });

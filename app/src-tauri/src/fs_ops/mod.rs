@@ -48,3 +48,8 @@ mod detect_conflicts_tests;
 mod overwrite_merge_tests;
 #[cfg(test)]
 mod data_safety_tests;
+
+// SPEC-0200-0001 §3.12.3 (inner layer `guarded.rs`), SPEC-0300-0011 第9版 AC-83 / AC-84 / AC-85 / AC-88.
+mod guarded;
+#[cfg(test)]
+mod guarded_tests;

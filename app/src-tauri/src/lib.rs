@@ -42,6 +42,10 @@ pub mod viewer;
 #[cfg(test)]
 mod acl_consistency;
 
+// AC-89 structure tests of the absolute-path check (SPEC-0200-0001 §3.12.8).
+#[cfg(test)]
+mod abs_path_structure_tests;
+
 /// Builds and runs the Tauri application. This is the sole place in the
 /// backend that `use`s more than one feature module's public command
 /// surface at once (SPEC-0200-0001 §4.2: `app/(bootstrap) -> <feature>/`),

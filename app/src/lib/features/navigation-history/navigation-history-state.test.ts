@@ -36,6 +36,27 @@ afterEach(() => {
   statusMessage.clear();
 });
 
+// SPEC-0300-0013 第6版 R-242-3 / R-238-4 / T-06 and the post-approval note of SPEC-0200-0001 §3.12.7 (SHOULD-189 / H-1),
+// AC-256 / AC-257 (unit-test-writer, 2026-10-07). Items that are not absolute paths are neither removed nor rewritten
+// when a snapshot is loaded; the EXISTING normalisation (SHOULD-129) stays, and of its effects only a bare `C:` -> `C:\`
+// changes whether a path is absolute. No production change is needed (owner decision 2026-10-07).
+describe("hydrate keeps items that are not absolute paths (R-242-3, T-06, AC-256 / AC-257)", () => {
+  const NOT_ABSOLUTE = ["C:src", "src", "\\foo", ".\\src", "C:src\\sub"];
+
+  it("none of C:src / src / \\foo / .\\src is removed or rewritten, in either list, and the order is kept", () => {
+    const s = createNavigationHistoryState();
+    s.hydrate(["C:\\Users\\a", ...NOT_ABSOLUTE, "D:\\b"], [...NOT_ABSOLUTE].reverse());
+    expect(s.visitHistory).toEqual(["C:\\Users\\a", ...NOT_ABSOLUTE, "D:\\b"]);
+    expect(s.jumpList).toEqual([...NOT_ABSOLUTE].reverse());
+  });
+
+  it("the existing normalisation stays: `/` -> `\\`, a trailing `\\` is dropped, a bare `C:` becomes `C:\\` (only that one changes absoluteness)", () => {
+    const s = createNavigationHistoryState();
+    s.hydrate(["src/", "C:src\\", "/foo", "C:"], []);
+    expect(s.visitHistory).toEqual(["src", "C:src", "\\foo", "C:\\"]);
+  });
+});
+
 describe("initial state (R-215-1, R-219, R-226)", () => {
   it("starts with empty lists, closed, and selection at 0", () => {
     const s = createNavigationHistoryState();

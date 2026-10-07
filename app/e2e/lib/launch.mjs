@@ -158,7 +158,7 @@ export const DEFAULT_CONFIG_TOML = 'ui_theme = "light"\n';
  * Launches `tauri dev` and returns once the override line has been verified and the main
  * page is listed by the debug port. Throws AbortRun (after killing the app) otherwise.
  */
-export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML }) {
+export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML, navigationToml, fx }) {
   // R-10: the backend refuses file operations outside this folder (the test folder, realpath form).
   if (typeof fsScope !== "string" || !path.isAbsolute(fsScope) || !fs.statSync(fsScope).isDirectory()) {
     throw new AbortRun(`unusable E2E file scope folder: ${fsScope}`);
@@ -181,6 +181,24 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
       removeDir(cfgDir);
       removeDir(userData);
       throw new AbortRun(`could not write the test config.toml: ${e.message}`);
+    }
+  }
+
+  // SHOULD-190: `navigationToml` is `(fx) => string | null` (the content may name folders inside the fresh test
+  // folder `fx.root`, which exists only per start). It is written into cfgDir (= REFLEXFILES_CONFIG_DIR) only,
+  // after the Fixtures exist and before the app is spawned; a failure removes the folders and aborts the run.
+  if (navigationToml !== undefined && navigationToml !== null) {
+    try {
+      if (typeof navigationToml !== "function") throw new Error("navigationToml must be a function (fx) => string | null");
+      const content = navigationToml(fx);
+      if (content !== null) {
+        if (typeof content !== "string") throw new Error("navigationToml returned neither a string nor null");
+        fs.writeFileSync(path.join(cfgDir, "navigation.toml"), content, "utf8");
+      }
+    } catch (e) {
+      removeDir(cfgDir);
+      removeDir(userData);
+      throw new AbortRun(`could not write the test navigation.toml: ${e.message}`);
     }
   }
 
