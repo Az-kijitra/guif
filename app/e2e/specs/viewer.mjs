@@ -11,7 +11,9 @@ export const VIEWER_LOOK = `(() => {
   const root = document.querySelector('.viewer');
   return {
     htmlBg: cs(document.documentElement).backgroundColor, bodyBg: cs(document.body).backgroundColor,
-    bodyMargin: cs(document.body).margin,
+    margins: [cs(document.documentElement).margin, cs(document.body).margin],
+    // R-913-3: the document itself never scrolls (scrollingElement = html in standards mode).
+    fits: (() => { const d = document.scrollingElement; return [d.scrollHeight === d.clientHeight, d.scrollWidth === d.clientWidth, d.scrollHeight, d.clientHeight]; })(),
     overflow: [cs(document.documentElement).overflowX, cs(document.documentElement).overflowY, cs(document.body).overflowX, cs(document.body).overflowY],
     htmlScheme: cs(document.documentElement).colorScheme,
     rootColor: cs(root).color, rootFont: cs(root).fontFamily,
@@ -25,7 +27,7 @@ export const VIEWER_LOOK = `(() => {
 export const tests = [
   {
     id: "AC-907",
-    title: "viewer (light pinned): html/body #fff, text #111, html color-scheme light, margin 8px, overflow visible, no --ui-* variables; the file's content is shown",
+    title: "viewer (light pinned): html/body #fff, text #111, html color-scheme light, margin 0 and no document scrollbar, overflow visible, no --ui-* variables; the file's content is shown",
     async run(t, ctx) {
       const dir = ctx.fx.mkdir("viewer");
       const file = ctx.fx.file("viewer", "note.txt");
@@ -44,7 +46,8 @@ export const tests = [
         const s = await viewer.ev(VIEWER_LOOK);
         t.eq(s.htmlBg, "rgb(255, 255, 255)", "html background");
         t.eq(s.bodyBg, "rgb(255, 255, 255)", "body background");
-        t.eq(s.bodyMargin, "8px", "body margin (the WebView default)");
+        t.eq(s.margins, ["0px", "0px"], "html / body margin (R-913-3)");
+        t.eq(s.fits.slice(0, 2), [true, true], "the document has no scrollbar (scrollHeight/Width = clientHeight/Width)", JSON.stringify(s.fits));
         t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
         t.eq(s.htmlScheme, "light", "html color-scheme (R-913-2)");
         t.eq(s.rootColor, "rgb(17, 17, 17)", "viewer text colour");

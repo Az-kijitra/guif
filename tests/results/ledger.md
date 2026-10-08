@@ -17,6 +17,14 @@
 | 2026-10-04 | 未採番(SPEC-0300-0011 第8版 / SPEC-0300-0018 第2版 / SPEC-0400-0001 第4版、Phase 11) | PASS(フロント・バック・E2E。ISS-0200 は 2026-10-04 に再実行して解消) | 以下「## 2026-10-04 Phase 11」セクション参照 | code-generator(先行作業: 既存E2Eのfail-closed化・+page.svelte分割・実機最小確認) → unit-test-writer → code-generator → code-reviewer(PR作成可、SHOULD 4件) → code-generator(S-1〜S-3等修正) → オーケストレーター(実アプリでレイアウト確認) |
 | 2026-10-06 | 未採番(SPEC-0300-0017 第5版 / SPEC-0300-0015 第5版 / SPEC-0300-0018 第3版 / SPEC-0300-0010 第14版・第15版 / SPEC-0300-0009 第13版・第14版 / SPEC-0900-0001 追補・第3版、Phase 12) | PASS(フロント・バック・E2E) | 以下「## 2026-10-06 Phase 12」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、MUST なし、S-1 ～ S-2・M-1 ～ M-4 修正済み) → オーケストレーター(実アプリでテーマ確認) |
 | 2026-10-07 | 未採番(SPEC-0300-0011 第9版 / 0016 第4版 / 0009 第14版 / 0013 第6版 / 0014 第5版 / 0015 第6版、絶対パス検査の二重防御・ISS-0204〜0206) | PASS(フロント・バック・E2E) | 以下「## 2026-10-07 絶対パス検査の二重防御」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
+| 2026-10-08 | 未採番(SPEC-0300-0017 第6版、ISS-0203 (b)(c)(d)) | PASS(フロント・E2E) | 以下「## 2026-10-08 ISS-0203 の片付け」セクション参照 | オーケストレーター(調査・実装・実アプリ確認) → spec-writer / spec-reviewer(第6版) |
+
+## 2026-10-08 ISS-0203 の片付け(ビューア初回表示・AC-949 文言・ビューアの縦スクロールバー)
+
+- (b) ビューア初回表示で本文が出ない: 原因は dev の vite が初回に依存(markdown-it)を見つけてページを強制再読み込みし、一度きりの pending(R-430)を消費した後に読み直したこと(2026-10-06 の p12dev.log 20:30:37「optimized dependencies changed. reloading」)。`app/vite.config.ts` の `optimizeDeps.include` に実行時の依存を列挙して解消。`node_modules/.vite` を消した初回起動でビューアを最初に開き、再読み込みが起きず本文が表示されることを確認。
+- (c) AC-949 の文字色の検査対象を画面全体のコンテナに限定(SPEC-0300-0017 第6版。実装・E2E は不変)。
+- (d) ビューアの縦スクロールバー: `viewer-theme.css` の `html, body` に `margin: 0`(R-913-3)。実アプリで scrollHeight 768 = clientHeight 768(修正前 784 / 768)。
+- vitest 118 ファイル 2383 件成功(R-913-3 の静的テスト1件追加)、svelte-check 0 エラー。E2E `npm run e2e` 全体: 119 PASS / 0 FAIL / 10 SKIP(AC-907 / AC-907-ii は margin 0 と文書のスクロールなしを確認)、R-08 PASS。
 
 ## 2026-10-07 絶対パス検査の二重防御(SPEC-0300-0011 第9版ほか5本、ISS-0204〜0206)テスト実行結果
 

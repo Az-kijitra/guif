@@ -152,6 +152,13 @@ describe("R-913-1: the viewer colour table in viewer-theme.css (SPEC-0200-0001 Â
     expect(declarations(r!.body).get("background")).toBe("var(--vw-bg)");
   });
 
+  it("R-913-3 (6th edition): `html, body` have no page margin, so the 100vh viewer does not overflow the document", () => {
+    const { light } = split(cssText());
+    const r = rules(light).find((x) => x.selector.split(",").map((s) => s.trim()).sort().join() === "body,html");
+    expect(declarations(r!.body).get("margin")).toBe("0");
+    expect(declarations(r!.body).has("overflow"), "overflow stays visible (not hidden as in main)").toBe(false);
+  });
+
   it("the stylesheet holds no colour literal outside the --vw-* declarations (rules use var())", () => {
     const rest = cssText().replace(/--vw-[\w-]+\s*:[^;}]+;?/g, "");
     expect(rest).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

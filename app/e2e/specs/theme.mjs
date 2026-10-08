@@ -174,7 +174,7 @@ const s1Tests = [
   },
   {
     id: "AC-907-ii",
-    title: "viewer (ui_theme = dark): html/body #1e1e1e, text #ddd, html color-scheme dark, margin 8px, no --ui-* variables; the content is shown",
+    title: "viewer (ui_theme = dark): html/body #1e1e1e, text #ddd, html color-scheme dark, margin 0 and no document scrollbar, no --ui-* variables; the content is shown",
     async run(t, ctx) {
       const dir = ctx.fx.mkdir("viewer-dark");
       fs.writeFileSync(ctx.fx.file("viewer-dark", "note.txt"), "dark viewer line one\nsecond line\n");
@@ -189,7 +189,8 @@ const s1Tests = [
         const s = await viewer.ev(VIEWER_LOOK);
         t.eq(s.htmlBg, "rgb(30, 30, 30)", "html background");
         t.eq(s.bodyBg, "rgb(30, 30, 30)", "body background");
-        t.eq(s.bodyMargin, "8px", "body margin");
+        t.eq(s.margins, ["0px", "0px"], "html / body margin (R-913-3)");
+        t.eq(s.fits.slice(0, 2), [true, true], "the document has no scrollbar (scrollHeight/Width = clientHeight/Width)", JSON.stringify(s.fits));
         t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
         t.eq(s.htmlScheme, "dark", "html color-scheme (R-913-2)");
         t.eq(s.rootColor, "rgb(221, 221, 221)", "viewer text colour");

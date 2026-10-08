@@ -10,6 +10,19 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [sveltekit()],
   clearScreen: false,
+  // Dev only: pre-bundle every runtime dependency up front. Otherwise vite discovers them on first
+  // use and force-reloads the page ("optimized dependencies changed. reloading"); for the viewer
+  // window that reload came AFTER it had consumed the one-shot pending file (R-430), leaving it on
+  // "No file selected" the first time a viewer opened after `tauri dev` started (ISS-0203 (b)).
+  optimizeDeps: {
+    include: [
+      "@tauri-apps/api/core",
+      "@tauri-apps/api/event",
+      "@tauri-apps/api/window",
+      "@tauri-apps/api/path",
+      "markdown-it",
+    ],
+  },
   server: {
     port: 5173,
     strictPort: true,

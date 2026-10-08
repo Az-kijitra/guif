@@ -1,11 +1,11 @@
 /*
- * SPEC-0300-0017 R-913 / R-913-1 / R-913-2 (Phase 12, dark theme); SPEC-0300-0015 R-511;
- * SPEC-0200-0001 §3.11.7.
+ * SPEC-0300-0017 R-913 / R-913-1 / R-913-2 (Phase 12, dark theme), R-913-3 (6th edition: zero page
+ * margin); SPEC-0300-0015 R-511; SPEC-0200-0001 §3.11.7.
  *
  * Imported ONLY by routes/viewer/+page.svelte. The viewer is its own document and has its own palette:
  * `--vw-*` variables on `html` (light), overridden inside the dark `prefers-color-scheme` media query. The
  * theme itself is decided by the platform (a fixed `ui_theme` or the OS, applied by the Rust side the same way
- * as for the main window); this file only paints it. Colour literals live here and nowhere else in the viewer
+ * as for the main window); this file only paints it, plus the page margin of R-913-3. Colour literals live here and nowhere else in the viewer
  * (R-910 / AC-905); the Rust-side window background in shared/window_theme.rs must equal `--vw-bg`.
  */
 
@@ -37,7 +37,9 @@ html {
   }
 }
 
+/* R-913-3: no page margin, so the 100vh `.viewer` fits exactly and the document shows no scrollbar. */
 html,
 body {
+  margin: 0;
   background: var(--vw-bg);
 }
