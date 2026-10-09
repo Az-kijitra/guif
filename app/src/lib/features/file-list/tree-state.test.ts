@@ -210,6 +210,8 @@ describe("load failures (SPEC-0300-0009 R-40-2/R-40-3, AC-604/AC-605)", () => {
     expect(node?.expanded).toBe(false);
     expect(rows.some((r) => r.path.startsWith("C:\\A\\"))).toBe(false);
     expect(onLoadFailureNotice).toHaveBeenCalledTimes(1);
+    // SPEC-0300-0019 W-34 / W-25 / AC-1209 (ix): the notice text (Japanese, `フォルダー`).
+    expect(onLoadFailureNotice).toHaveBeenCalledWith("一部のフォルダーの中身を読み込めませんでした。");
   });
 
   it("AC-645: several invalid_path failures in one build still produce a single notice", async () => {

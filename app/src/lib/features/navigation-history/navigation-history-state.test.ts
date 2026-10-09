@@ -185,6 +185,7 @@ describe("openHistory / openJump (R-215, R-219, R-222, AC-214, AC-219)", () => {
     const s = createNavigationHistoryState();
     s.openJump();
     expect(statusMessage.text).not.toBeNull();
+    expect(statusMessage.text).toBe("項目なし"); // SPEC-0300-0019 W-14
   });
 });
 
@@ -223,6 +224,7 @@ describe("switchMode (R-227, R-219, R-218-1, AC-218)", () => {
     s.switchMode("jump");
 
     expect(statusMessage.text).not.toBeNull();
+    expect(statusMessage.text).toBe("項目なし"); // W-14: the empty jump list
   });
 });
 

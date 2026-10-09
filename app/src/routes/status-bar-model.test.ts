@@ -92,9 +92,9 @@ describe("resolveFocusArea: R-972 priority 1..8 (AC-935)", () => {
 describe("focusAreaLabel: R-972 names (Japanese, R-976)", () => {
   const table: [FocusArea, string][] = [
     ["dialog", "ダイアログ"],
-    ["history", "訪問履歴"],
+    ["history", "履歴"],
     ["jump", "ジャンプリスト"],
-    ["sort-menu", "ソートメニュー"],
+    ["sort-menu", "並び替えメニュー"],
     ["path", "パス"],
     ["search", "検索"],
     ["tree", "ツリー"],
@@ -145,7 +145,7 @@ describe("buildStatusItems: the four permanent items (R-971, AC-932, AC-933)", (
   it("the focus item follows the focus area (R-972)", () => {
     expect(texts({ focusArea: "tree" })[0]).toBe("フォーカス: ツリー");
     expect(texts({ focusArea: "none" })[0]).toBe("フォーカス: なし");
-    expect(texts({ focusArea: "sort-menu" })[0]).toBe("フォーカス: ソートメニュー");
+    expect(texts({ focusArea: "sort-menu" })[0]).toBe("フォーカス: 並び替えメニュー");
   });
 
   it("選択 is shown for zero too (P-12)", () => {

@@ -599,3 +599,71 @@ describe("Phase 11 OS clipboard boundaries (SPEC-0200-0001 §3.10.12 / §3.10.15
     }
   });
 });
+
+// SPEC-0200-0001 §3.13.2 / §3.13.5 (the new describe "文言の置き場所"), §3.13.14 H-1: the wording modules.
+//   shared/messages.ts is a LEAF (imports nothing); every feature's messages.ts and routes/messages.ts import
+//   only `$lib/shared/messages` (so another feature's messages.ts can never be imported: §4.1 still holds); and all
+//   of them are pure data / template functions (no runes, no DOM). SPEC-0300-0019 R-1201.
+describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, SPEC-0300-0019 R-1201)", () => {
+  const FEATURES_WITH_MESSAGES = [
+    "archive",
+    "context-menu",
+    "file-list",
+    "file-ops",
+    "keyboard",
+    "navigation-history",
+    "path-bar",
+    "search",
+    "viewer",
+  ];
+  const SHARED_MESSAGES = "lib/shared/messages.ts";
+  const ROUTES_MESSAGES = "routes/messages.ts";
+  const FEATURE_MESSAGES = FEATURES_WITH_MESSAGES.map((f) => `lib/features/${f}/messages.ts`);
+  const ALL_MESSAGES = [SHARED_MESSAGES, ...FEATURE_MESSAGES, ROUTES_MESSAGES];
+  const abs = (rel: string) => join(SRC, rel);
+
+  it("the planned modules exist: shared (1) + feature (9) + routes (1) = 11, and no other messages.ts is hiding elsewhere", () => {
+    for (const rel of ALL_MESSAGES) expect(() => statSync(abs(rel)), rel).not.toThrow();
+    const found = walk(SRC)
+      .filter((f) => /(^|[\\/])messages\.ts$/.test(f))
+      .map((f) => relative(SRC, f).split(sep).join("/"))
+      .sort();
+    expect(found).toEqual([...ALL_MESSAGES].sort());
+  });
+
+  it("shared/messages.ts is a leaf: it imports nothing (not even a type)", () => {
+    expect(specifiersOf(readFileSync(abs(SHARED_MESSAGES), "utf-8"))).toEqual([]);
+  });
+
+  it("a feature's messages.ts and routes/messages.ts import only `$lib/shared/messages` (never another feature's messages.ts, a sibling or routes)", () => {
+    const bad: string[] = [];
+    for (const rel of [...FEATURE_MESSAGES, ROUTES_MESSAGES]) {
+      for (const spec of specifiersOf(readFileSync(abs(rel), "utf-8"))) {
+        if (spec !== "$lib/shared/messages") bad.push(`${rel} -> ${spec}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("every messages.ts is pure data / template functions: no runes, no DOM globals (comments are ignored)", () => {
+    const bad = ALL_MESSAGES.filter((rel) =>
+      /\$state\b|\$derived\b|\$effect\b|\b(document|window|localStorage|navigator)\b/.test(stripComments(readFileSync(abs(rel), "utf-8"))),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("every messages.ts stays within the 400-line limit (SPEC-0200-0001 §7.1)", () => {
+    const tooLong = ALL_MESSAGES.filter((rel) => readFileSync(abs(rel), "utf-8").split("\n").length > 400);
+    expect(tooLong).toEqual([]);
+  });
+
+  it("shared/messages.ts may be imported from anywhere, but a feature's messages.ts only from inside that feature (§3.13.14: routes import none today)", () => {
+    const bad = collectEdges().filter((e) => {
+      const m = /^lib\/features\/([^/]+)\/messages\.ts$/.exec(e.to.split(sep).join("/"));
+      if (m === null) return false;
+      if (e.from.endsWith(".test.ts")) return false; // a test may import the module it covers
+      return !(e.fromLayer.kind === "feature" && e.fromLayer.name === m[1]);
+    });
+    expect(bad.map(fmt)).toEqual([]);
+  });
+});

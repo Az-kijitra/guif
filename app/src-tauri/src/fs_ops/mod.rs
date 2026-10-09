@@ -22,7 +22,7 @@
 //! - `delete` — §7 trash-bin delete and permanent delete (R-50~R-58)
 //! - `rename` — §8 rename command (R-60~R-64)
 //! - `create` — §9 create command (R-70~R-78)
-//! - `error` — §10 error-code translation fallback / scope-exclusion guard (R-84~R-88)
+//! - `error` — scope-exclusion guard (R-88) only; error-code translation lives in the frontend table (SPEC-0300-0019 T-13)
 //!
 //! **2026-09-23 (ISS-0052 resolved):** `commands` now also implements
 //! R-40~R-45 (copy/move progress events + cancellation) — see

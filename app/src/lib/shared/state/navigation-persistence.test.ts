@@ -419,3 +419,34 @@ describe("register()", () => {
     });
   });
 });
+
+// SPEC-0300-0019 (stage B) W-36 / W-37 / W-38, AC-1209 (vii) (x) (xi): the exact notice wording (Japanese).
+describe("notice wording (SPEC-0300-0019 W-36 / W-37 / W-38)", () => {
+  it("W-36: a corruption recovery resolves to the Japanese navigation.toml notice", async () => {
+    vi.mocked(configLoadNavigation).mockResolvedValueOnce({ data: emptyData(), recoveredFromCorruption: true });
+    const coordinator = createNavigationPersistenceCoordinator();
+
+    await expect(coordinator.hydrateAll()).resolves.toBe(
+      "navigation.toml を読み込めなかったため、履歴・ジャンプリスト・検索履歴を空にしました。元のファイルは退避しました。",
+    );
+  });
+
+  it("W-38: a failed load resolves to `保存データを読み込めなかったため、今回の変更は保存しません。`", async () => {
+    vi.mocked(configLoadNavigation).mockRejectedValueOnce(new Error("io error"));
+    const coordinator = createNavigationPersistenceCoordinator();
+
+    await expect(coordinator.hydrateAll()).resolves.toBe("保存データを読み込めなかったため、今回の変更は保存しません。");
+  });
+
+  it("W-37: a failed save shows `履歴・ジャンプリスト・検索履歴を保存できませんでした。` as the status message", async () => {
+    vi.mocked(configLoadNavigation).mockResolvedValueOnce({ data: emptyData(), recoveredFromCorruption: false });
+    vi.mocked(configSaveNavigation).mockRejectedValue(new Error("disk full"));
+    const coordinator = createNavigationPersistenceCoordinator();
+    await coordinator.hydrateAll();
+
+    coordinator.requestSave();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(statusMessage.text).toBe("履歴・ジャンプリスト・検索履歴を保存できませんでした。");
+  });
+});

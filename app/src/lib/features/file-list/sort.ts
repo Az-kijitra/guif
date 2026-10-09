@@ -2,6 +2,8 @@
 // is performed by the backend (fs_list_dir, R-32); the frontend never
 // re-sorts the entries it receives.
 
+import { SORT_KEY_LABELS } from "./messages";
+
 export const SORT_KEYS = ["name", "size", "type", "modified"] as const;
 
 export type SortKey = (typeof SORT_KEYS)[number];
@@ -42,15 +44,8 @@ export function moveSortMenuHighlight(current: SortKey, direction: "up" | "down"
 // Phase 9 (SPEC-0300-0017 R-971 #2 / R-983; SPEC-0200-0001 §3.8.17 SHOULD-148):
 // labels shared by the status bar and the sort menu (one source for the marks).
 
-const SORT_KEY_LABELS: Record<SortKey, string> = {
-  name: "名前",
-  size: "サイズ",
-  type: "種類",
-  modified: "更新日時",
-};
-
 export function sortKeyLabel(key: SortKey): string {
-  return SORT_KEY_LABELS[key];
+  return (SORT_KEY_LABELS satisfies Record<SortKey, string>)[key];
 }
 
 // P-20: ascending "↑", descending "↓".

@@ -8,10 +8,11 @@
 // primitives, so there is nothing to `touch()`.
 
 import { pathComparisonKey } from "$lib/shared/path-key";
-import { translateErrorCode } from "$lib/shared/error-text";
+import { FILE_OP_ERROR_MESSAGES } from "$lib/shared/messages";
 import type { NavigateResult } from "$lib/shared/navigation-result";
 import { resolveCompletion, splitForCompletion } from "./completion";
 import { normalizePathBarInput } from "./normalize";
+import { PATH_BAR_MESSAGES } from "./messages";
 
 export interface PathBarDeps {
   currentPath: () => string;
@@ -60,7 +61,7 @@ export function createPathBarState(deps: PathBarDeps) {
     const normalized = normalizePathBarInput(confirmedText);
     if (normalized.kind === "empty") return { status: "empty" }; // R-722-1
     if (normalized.kind === "invalid") {
-      deps.notify(translateErrorCode("invalid_path") ?? "パスが正しくありません。"); // R-731
+      deps.notify(FILE_OP_ERROR_MESSAGES.invalid_path); // R-731
       deps.onCaretToEnd?.();
       return { status: "invalid" };
     }
@@ -89,7 +90,7 @@ export function createPathBarState(deps: PathBarDeps) {
 
   async function handleTabComplete(): Promise<void> {
     const textAtTabTime = rawText;
-    const notFound = () => deps.notify("候補がありません。");
+    const notFound = () => deps.notify(PATH_BAR_MESSAGES.noCandidates);
     // R-741: R-721 steps 1-3 only.
     let input = textAtTabTime.trim();
     if (input.length >= 2 && input.startsWith('"') && input.endsWith('"')) input = input.slice(1, -1);
@@ -122,7 +123,7 @@ export function createPathBarState(deps: PathBarDeps) {
         deps.onCaretToEnd?.();
         break;
       case "ambiguous":
-        deps.notify(`候補が${outcome.count}件あります。`); // R-744-1
+        deps.notify(PATH_BAR_MESSAGES.ambiguousCandidates(outcome.count)); // R-744-1
         break;
       case "none":
         notFound(); // R-745

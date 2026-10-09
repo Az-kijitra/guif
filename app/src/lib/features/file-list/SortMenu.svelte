@@ -4,7 +4,8 @@
   // (MUST-91: outside-click closes via a transparent backdrop BEHIND the
   // menu -- clicks on the menu itself never reach the backdrop, and clicks
   // outside never reach the file list/tree behind it).
-  import { SORT_KEYS, sortOrderMark, type SortKey, type SortOrder } from "./sort";
+  import { REGION_NAMES } from "$lib/shared/messages";
+  import { SORT_KEYS, sortKeyLabel, sortOrderMark, type SortKey, type SortOrder } from "./sort";
 
   let {
     highlightedKey,
@@ -17,8 +18,6 @@
     currentSortOrder: SortOrder;
     onClose: () => void;
   } = $props();
-
-  const LABELS: Record<SortKey, string> = { name: "Name", size: "Size", type: "Type", modified: "Modified" };
 </script>
 
 <!-- MUST-91: the backdrop sits BEHIND the menu (lower z-index) but covers the
@@ -27,11 +26,11 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="sort-menu-backdrop" role="presentation" onclick={onClose}></div>
-<div class="sort-menu" role="menu">
+<div class="sort-menu" role="menu" aria-label={REGION_NAMES.sortMenu}>
   {#each SORT_KEYS as key (key)}
     <div class="sort-menu-item" role="menuitemradio" aria-checked={key === currentSortKey} class:highlighted={key === highlightedKey}>
       <span class="check">{key === currentSortKey ? sortOrderMark(currentSortOrder) : ""}</span>
-      <span class="label">{LABELS[key]}</span>
+      <span class="label">{sortKeyLabel(key)}</span>
     </div>
   {/each}
 </div>

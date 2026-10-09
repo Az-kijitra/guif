@@ -4,6 +4,7 @@
 // checkbox anywhere (R-320-1, R-340-1, R-340-2, R-390-1).
 
 import type { ConfirmSpec, FormSpec, ProgressSpec } from "$lib/shared/state/modal-host.svelte";
+import { ARCHIVE_MESSAGES } from "./messages";
 import { basename } from "./path-util";
 
 type OnSubmit = FormSpec["onSubmit"];
@@ -19,30 +20,32 @@ function selectionBeforeZipExtension(value: string): [number, number] {
 
 export function buildCreateFormSpec(input: { count: number; outputPath: string; onSubmit: OnSubmit }): FormSpec {
   return {
-    title: "ZIPを作成",
-    lines: [`対象: ${input.count}件`],
+    title: ARCHIVE_MESSAGES.createTitle,
+    lines: [ARCHIVE_MESSAGES.createCountLine(input.count)],
     fields: [
       {
         id: "outputPath",
-        label: "出力先",
+        label: ARCHIVE_MESSAGES.createOutputLabel,
         type: "text",
         value: input.outputPath,
         selection: selectionBeforeZipExtension(input.outputPath),
       },
     ],
-    submitLabel: "作成",
-    cancelLabel: "キャンセル",
+    submitLabel: ARCHIVE_MESSAGES.createSubmit,
+    cancelLabel: ARCHIVE_MESSAGES.cancel,
     onSubmit: input.onSubmit,
   };
 }
 
 export function buildExtractFormSpec(input: { zipPath: string; destination: string; onSubmit: OnSubmit }): FormSpec {
   return {
-    title: "ZIPを展開",
-    lines: [`ZIP: ${input.zipPath}`],
-    fields: [{ id: "destination", label: "展開先", type: "text", value: input.destination }],
-    submitLabel: "展開",
-    cancelLabel: "キャンセル",
+    title: ARCHIVE_MESSAGES.extractTitle,
+    lines: [ARCHIVE_MESSAGES.extractZipLine(input.zipPath)],
+    fields: [
+      { id: "destination", label: ARCHIVE_MESSAGES.extractDestinationLabel, type: "text", value: input.destination },
+    ],
+    submitLabel: ARCHIVE_MESSAGES.extractSubmit,
+    cancelLabel: ARCHIVE_MESSAGES.cancel,
     onSubmit: input.onSubmit,
   };
 }
@@ -50,11 +53,11 @@ export function buildExtractFormSpec(input: { zipPath: string; destination: stri
 // R-326-1: exactly overwrite / cancel; the safe choice is the default.
 export function buildOverwriteConfirmSpec(outputPath: string): ConfirmSpec {
   return {
-    title: "同じ名前のZIPがあります",
-    lines: [`「${basename(outputPath)}」はすでに存在します。`, "上書きしますか?"],
+    title: ARCHIVE_MESSAGES.overwriteZipTitle,
+    lines: [ARCHIVE_MESSAGES.existsLine(basename(outputPath)), ARCHIVE_MESSAGES.overwriteQuestion],
     buttons: [
-      { id: "overwrite", label: "上書き" },
-      { id: "cancel", label: "キャンセル" },
+      { id: "overwrite", label: ARCHIVE_MESSAGES.overwrite },
+      { id: "cancel", label: ARCHIVE_MESSAGES.cancel },
     ],
     defaultButtonId: "cancel",
     cancelButtonId: "cancel",
@@ -65,20 +68,20 @@ export function buildOverwriteConfirmSpec(outputPath: string): ConfirmSpec {
 // replacement); shows the archive-internal path and the total.
 export function buildConflictConfirmSpec(entryPath: string, total: number): ConfirmSpec {
   return {
-    title: "同じ名前のファイルがあります",
+    title: ARCHIVE_MESSAGES.conflictTitle,
     lines: [
-      `「${entryPath}」はすでに存在します。`,
-      "上書きすると、既存のファイルが置き換えられます。",
-      ...(total > 1 ? [`(競合: 全${total}件)`] : []),
+      ARCHIVE_MESSAGES.existsLine(entryPath),
+      ARCHIVE_MESSAGES.conflictReplace,
+      ...(total > 1 ? [ARCHIVE_MESSAGES.conflictCount(total)] : []),
     ],
     buttons: [
-      { id: "overwrite", label: "上書き" },
-      { id: "skip", label: "スキップ" },
-      { id: "cancel", label: "キャンセル" },
+      { id: "overwrite", label: ARCHIVE_MESSAGES.overwrite },
+      { id: "skip", label: ARCHIVE_MESSAGES.skip },
+      { id: "cancel", label: ARCHIVE_MESSAGES.cancel },
     ],
     defaultButtonId: "cancel",
     cancelButtonId: "cancel",
-    checkbox: { label: "すべてに適用", checked: true },
+    checkbox: { label: ARCHIVE_MESSAGES.applyToAll, checked: true },
   };
 }
 
@@ -87,7 +90,7 @@ export function buildErrorConfirmSpec(input: { title: string; lines: string[]; n
     title: input.title,
     lines: input.lines,
     ...(input.note !== undefined ? { note: input.note } : {}),
-    buttons: [{ id: "close", label: "閉じる" }],
+    buttons: [{ id: "close", label: ARCHIVE_MESSAGES.close }],
     defaultButtonId: "close",
     cancelButtonId: "close",
   };
@@ -97,16 +100,17 @@ export type ArchiveKind = "create" | "extract";
 
 export function buildProgressSpec(kind: ArchiveKind, onCancel: () => void): ProgressSpec {
   return {
-    title: kind === "create" ? "ZIPの作成" : "ZIPの展開",
-    cancelLabel: "キャンセル",
+    title: kind === "create" ? ARCHIVE_MESSAGES.progressCreateTitle : ARCHIVE_MESSAGES.progressExtractTitle,
+    cancelLabel: ARCHIVE_MESSAGES.cancel,
     onCancel,
   };
 }
 
-// R-381: `<作成中|展開中> <name> (<index>/<total>)`.
+// R-381 / SPEC-0300-0019 W-43: `<圧縮中|展開中> <name> (<index>/<total>)`.
 export function formatArchiveProgressLabel(
   kind: ArchiveKind,
   info: { name: string; index: number; total: number },
 ): string {
-  return `${kind === "create" ? "作成中" : "展開中"} ${info.name} (${info.index}/${info.total})`;
+  const verb = kind === "create" ? ARCHIVE_MESSAGES.progressCreateVerb : ARCHIVE_MESSAGES.progressExtractVerb;
+  return ARCHIVE_MESSAGES.progressLabel(verb, info.name, info.index, info.total);
 }

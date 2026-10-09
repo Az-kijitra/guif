@@ -2,6 +2,7 @@
   // SPEC-0300-0018 §8, §9, §11 / SPEC-0200-0001 §3.9.6, §3.9.10: display only (props + callbacks).
   // The transparent backdrop sits BEHIND the menu and covers the viewport, so a click outside
   // closes the menu without reaching the row / tree node / path bar underneath (R-1087).
+  import { REGION_NAMES } from "$lib/shared/messages";
   import { computeMenuPosition } from "./menu-position";
   import type { MenuEntry, MenuItemId } from "./menu-model";
 
@@ -53,7 +54,7 @@
   role="menu"
   tabindex="-1"
   lang="ja"
-  aria-label="右クリックメニュー"
+  aria-label={REGION_NAMES.contextMenu}
   aria-activedescendant={highlightedId === null ? undefined : `ctx-item-${highlightedId}`}
   use:placeMenu={cursor}
   onmousedown={(e) => e.preventDefault()}

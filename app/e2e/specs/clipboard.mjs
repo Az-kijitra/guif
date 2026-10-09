@@ -280,7 +280,7 @@ export const tests = [
         await waitUntil(() => readFileDropForTest() === null, "the OS clipboard to be emptied after the move", 8000).catch(() => {});
         t.eq(readFileDropForTest(), null, "the OS clipboard holds no file list any more");
         await openBlankMenu(ctx);
-        t.eq(await pasteDisabled(ctx), true, "ペースト is disabled (app and OS both empty)");
+        t.eq(await pasteDisabled(ctx), true, "貼り付け is disabled (app and OS both empty)");
         await closeMenu(ctx);
 
         // copy -> paste: the OS list stays
@@ -328,7 +328,7 @@ export const tests = [
   },
   {
     id: "AC-1024-1",
-    title: "the menu's ペースト reflects the OS clipboard every time it opens: text / empty -> disabled, a file list -> enabled",
+    title: "the menu's 貼り付け reflects the OS clipboard every time it opens: text / empty -> disabled, a file list -> enabled",
     async run(t, ctx) {
       const s = await setup(ctx, "1024");
       await ctx.withClipboardGuard(async () => {
@@ -353,7 +353,7 @@ export const tests = [
   },
   {
     id: "AC-1052-1",
-    title: "cut, then パスのコピー (changes the OS clipboard), then ペースト from the menu: a copy with the CB-13 notice",
+    title: "cut, then パスのコピー (changes the OS clipboard), then 貼り付け from the menu: a copy with the CB-13 notice",
     async run(t, ctx) {
       const s = await setup(ctx, "10521");
       await ctx.cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
@@ -368,7 +368,7 @@ export const tests = [
         await ctx.nav(s.at("dst"));
         await ctx.focusList();
         await openBlankMenu(ctx);
-        t.eq(await pasteDisabled(ctx), false, "ペースト is enabled (the app clipboard still holds the cut)");
+        t.eq(await pasteDisabled(ctx), false, "貼り付け is enabled (the app clipboard still holds the cut)");
         await ctx.withScopedFileOps(async () => {
           await clickItem(ctx, "paste");
           await waitUntil(() => exists(s.at("dst"), "a.txt"), "the paste from the menu");

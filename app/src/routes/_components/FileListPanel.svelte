@@ -9,8 +9,11 @@
   // (R-955/R-956), the column scroll + edge markers (R-958/R-959), and the click on
   // the frame's free space (R-956-1).
   import { onMount } from "svelte";
+  import { COMMON } from "$lib/shared/messages";
+  import { listErrorText } from "../messages";
   import type { FsEntry } from "$lib/shared/ipc/fs";
   import type { SortKey, SortOrder } from "$lib/features/file-list/sort";
+  import { shouldShowEmptyNotice } from "$lib/features/file-list/list-notice";
   import SortMenu from "$lib/features/file-list/SortMenu.svelte";
   import { columnScroll } from "$lib/features/file-list/column-scroll";
   import { computeEdgeMarkerRows, computeNameCellWidth, type ListGeometry } from "$lib/features/file-list/list-layout";
@@ -76,6 +79,8 @@
   });
 
   let scrollLeft = $state(0);
+  // SPEC-0300-0009 R-26: `項目なし` when the render target is empty (not loading, no error).
+  let showEmpty = $derived(shouldShowEmptyNotice({ loading, error, entryCount: entries.length }));
   let focusIndex = $derived(entries.findIndex((e) => e.path === focusedPath));
   let nameAvail = $derived(computeNameCellWidth({ colWidth: geometry.colWidth, showSize, showTime }));
   let markers = $derived(
@@ -107,10 +112,13 @@
     onclick={handleFrameClick}
   >
     {#if loading}
-      <p class="list-notice">Loading…</p>
+      <p class="list-notice">{COMMON.loading}</p>
     {/if}
     {#if error}
-      <p role="alert" class="list-notice error">Error: {error}</p>
+      <p role="alert" class="list-notice error">{listErrorText(error)}</p>
+    {/if}
+    {#if showEmpty}
+      <p id="file-list-empty" class="list-empty">{COMMON.noItems}</p>
     {/if}
 
     <div
@@ -118,6 +126,7 @@
       class="file-list"
       tabindex="0"
       role="listbox"
+      aria-describedby={showEmpty ? "file-list-empty" : undefined}
       data-focus-area="list"
       aria-multiselectable={ariaMultiselectable}
       aria-activedescendant={ariaActivedescendant}
@@ -204,7 +213,8 @@
     outline-color: var(--ui-focused);
   }
   /* R-906: overlaid at the frame's top-left; never changes the body's size. */
-  .list-notice {
+  .list-notice,
+  .list-empty {
     position: absolute;
     top: 4px;
     left: 4px;
@@ -218,6 +228,9 @@
     font-size: 12px;
     overflow-wrap: anywhere;
     pointer-events: none;
+  }
+  .list-empty {
+    color: var(--ui-muted);
   }
   .list-notice.error {
     color: var(--ui-error);

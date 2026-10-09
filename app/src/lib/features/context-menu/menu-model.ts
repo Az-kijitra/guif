@@ -3,6 +3,8 @@
 // execution-time recheck (planExecution). Pure, DOM-free; imports no other
 // feature.
 
+import { MENU_ITEM_LABELS, MENU_NOTICES, MENU_REASONS } from "./messages";
+
 export type MenuItemId =
   | "open"
   | "os_open"
@@ -51,24 +53,12 @@ export type ExecutionPlan =
   | { kind: "notice"; message: string }
   | { kind: "noop" };
 
-export const REASON_ONE_ONLY = "1件だけ選択してください";
-export const REASON_FOLDER = "フォルダには使えません";
-export const REASON_NOT_ZIP = "ZIPファイルではありません";
-export const REASON_CLIPBOARD_EMPTY = "クリップボードが空です";
+export const REASON_ONE_ONLY = MENU_REASONS.oneOnly;
+export const REASON_FOLDER = MENU_REASONS.folder;
+export const REASON_NOT_ZIP = MENU_REASONS.notZip;
+export const REASON_CLIPBOARD_EMPTY = MENU_REASONS.clipboardEmpty;
 
-const LABELS: Record<MenuItemId, string> = {
-  open: "開く",
-  os_open: "OSの関連付けで開く",
-  copy: "コピー",
-  cut: "カット",
-  paste: "ペースト",
-  copy_path: "パスのコピー",
-  delete: "削除",
-  rename: "名前の変更",
-  zip_create: "ZIPに圧縮",
-  zip_extract: "ZIPを解凍",
-  new_file: "新規作成...",
-};
+const LABELS: Record<MenuItemId, string> = MENU_ITEM_LABELS;
 
 type Layout = ReadonlyArray<MenuItemId | "---">;
 
@@ -116,9 +106,9 @@ export function buildMenu(input: MenuInput): MenuEntry[] {
   });
 }
 
-const NOTICE_NO_SELECTION = "選択がありません";
-const NOTICE_NO_TARGET = "対象がありません";
-const NOTICE_EXTRACT_ONE_AT_A_TIME = "展開は1件ずつ指定してください";
+const NOTICE_NO_SELECTION = MENU_NOTICES.noSelection;
+const NOTICE_NO_TARGET = MENU_NOTICES.noTarget;
+const NOTICE_EXTRACT_ONE_AT_A_TIME = MENU_NOTICES.extractOneAtATime;
 
 // R-1056: re-check at execution time against the entries displayed now.
 export function planExecution(i: {

@@ -3,6 +3,7 @@
 // R-25 (skipped), R-44 (canceled), R-80/R-81 (failure list, first 5), R-84.
 
 import { formatFailureList, translateErrorCode, type FailureEntry } from "./error-format";
+import { RESULT_REPORT_MESSAGES } from "./messages";
 
 export type ReportMode = "copy" | "move" | "trash" | "permanent";
 
@@ -21,10 +22,10 @@ export interface ResultReport {
 }
 
 const VERB: Record<ReportMode, string> = {
-  copy: "コピー",
-  move: "移動",
-  trash: "削除",
-  permanent: "削除",
+  copy: RESULT_REPORT_MESSAGES.verbCopy,
+  move: RESULT_REPORT_MESSAGES.verbMove,
+  trash: RESULT_REPORT_MESSAGES.verbDelete,
+  permanent: RESULT_REPORT_MESSAGES.verbDelete,
 };
 
 function baseName(path: string): string {
@@ -36,12 +37,12 @@ export function buildResultReport(summary: SummaryLike, mode: ReportMode): Resul
   const verb = VERB[mode];
 
   if (summary.failed === 0 && summary.failures.length === 0) {
-    const skipped = summary.skipped > 0 ? `(${summary.skipped}件スキップ)` : "";
-    return { kind: "success", status: `${summary.ok}件を${verb}しました${skipped}`, failureDialog: null };
+    const skipped = summary.skipped > 0 ? RESULT_REPORT_MESSAGES.skippedSuffix(summary.skipped) : "";
+    return { kind: "success", status: RESULT_REPORT_MESSAGES.success(summary.ok, verb, skipped), failureDialog: null };
   }
 
   if (summary.failures.length > 0 && summary.failures.every((f) => f.code === "canceled")) {
-    return { kind: "canceled", status: `キャンセルしました(${summary.ok}件完了)`, failureDialog: null };
+    return { kind: "canceled", status: RESULT_REPORT_MESSAGES.canceled(summary.ok), failureDialog: null };
   }
 
   const { shown, truncated } = formatFailureList(summary.failures);
@@ -49,11 +50,11 @@ export function buildResultReport(summary: SummaryLike, mode: ReportMode): Resul
   const rest = summary.failures.length - shown.length;
   return {
     kind: "failed",
-    status: `${summary.ok}件を${verb}しました。${summary.failed}件は失敗しました`,
+    status: RESULT_REPORT_MESSAGES.failedStatus(summary.ok, verb, summary.failed),
     failureDialog: {
-      title: `${verb}できなかった項目`,
+      title: RESULT_REPORT_MESSAGES.failedTitle(verb),
       lines,
-      ...(truncated ? { note: `ほか${rest}件…` } : {}),
+      ...(truncated ? { note: RESULT_REPORT_MESSAGES.moreFailures(rest) } : {}),
     },
   };
 }

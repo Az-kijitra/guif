@@ -9,13 +9,14 @@
 
 import { uiStateSave, uiStateLoad, type UiStateData } from "$lib/shared/ipc/config";
 import { createPersistenceCoordinator } from "$lib/shared/persistence-coordinator";
+import { FILE_LIST_NOTICES } from "./messages";
 
 export function createUiStatePersistenceCoordinator() {
   return createPersistenceCoordinator<UiStateData>({
     load: async () => {
       const result = await uiStateLoad();
       const notice = result.recoveredFromCorruption
-        ? "Display settings were corrupted and have been reset. The original file was backed up." // R-77-3
+        ? FILE_LIST_NOTICES.displaySettingsCorrupted // R-77-3
         : null;
       return { data: result.data, notice };
     },

@@ -31,6 +31,7 @@ import {
   type ArchiveKind,
 } from "./dialog-specs";
 import { formatArchiveError, formatPreflightError } from "./error-format";
+import { ARCHIVE_MESSAGES } from "./messages";
 import { basename, dirname, joinPath, samePath } from "./path-util";
 import {
   buildCreateErrorReport,
@@ -87,13 +88,13 @@ export interface ArchiveDeps {
 }
 
 const ZIP_ACTIONS = new Set(["zip_create", "zip_extract"]);
-const BUSY_MESSAGE = "別のZIP操作を実行中です";
-const NO_TARGET_MESSAGE = "対象がありません";
-const EXTRACT_ONE_MESSAGE = "展開は1件ずつ指定してください";
-const NOT_ZIP_MESSAGE = "ZIPファイルではありません";
-const BLANK_OUTPUT_MESSAGE = "出力パスを入力してください";
-const BLANK_DESTINATION_MESSAGE = "展開先を入力してください";
-const EXTRACT_CANCELED_MESSAGE = "展開をキャンセルしました";
+const BUSY_MESSAGE = ARCHIVE_MESSAGES.busy;
+const NO_TARGET_MESSAGE = ARCHIVE_MESSAGES.noTarget;
+const EXTRACT_ONE_MESSAGE = ARCHIVE_MESSAGES.extractOneAtATime;
+const NOT_ZIP_MESSAGE = ARCHIVE_MESSAGES.notZipFile;
+const BLANK_OUTPUT_MESSAGE = ARCHIVE_MESSAGES.blankOutput;
+const BLANK_DESTINATION_MESSAGE = ARCHIVE_MESSAGES.blankDestination;
+const EXTRACT_CANCELED_MESSAGE = ARCHIVE_MESSAGES.extractCanceled;
 
 type RunOutcome<T> = { kind: "ok"; value: T } | { kind: "rejected"; error: unknown };
 
@@ -125,7 +126,7 @@ export function createArchiveController(deps: ArchiveDeps) {
     );
     let unlisten: (() => void) | undefined;
     try {
-      handle.update({ label: "準備中…", index: 0, total: 0 });
+      handle.update({ label: ARCHIVE_MESSAGES.preparing, index: 0, total: 0 });
       unlisten = await ipc.listenProgress(operationId, (e) => {
         handle.update({ label: formatArchiveProgressLabel(kind, e), index: e.index, total: e.total });
       });

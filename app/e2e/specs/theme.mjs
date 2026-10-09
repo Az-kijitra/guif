@@ -15,7 +15,8 @@ import { fixedThemeNote } from "../lib/os-theme.mjs";
 import { openFiles, RGB_DARK, setSort, openViewerWindow, waitViewerShows } from "./_util.mjs";
 import { checkViewerPalette, VIEWER_LOOK, VIEWER_PALETTE } from "./viewer.mjs";
 
-const THEME_NOTICE = 'Could not understand ui_theme in config.toml (use "light", "dark" or "system"); following the OS theme.';
+// W-33 (SPEC-0300-0019)
+const THEME_NOTICE = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
 const KEYMAP_LINE = 'toggle_time = "Ctrl+Alt+T"\n';
 const countOf = (text, part) => (part === "" ? 0 : text.split(part).length - 1);
 
@@ -493,7 +494,7 @@ const s3Tests = [
 function invalidThemeTest(id, label, { extraKeymapNotice = null } = {}) {
   return {
     id,
-    title: `ui_theme ${label}: follows the OS, one "could not understand ui_theme" notice, Ctrl+Alt+T works, config.toml untouched`,
+    title: `ui_theme ${label}: follows the OS, one W-33 ui_theme notice, Ctrl+Alt+T works, config.toml untouched`,
     async run(t, ctx) {
       const before = configState(ctx);
       const message = await reloadAndReadNotice(ctx);
@@ -525,9 +526,10 @@ const s8Tests = [
       const dto = await checkFollowsOs(t, ctx);
       t.eq(dto.uiThemeInvalid, false, "no theme notice of its own");
       t.eq(dto.parseError?.wholeFile, true, "DTO parseError.wholeFile");
-      t.eq(messageCount(message, "config.toml could not be read"), 1, "the R-45-2 notice appears once", JSON.stringify(message));
-      t.ok(message.includes("default theme"), "the notice says the theme falls back too", message);
-      t.eq(messageCount(message, "Could not understand ui_theme"), 0, "no separate theme notice");
+      t.eq(messageCount(message, "読み込めなかったため"), 1, "the R-45-2 notice (W-31) appears once", JSON.stringify(message));
+      t.ok(message.includes("既定のキー割り当てとテーマ(OS の設定に従う)を使います。"), "the notice says the theme falls back too (W-31)", message);
+      t.ok(message.includes("テーマ"), "the notice mentions the theme", message);
+      t.eq(messageCount(message, "ui_theme を解釈できない"), 0, "no separate theme notice (W-33)");
       checkConfigUntouched(t, ctx, before, "after the start");
     },
   },
@@ -545,9 +547,9 @@ const s9Tests = [
       t.eq(dto.parseError?.wholeFile, false, "DTO parseError.wholeFile is false");
       t.eq(await matchesDark(ctx), true, "the page is dark (no emulation)");
       t.eq(await uiBg(ctx), "#1e1f22", "--ui-bg dark");
-      t.eq(messageCount(message, "config.toml could not be read"), 1, "the R-45-2 notice appears once", JSON.stringify(message));
-      t.ok(message.includes("Using the default keymap."), "the notice says the default keymap is used", message);
-      t.ok(!/theme/i.test(message), "the notice does not mention the theme", message);
+      t.eq(message, "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。", "the R-45-2 (b) notice is exactly the W-30-2 sentence", message);
+      t.ok(!message.includes("テーマ") && !/theme/i.test(message), "the notice does not mention the theme", message);
+      t.ok(!message.includes("詳細:"), "the notice has no detail part (W-30-2)", message);
       // default keymap: Ctrl+H toggles hidden files
       const dir = ctx.fx.files("keymap-check2", 5);
       await ctx.nav(dir);
@@ -574,7 +576,7 @@ export const scenarios = [
     id: "S7",
     title: "invalid ui_theme + unknown keymap action",
     configToml: `ui_theme = "Dark"\n${keymapBlock}no_such_action = "Ctrl+Alt+Z"\n`,
-    tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "Ignored 1 invalid keymap override(s) in config.toml: no_such_action." })],
+    tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。" })],
   },
   { id: "S8", title: "TOML syntax error", configToml: 'ui_theme = "dark"\nthis is = = not toml\n', tests: s8Tests },
   { id: "S9", title: 'ui_theme = "dark" + input_keymap_custom not a table', configToml: 'ui_theme = "dark"\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },

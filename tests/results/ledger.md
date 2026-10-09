@@ -18,6 +18,15 @@
 | 2026-10-06 | 未採番(SPEC-0300-0017 第5版 / SPEC-0300-0015 第5版 / SPEC-0300-0018 第3版 / SPEC-0300-0010 第14版・第15版 / SPEC-0300-0009 第13版・第14版 / SPEC-0900-0001 追補・第3版、Phase 12) | PASS(フロント・バック・E2E) | 以下「## 2026-10-06 Phase 12」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可、MUST なし、S-1 ～ S-2・M-1 ～ M-4 修正済み) → オーケストレーター(実アプリでテーマ確認) |
 | 2026-10-07 | 未採番(SPEC-0300-0011 第9版 / 0016 第4版 / 0009 第14版 / 0013 第6版 / 0014 第5版 / 0015 第6版、絶対パス検査の二重防御・ISS-0204〜0206) | PASS(フロント・バック・E2E) | 以下「## 2026-10-07 絶対パス検査の二重防御」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
 | 2026-10-08 | 未採番(SPEC-0300-0017 第6版、ISS-0203 (b)(c)(d)) | PASS(フロント・E2E) | 以下「## 2026-10-08 ISS-0203 の片付け」セクション参照 | オーケストレーター(調査・実装・実アプリ確認) → spec-writer / spec-reviewer(第6版) |
+| 2026-10-09 | 未採番(SPEC-0300-0019 第1版 画面文言の日本語統一、SPEC-0300-0009 第16版 空の一覧の「項目なし」ほか関連7本、ISS-0176 / 0207〜0210) | PASS(フロント・バック・E2E) | 以下「## 2026-10-09 画面文言の日本語統一」セクション参照 | code-generator(段階 A / C) → unit-test-writer(段階 B) → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
+
+## 2026-10-09 画面文言の日本語統一(SPEC-0300-0019 第1版、SPEC-0300-0009 第16版ほか)テスト実行結果
+
+- 段階 A(文字列不変の移設 → messages.ts 11 本)、段階 B(新しい期待値の単体テスト)、段階 C(値の置換・空の一覧の「項目なし」・aria-label・lang="ja"・Rust の未使用 translate_error_code 削除)。
+- 単体: vitest 130 ファイル 2510 件すべて成功、svelte-check 0 エラー(既存 a11y 警告 6)、cargo test 1050 件成功。オーケストレーターが archive の途中キャンセルの期待値(旧「途中まで」)を W-49「ZIPの展開を途中でキャンセルしました」に修正。
+- code-reviewer: PR作成可(MUST なし)。SHOULD-1(パスバーの読み上げ名を REGION_NAMES.path から引く)・MINOR(段階 A のコメント残り、同値の別キー extractFailedHeading の統合)をオーケストレーターが修正。SHOULD-2(file-ops と archive のエラーコード表の同文)は設計 H-5 どおり残置。
+- E2E で発見・修正: ビューアの「読み込み中…」(R-512 / AC-505 / AC-1210 (ii))が到達不能だった(fileName は内容と同時にしか入らないため、初回読み込み中も「ファイルが選択されていません」)。ローダーに onTaken を追加し、受け渡し後は「読み込み中…」を表示。単体 viewer-content-loader.test.ts を新設、E2E を note から必須の検査に変更。
+- E2E `npm run e2e` 全体: 135 PASS / 0 FAIL / 10 SKIP、R-08 PASS。新設 specs/wording.mjs 17 件(AC-646〜648・650〜652、AC-1200〜1208・1210)すべて PASS。クリップボード系もすべて PASS。
 
 ## 2026-10-08 ISS-0203 の片付け(ビューア初回表示・AC-949 文言・ビューアの縦スクロールバー)
 

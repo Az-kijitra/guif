@@ -49,7 +49,7 @@ export const tests = [
       await ctx.press.sortMenu();
       await ctx.waitFor(`!!document.querySelector('.sort-menu')`, { label: "the sort menu" });
       const marks = await ctx.ev(`[...document.querySelectorAll('.sort-menu-item')].map((e) => [e.querySelector('.label').textContent, e.querySelector('.check').textContent])`);
-      t.eq(marks.find((m) => m[0] === "Modified")?.[1], "↓", "current key carries ↓ in the menu");
+      t.eq(marks.find((m) => m[0] === "更新日時")?.[1], "↓", "current key carries ↓ in the menu");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.sort-menu')`, { label: "the sort menu to close" });
       await setSort(ctx, "name", "asc");
@@ -129,7 +129,7 @@ export const tests = [
   },
   {
     id: "AC-935",
-    title: "focus item follows the focus: ツリー / パス / 検索 (input and button) / 訪問履歴 / ジャンプリスト / ソートメニュー / ダイアログ / 一覧 / なし",
+    title: "focus item follows the focus: ツリー / パス / 検索 (input and button) / 履歴 / ジャンプリスト / 並び替えメニュー / ダイアログ / 一覧 / なし",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100, { size: true, time: false, hidden: false });
       const focus = async () => (await items(ctx))[0];
@@ -154,20 +154,20 @@ export const tests = [
       await openSearch(ctx);
       await ctx.settle(100);
       t.eq(await focus(), "フォーカス: 検索", "(iii) search input");
-      // (iii-2) A button inside the search bar. Pressing the mouse on Apply focuses the button; the
+      // (iii-2) A button inside the search bar. Pressing the mouse on 適用 focuses the button; the
       // completed click is a "confirm", which hands the focus to the list (SPEC-0300-0012 AC-113-1),
-      // so the literal wording "just after clicking Apply" is checked at the press, not after the release.
+      // so the literal wording "just after clicking 適用" is checked at the press, not after the release.
       await ctx.type("f0"); // a non-empty query keeps the bar open after the confirm
       await ctx.settle(150);
       const apply = await ctx.m.center(".search-bar .apply-button");
       await ctx.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: apply.x, y: apply.y });
       await ctx.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: apply.x, y: apply.y, button: "left", buttons: 1, clickCount: 1 });
       await ctx.settle(150);
-      t.eq((await ctx.m.active())?.tag, "BUTTON", "(iii-2) the Apply button holds the keyboard focus while pressed");
-      t.eq(await focus(), "フォーカス: 検索", "(iii-2) mouse pressed on Apply");
+      t.eq((await ctx.m.active())?.tag, "BUTTON", "(iii-2) the 適用 button holds the keyboard focus while pressed");
+      t.eq(await focus(), "フォーカス: 検索", "(iii-2) mouse pressed on 適用");
       await ctx.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: apply.x, y: apply.y, button: "left", buttons: 0, clickCount: 1 });
       await ctx.settle(200);
-      t.eq(await focus(), "フォーカス: 一覧", "(iii-2) after the completed Apply click the list has the focus (SPEC-0300-0012 AC-113-1)");
+      t.eq(await focus(), "フォーカス: 一覧", "(iii-2) after the completed 適用 click the list has the focus (SPEC-0300-0012 AC-113-1)");
       await ctx.waitFor(`!!document.querySelector('.search-bar')`, { label: "the search bar to stay open" });
       await ctx.clickSel(".search-bar .regex-toggle");
       await ctx.settle(150);
@@ -179,7 +179,7 @@ export const tests = [
       await ctx.press.history();
       await ctx.waitFor(`!!document.querySelector('.nav-history-list')`, { label: "the visit history" });
       await ctx.settle(100);
-      t.eq(await focus(), "フォーカス: 訪問履歴", "(iv) visit history");
+      t.eq(await focus(), "フォーカス: 履歴", "(iv) visit history");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.nav-history-list')`, { label: "the history to close" });
 
@@ -197,7 +197,7 @@ export const tests = [
       await ctx.press.sortMenu();
       await ctx.waitFor(`!!document.querySelector('.sort-menu')`, { label: "the sort menu" });
       await ctx.settle(100);
-      t.eq(await focus(), "フォーカス: ソートメニュー", "(vi) sort menu");
+      t.eq(await focus(), "フォーカス: 並び替えメニュー", "(vi) sort menu");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.sort-menu')`, { label: "the sort menu to close" });
 

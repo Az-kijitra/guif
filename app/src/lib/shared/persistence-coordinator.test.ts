@@ -265,3 +265,20 @@ describe("register(): an unregistered slice falls back to the hydrated baseline,
     expect(save).toHaveBeenCalledWith({ a: ["new"], b: ["also-from-disk"] });
   });
 });
+
+// SPEC-0300-0019 (stage B) W-38 / AC-1209 (x): the notice of a failed load is Japanese.
+describe("hydrateAll() -- W-38 wording", () => {
+  it("a rejected load() resolves to `保存データを読み込めなかったため、今回の変更は保存しません。`", async () => {
+    const load = vi.fn().mockRejectedValue(new Error("io error"));
+    const coordinator = createPersistenceCoordinator<Data>({ load, save: vi.fn() });
+
+    await expect(coordinator.hydrateAll()).resolves.toBe("保存データを読み込めなかったため、今回の変更は保存しません。");
+  });
+
+  it("the notice load() itself reports is passed through unchanged", async () => {
+    const load = vi.fn().mockResolvedValue({ data: emptyData(), notice: "N" });
+    const coordinator = createPersistenceCoordinator<Data>({ load, save: vi.fn() });
+
+    await expect(coordinator.hydrateAll()).resolves.toBe("N");
+  });
+});

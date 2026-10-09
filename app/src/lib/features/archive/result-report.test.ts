@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 //   controller flow (Ok+completed => status; Ok+canceled => status with N/M and
 //   destination; Ok+failed with extracted>0 => error dialog with "extracted
 //   part" notice; failed with extracted==0 => the ordinary error; Err =>
-//   error dialog; create canceled => "ZIPの作成をキャンセルしました").
+//   error dialog; create canceled => "ZIPへの圧縮をキャンセルしました").
 // Module under test (not yet implemented): ./result-report.ts
 //
 // Contract assumed (documented in the handback report):
@@ -24,12 +24,12 @@ import { describe, expect, it } from "vitest";
 //     dialog: null | { title: string; lines: string[]; note?: string } }
 //   buildCreateSuccessReport({ outputPath, entries, skippedLinks }) -> ArchiveReport (success)
 //   buildCreateErrorReport(err: { code, message, entryPath? }) -> ArchiveReport
-//        (code "canceled" => kind canceled, status "ZIPの作成をキャンセルしました", dialog null;
+//        (code "canceled" => kind canceled, status "ZIPへの圧縮をキャンセルしました" (W-45), dialog null;
 //         otherwise kind failed, dialog non-null)
 //   buildExtractResultReport(result: { extracted, skipped, total, destination,
 //        outcome: "completed" | "failed" | "canceled", error?: {code,message,entryPath?} }) -> ArchiveReport
 //   buildExtractErrorReport(err) -> ArchiveReport   (the `Err` = nothing written path;
-//        code "canceled" => kind canceled with status "展開をキャンセルしました")
+//        code "canceled" => kind canceled with status "ZIPの展開をキャンセルしました" (W-49))
 
 import {
   buildCreateErrorReport,
@@ -67,10 +67,10 @@ describe("buildCreateSuccessReport (R-396, AC-383)", () => {
 });
 
 describe("buildCreateErrorReport (R-328-1, R-383, R-385, AC-353)", () => {
-  it("canceled => a canceled report with the status 'ZIPの作成をキャンセルしました' and NO dialog", () => {
+  it("canceled => a canceled report with the status 'ZIPへの圧縮をキャンセルしました' and NO dialog", () => {
     const r = buildCreateErrorReport({ code: "canceled", message: "canceled" });
     expect(r.kind).toBe("canceled");
-    expect(r.status).toBe("ZIPの作成をキャンセルしました");
+    expect(r.status).toBe("ZIPへの圧縮をキャンセルしました");
     expect(r.dialog).toBeNull();
   });
 
@@ -114,7 +114,7 @@ describe("buildExtractResultReport: canceled midway (R-351, R-351-1, R-384, AC-3
     const r = buildExtractResultReport({ extracted: 3, skipped: 0, total: 10, destination: "C:\\work\\a", outcome: "canceled" });
     expect(r.kind).toBe("canceled");
     expect(r.dialog).toBeNull();
-    expect(r.status).toContain("途中まで");
+    expect(r.status).toContain("ZIPの展開を途中でキャンセルしました"); // SPEC-0300-0019 W-49
     expect(r.status).toContain("3/10");
     expect(r.status).toContain("C:\\work\\a");
   });
@@ -203,7 +203,64 @@ describe("buildExtractErrorReport (Err = rejected before anything was written; R
   it("R-387-2: a canceled rejection (cancel arrived before the start) => canceled status, no dialog", () => {
     const r = buildExtractErrorReport({ code: "canceled", message: "canceled" });
     expect(r.kind).toBe("canceled");
-    expect(r.status).toBe("展開をキャンセルしました");
+    expect(r.status).toBe("ZIPの展開をキャンセルしました");
     expect(r.dialog).toBeNull();
+  });
+});
+
+// SPEC-0300-0019 AC-1208-1 (W-44 / W-45 / W-46 / W-48 / W-49 / W-4A, R-1221): the exact titles and status texts.
+describe("AC-1208-1: ZIP result wording (用語「ZIPに圧縮」「ZIPを展開」)", () => {
+  const failedPartial = {
+    extracted: 4,
+    skipped: 0,
+    total: 10,
+    destination: "C:\\work\\a",
+    outcome: "failed" as const,
+    error: { code: "zip_corrupt", message: "CRC mismatch", entryPath: "data/big.bin" },
+  };
+
+  it("W-44: a failed create has the title `ZIPに圧縮できませんでした`", () => {
+    const r = buildCreateErrorReport({ code: "io_error", message: "disk" });
+    expect(r.dialog?.title).toBe("ZIPに圧縮できませんでした");
+  });
+
+  it("W-45: a canceled create is `ZIPへの圧縮をキャンセルしました`", () => {
+    expect(buildCreateErrorReport({ code: "canceled", message: "canceled" }).status).toBe("ZIPへの圧縮をキャンセルしました");
+  });
+
+  it("W-46: a successful create stays `{name} を作成しました`", () => {
+    const r = buildCreateSuccessReport({ outputPath: "C:\\work\\docs.zip", entries: 5, skippedLinks: 0 });
+    expect(r.status).toBe("docs.zip を作成しました");
+  });
+
+  it("W-48 (pre-validation rejection): the title is `ZIPを展開できませんでした`", () => {
+    expect(buildExtractErrorReport({ code: "conflict", message: "exists" }).dialog?.title).toBe("ZIPを展開できませんでした");
+  });
+
+  it("W-48 (failed before extracting anything): the title is `ZIPを展開できませんでした`", () => {
+    expect(buildExtractResultReport({ ...failedPartial, extracted: 0 }).dialog?.title).toBe("ZIPを展開できませんでした");
+  });
+
+  it("W-48 (failed midway): the title is `ZIPを展開できませんでした` and the body lines are unchanged", () => {
+    const r = buildExtractResultReport(failedPartial);
+    expect(r.dialog?.title).toBe("ZIPを展開できませんでした");
+    expect(r.dialog?.lines[0]).toBe("途中まで展開しました(4/10件)。");
+    expect(r.dialog?.lines[1]).toBe("展開先: C:\\work\\a");
+    expect(r.dialog?.note).toBe("展開済みのファイルは残っています。");
+  });
+
+  it("W-49: canceled before anything was extracted is `ZIPの展開をキャンセルしました`", () => {
+    const r = buildExtractResultReport({ extracted: 0, skipped: 0, total: 10, destination: "C:\\work\\a", outcome: "canceled" });
+    expect(r.status).toBe("ZIPの展開をキャンセルしました");
+  });
+
+  it("W-49: canceled midway is `ZIPの展開を途中でキャンセルしました({x}/{n}件を {destination} に展開済み)`", () => {
+    const r = buildExtractResultReport({ extracted: 3, skipped: 0, total: 10, destination: "C:\\work\\a", outcome: "canceled" });
+    expect(r.status).toBe("ZIPの展開を途中でキャンセルしました(3/10件を C:\\work\\a に展開済み)");
+  });
+
+  it("W-4A: a successful extract stays `{destination} に{n}件を展開しました{skip}`", () => {
+    const r = buildExtractResultReport({ extracted: 12, skipped: 3, total: 15, destination: "C:\\work\\a", outcome: "completed" });
+    expect(r.status).toBe("C:\\work\\a に12件を展開しました(3件をスキップ)");
   });
 });

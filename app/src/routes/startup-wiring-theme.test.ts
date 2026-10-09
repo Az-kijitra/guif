@@ -25,8 +25,12 @@ function dto(over: Partial<Dto> = {}): Dto {
   return { entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, ...over } as Dto;
 }
 
+// SPEC-0300-0019 (stage B): the startup notices are Japanese (W-30-2 / W-31 / W-32 / W-33); the join separators
+// (" " inside the config.toml part, " / " between files) are unchanged (W-39).
 const THEME_NOTICE =
-  'Could not understand ui_theme in config.toml (use "light", "dark" or "system"); following the OS theme.';
+  'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
+const W30_2 = "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。";
+const W32_NO_SUCH_ACTION = "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。";
 
 beforeEach(() => {
   vi.mocked(configLoadKeymap).mockReset();
@@ -57,7 +61,7 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
       dto({ entries: [{ actionId: "no_such_action", value: "Ctrl+X" }], uiThemeInvalid: true }),
     );
     const { notice } = await loadKeymapForStartup();
-    expect(notice).toBe(`Ignored 1 invalid keymap override(s) in config.toml: no_such_action. ${THEME_NOTICE}`);
+    expect(notice).toBe(`${W32_NO_SUCH_ACTION} ${THEME_NOTICE}`);
   });
 
   it("R-917-5 case 2 (AC-959 (ii)): the whole file is unreadable -> ONE notice that also says the default theme; NO separate theme notice", async () => {
@@ -66,9 +70,9 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
     );
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(
-      "config.toml could not be read (line 2): bad toml. Using the default keymap and the default theme (following the OS).",
+      "config.toml の 2 行目を読み込めなかったため、既定のキー割り当てとテーマ(OS の設定に従う)を使います。 詳細: bad toml",
     );
-    expect(notice).not.toContain("Could not understand ui_theme");
+    expect(notice).not.toContain("ui_theme を解釈できない");
   });
 
   it("R-917-5 case 3 (AC-959 (iii)): input_keymap_custom of the wrong type with a valid ui_theme -> the R-45-2 notice WITHOUT any theme wording", async () => {
@@ -80,8 +84,10 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
       }),
     );
     const { notice } = await loadKeymapForStartup();
-    expect(notice).toBe("config.toml could not be read: input_keymap_custom must be a table. Using the default keymap.");
-    expect(notice).not.toMatch(/theme/i);
+    expect(notice).toBe(W30_2);
+    expect(notice).not.toContain("テーマ");
+    expect(notice).not.toContain("詳細:");
+    expect(notice).not.toContain("must be a table");
   });
 
   it("R-917-5 case 3 + `ui_theme = 1` (確定 #16): both notices, the keymap one without theme wording, then the theme one", async () => {
@@ -92,9 +98,7 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
       }),
     );
     const { notice } = await loadKeymapForStartup();
-    expect(notice).toBe(
-      `config.toml could not be read: input_keymap_custom must be a table. Using the default keymap. ${THEME_NOTICE}`,
-    );
+    expect(notice).toBe(`${W30_2} ${THEME_NOTICE}`);
   });
 
   it("the keymap part and the theme part are separate sentences (the theme notice is not folded into R-45-2's text)", async () => {
@@ -102,8 +106,8 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
       dto({ parseError: { message: "x", line: null, wholeFile: false }, uiThemeInvalid: true }),
     );
     const { notice } = (await loadKeymapForStartup()) as { notice: string };
-    expect(notice.indexOf("Using the default keymap.")).toBeGreaterThan(-1);
-    expect(notice.indexOf(THEME_NOTICE)).toBeGreaterThan(notice.indexOf("Using the default keymap."));
+    expect(notice.indexOf(W30_2)).toBe(0);
+    expect(notice.indexOf(THEME_NOTICE)).toBeGreaterThan(notice.indexOf(W30_2));
   });
 });
 
@@ -120,7 +124,7 @@ describe("runStartupHydrate with the real keymap loader: config part, then ui-st
     });
 
     expect(statusMessage.text).toBe(
-      `Ignored 1 invalid keymap override(s) in config.toml: no_such_action. ${THEME_NOTICE} / UI-STATE-NOTICE / NAVIGATION-NOTICE`,
+      `${W32_NO_SUCH_ACTION} ${THEME_NOTICE} / UI-STATE-NOTICE / NAVIGATION-NOTICE`,
     );
   });
 

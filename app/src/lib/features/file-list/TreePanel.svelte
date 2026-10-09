@@ -12,6 +12,7 @@
   import { pathComparisonKey } from "$lib/shared/path-key";
   import { computeFullyVisibleRows, treeIndentPx, treeNodeLabel, treeNodeTitle } from "./tree";
   import { readRowHeightPx } from "./text-measure";
+  import { TREE_MESSAGES } from "./messages";
   import type { TreeRowView } from "./tree-state.svelte";
 
   // R-59-2 / R-942 / AC-623: the tree panel measures ITS OWN viewport (never the
@@ -104,7 +105,7 @@
         class:leaf={row.leaf}
         tabindex="-1"
         aria-hidden={row.leaf ? "true" : undefined}
-        aria-label={row.expanded ? "Collapse" : "Expand"}
+        aria-label={row.expanded ? TREE_MESSAGES.collapse : TREE_MESSAGES.expand}
         onclick={(e) => {
           e.stopPropagation();
           onToggleExpand(row.path);

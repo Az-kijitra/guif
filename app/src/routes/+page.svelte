@@ -3,6 +3,7 @@
   // features/ and routes/*-wiring.ts (`filteredEntries` is the sole feature bridge, §3.1.2).
   import "../app.css"; // R-913: the main window only (never +layout.svelte / the viewer).
   import { onMount, onDestroy, tick, untrack } from "svelte";
+  import { REGION_NAMES } from "$lib/shared/messages";
   import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
   import { fileListState } from "$lib/features/file-list/list-state.svelte";
   import { createSortMenuState } from "$lib/features/file-list/sort-menu-state.svelte";
@@ -326,7 +327,7 @@
       historyOpen={navigationHistoryState.isOpen}
       historyItems={navigationHistoryState.mode === "history" ? navigationHistoryState.visitHistory : navigationHistoryState.jumpList}
       historySelectedIndex={navigationHistoryState.selectedIndex}
-      historyLabel={navigationHistoryState.mode === "history" ? "Visit history" : "Jump list"}
+      historyLabel={navigationHistoryState.mode === "history" ? REGION_NAMES.history : REGION_NAMES.jumpList}
       bind:historyListEl
       onHistoryRowClick={historyRows.onHistoryRowClick}
       onHistoryRemove={historyRows.onHistoryRemove}

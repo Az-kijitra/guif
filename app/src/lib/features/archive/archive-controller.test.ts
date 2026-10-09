@@ -535,13 +535,13 @@ describe("create: progress ordering, cancel and finally (R-380~R-382, R-387-1/-2
     expect(h.ipc.cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("AC-350: progress events update the dialog with `作成中 <name> (<index>/<total>)`", async () => {
+  it("AC-350: progress events update the dialog with `圧縮中 <name> (<index>/<total>)`", async () => {
     let release!: (v: CreateResult) => void;
     const gate = new Promise<CreateResult>((r) => (release = r));
     const h = go({ create: () => gate });
     await h.run("zip_create");
     h.emit({ operationId: "op-1", name: "docs/a.txt", index: 2, total: 5 });
-    expect(h.handle.update).toHaveBeenLastCalledWith({ label: "作成中 docs/a.txt (2/5)", index: 2, total: 5 });
+    expect(h.handle.update).toHaveBeenLastCalledWith({ label: "圧縮中 docs/a.txt (2/5)", index: 2, total: 5 });
     release({ outputPath: "C:\\work\\o.zip", entries: 5, skippedLinks: 0 });
     await flush();
   });
@@ -640,14 +640,14 @@ describe("create: results, reload and focus (R-329, R-383, R-396~R-398; AC-353, 
     expect(h.reload.mock.calls[0][0]?.focusPath).toBeUndefined();
   });
 
-  it("R-383 / AC-353: canceled => status 'ZIPの作成をキャンセルしました', NO dialog, reload once WITHOUT clearing the selection", async () => {
+  it("R-383 / AC-353: canceled => status 'ZIPへの圧縮をキャンセルしました', NO dialog, reload once WITHOUT clearing the selection", async () => {
     const h = go({
       create: () => {
         throw arcErr("canceled", "canceled");
       },
     });
     await h.run("zip_create");
-    expect(h.statusTexts()).toContain("ZIPの作成をキャンセルしました");
+    expect(h.statusTexts()).toContain("ZIPへの圧縮をキャンセルしました");
     expect(h.modal.confirm).not.toHaveBeenCalled();
     expect(h.reload).toHaveBeenCalledTimes(1);
     const opts = h.reload.mock.calls[0][0];
@@ -876,7 +876,7 @@ describe("extract: conflict confirmation before the run (R-373, R-374, R-374-1, 
     await h.run("zip_extract");
     expect(h.modal.showProgress).not.toHaveBeenCalled();
     expect(h.ipc.extract).not.toHaveBeenCalled();
-    expect(h.statusTexts()).toContain("展開をキャンセルしました");
+    expect(h.statusTexts()).toContain("ZIPの展開をキャンセルしました");
   });
 
   it("AC-343: 'overwrite' with apply-to-all => every conflicting entry path is resolved 'overwrite' (keys = archive-internal paths exactly)", async () => {
@@ -1040,7 +1040,7 @@ describe("extract: results, reload and focus (R-350, R-351, R-351-1, R-384, R-39
     const h = go({ extract: () => result({ outcome: "canceled", extracted: 2, total: 5 }) });
     await h.run("zip_extract");
     const s = h.statusTexts().join("\n");
-    expect(s).toContain("途中まで");
+    expect(s).toContain("ZIPの展開を途中でキャンセルしました"); // SPEC-0300-0019 W-49
     expect(s).toContain("2/5");
     expect(s).toContain("C:\\work\\a");
     expect(h.modal.confirm).not.toHaveBeenCalled();
@@ -1104,7 +1104,7 @@ describe("extract: results, reload and focus (R-350, R-351, R-351-1, R-384, R-39
       },
     });
     await h.run("zip_extract");
-    expect(h.statusTexts()).toContain("展開をキャンセルしました");
+    expect(h.statusTexts()).toContain("ZIPの展開をキャンセルしました");
     expect(h.modal.confirm).not.toHaveBeenCalled();
   });
 });
@@ -1230,7 +1230,7 @@ describe("with the real modal-host (SPEC-0200-0001 §3.4.1: exclusion relies on 
     gate.reject(arcErr("canceled", "canceled"));
     await flush();
     expect(r.host.isOpen).toBe(false);
-    expect(r.status.show).toHaveBeenCalledWith("ZIPの作成をキャンセルしました");
+    expect(r.status.show).toHaveBeenCalledWith("ZIPへの圧縮をキャンセルしました");
     expect(r.unlisten).toHaveBeenCalledTimes(1);
   });
 
@@ -1248,7 +1248,7 @@ describe("with the real modal-host (SPEC-0200-0001 §3.4.1: exclusion relies on 
     await flush();
     expect(r.ipc.extract).not.toHaveBeenCalled();
     expect(r.host.isOpen).toBe(false);
-    expect(r.status.show).toHaveBeenCalledWith("展開をキャンセルしました");
+    expect(r.status.show).toHaveBeenCalledWith("ZIPの展開をキャンセルしました");
   });
 
   it("R-395-1 end to end: a pre-validation error keeps the form open with the error shown; a second submit succeeds", async () => {

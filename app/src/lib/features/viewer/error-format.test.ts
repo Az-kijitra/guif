@@ -92,3 +92,18 @@ describe("formatViewerError: invalid_path (R-447, SPEC-0200-0001 §3.12.6)", () 
     expect(formatViewerError(INVALID_PATH)).not.toBe(formatViewerError("unknown"));
   });
 });
+
+// SPEC-0300-0019 W-25 / W-55 / R-1221: the viewer wording (stage B; RED until stage C).
+describe("formatViewerError: SPEC-0300-0019 wording (W-25 / W-55)", () => {
+  it("W-25: not_a_file says `フォルダーは表示できません。`", () => {
+    expect(formatViewerError("not_a_file")).toBe("フォルダーは表示できません。");
+  });
+
+  it("W-25: no viewer message uses the bare `フォルダ` (a `フォルダ` not followed by `ー`)", () => {
+    for (const code of ALL_CODES) expect(formatViewerError(code)).not.toMatch(/フォルダ(?!ー)/);
+  });
+
+  it("W-55: unsupported_kind keeps `このファイルはビューアで表示できません。` (the +page.svelte body uses this one entry)", () => {
+    expect(formatViewerError("unsupported_kind")).toBe("このファイルはビューアで表示できません。");
+  });
+});

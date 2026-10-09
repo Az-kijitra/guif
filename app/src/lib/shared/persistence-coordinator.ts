@@ -14,6 +14,8 @@
 // `shared/state/status-message.svelte.ts` directly. (2) plain `.ts`, no
 // Svelte runes.
 
+import { SHARED_NOTICES } from "$lib/shared/messages";
+
 export interface PersistenceParticipant<T> {
   getSnapshot(): Partial<T>;
   hydrate(data: T): void;
@@ -101,7 +103,7 @@ export function createPersistenceCoordinator<T extends object>(deps: Persistence
       result = await deps.load();
     } catch {
       // never enable saving after a failed load.
-      return "Failed to load data. Changes will not be saved this session.";
+      return SHARED_NOTICES.loadFailed;
     }
     baseline = result.data;
     for (const p of participants) p.hydrate(result.data);

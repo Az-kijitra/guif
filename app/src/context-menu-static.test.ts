@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { REGION_NAMES } from "$lib/shared/messages";
+
 // [静的] Spec: SPEC-0300-0018 R-1012 / R-1013 (one global guard, also in the
 //   viewer window), R-1071 / R-1074 (colours via CSS variables, no border
 //   radius), R-1110 + AC-1026 (no extra items / strings), R-1130 (pure
@@ -196,9 +198,18 @@ describe("Svelte files: size and colours (§3.9.11, R-1071, R-1074)", () => {
     const f = join(CM, "ContextMenu.svelte");
     expect(existsSync(f)).toBe(true);
     const code = read(f);
-    for (const needle of ['role="menu"', 'role="menuitem"', 'role="separator"', "aria-disabled", "aria-describedby", "aria-activedescendant", 'aria-label="右クリックメニュー"', 'lang="ja"']) {
+    for (const needle of ['role="menu"', 'role="menuitem"', 'role="separator"', "aria-disabled", "aria-describedby", "aria-activedescendant", 'lang="ja"']) {
       expect(code, needle).toContain(needle);
     }
+  });
+
+  // SPEC-0200-0001 §3.13.14 MUST-128 (b): the accessible name comes from the shared wording module, not a literal in
+  // the .svelte (SPEC-0300-0019 R-1201 / AC-1212). The value is pinned here and in shared/messages.test.ts.
+  it("the menu's aria-label is `aria-label={REGION_NAMES.contextMenu}` and its value is 右クリックメニュー (R-1111, MUST-128 (b))", () => {
+    const code = read(join(CM, "ContextMenu.svelte"));
+    expect(code).toMatch(/aria-label=\{\s*REGION_NAMES\.contextMenu\s*\}/);
+    expect(code).not.toContain('aria-label="右クリックメニュー"');
+    expect(REGION_NAMES.contextMenu).toBe("右クリックメニュー");
   });
 });
 

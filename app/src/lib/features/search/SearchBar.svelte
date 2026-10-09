@@ -14,6 +14,8 @@
   // (query/regexMode/error are all props owned by features/search/
   // search-state.svelte.ts and routes' `$derived` filter result, §3.1.2).
 
+  import { SEARCH_MESSAGES } from "./messages";
+
   interface Props {
     query: string;
     regexMode: boolean;
@@ -54,7 +56,7 @@
     bind:this={inputEl}
     type="text"
     class="search-input"
-    aria-label="Search"
+    aria-label={SEARCH_MESSAGES.inputLabel}
     value={query}
     oninput={(event) => onQueryInput((event.currentTarget as HTMLInputElement).value)}
     onfocus={onInputFocus}
@@ -64,12 +66,13 @@
     type="button"
     class="regex-toggle"
     aria-pressed={regexMode}
+    aria-label={SEARCH_MESSAGES.regexToggleLabel}
     onclick={() => onRegexModeChange(!regexMode)}
   >
     .*
   </button>
-  <button type="submit" class="apply-button">Apply</button>
-  <button type="button" class="clear-button" onclick={onCancel}>Clear</button>
+  <button type="submit" class="apply-button">{SEARCH_MESSAGES.apply}</button>
+  <button type="button" class="clear-button" onclick={onCancel}>{SEARCH_MESSAGES.clear}</button>
   {#if error}
     <span role="alert" class="search-error">{error}</span>
   {/if}

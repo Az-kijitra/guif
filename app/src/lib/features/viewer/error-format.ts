@@ -3,6 +3,8 @@
 // `ViewerErrorCode` enum is not shared across the IPC boundary -- only the
 // wire strings are kept consistent (SPEC-0300-0011 第6版 R-85, ISS-0128).
 
+import { VIEWER_ERROR_MESSAGES, VIEWER_FALLBACK } from "./messages";
+
 export type ViewerDisplayErrorCode =
   | "not_found"
   | "not_a_file"
@@ -15,20 +17,10 @@ export type ViewerDisplayErrorCode =
   | "invalid_path" // R-89-2 / R-447: a path argument that is not absolute (same wording as shared/error-text.ts)
   | "unknown";
 
-const MESSAGES: Record<ViewerDisplayErrorCode, string> = {
-  not_found: "ファイルが見つかりません。",
-  not_a_file: "フォルダは表示できません。",
-  permission_denied: "アクセス権がないため開けません。",
-  viewer_path_not_allowed: "このファイルは読み込めません。",
-  viewer_image_too_large: "画像が大きすぎるため表示できません(上限 50 MiB)。",
-  image_decode_failed: "画像を表示できません。",
-  unsupported_kind: "このファイルはビューアで表示できません。",
-  io_error: "読み込み中にエラーが発生しました。",
-  invalid_path: "パスが正しくありません。",
-  unknown: "不明なエラーが発生しました。",
-};
+// SPEC-0200-0001 §3.13 (P7): the table itself lives in `./messages`.
+const MESSAGES: Record<ViewerDisplayErrorCode, string> = VIEWER_ERROR_MESSAGES;
 
-const FALLBACK = "エラーが発生しました。";
+const FALLBACK = VIEWER_FALLBACK;
 
 // R-447: never leaks the internal `code=<code>; <message>` representation
 // (or the raw code string itself) into the display text; an unrecognized

@@ -12,7 +12,7 @@ import { isZipFileName } from "$lib/features/archive/target-rules";
 //   list), R-1042 (no re-evaluation while shown), R-1050~R-1056, R-1056-1 +
 //   guardian 20th audit MUST-117 (before executing ANY row-menu item -- incl.
 //   open / os_open / copy_path -- the selection is restored to the menu's
-//   targets; only the blank menu's 新規作成... / ペースト are exempt), R-1053
+//   targets; only the blank menu's 新規作成… / 貼り付け are exempt), R-1053
 //   (delete never passes Shift), R-1055 (close + focus the list BEFORE the
 //   action), R-1060-3/4 (copy path status, app clipboard untouched), R-1080~
 //   R-1084 (keys), R-1086, R-1087 (+G-4 shield), R-1088 (+G-5), R-1101,
@@ -253,7 +253,7 @@ describe("opening: row menu (R-1000, R-1020, R-1022, R-1024, AC-1000)", () => {
     expect(h.clipboardPort.get).not.toHaveBeenCalled();
   });
 
-  it("AC-1024-1: hasItems() true => ペースト is enabled; false => disabled with the existing reason", async () => {
+  it("AC-1024-1: hasItems() true => 貼り付け is enabled; false => disabled with the existing reason", async () => {
     const h = setup();
     h.clipboardPort.hasItems.mockResolvedValue(true);
     await h.openRow(A);
@@ -274,7 +274,7 @@ describe("opening: row menu (R-1000, R-1020, R-1022, R-1024, AC-1000)", () => {
     expect((h.wiring.state.snapshot as MenuSnapshot).clipboardHasItems).toBe(false);
   });
 
-  it("the ZIP judgment is injected: c.zip alone enables ZIPを解凍", async () => {
+  it("the ZIP judgment is injected: c.zip alone enables ZIPを展開", async () => {
     const h = setup();
     await h.openRow(Z);
     const snap = h.wiring.state.snapshot as MenuSnapshot;
@@ -293,7 +293,7 @@ describe("opening: blank menu (R-1021, R-1031, AC-1002)", () => {
     const snap = h.wiring.state.snapshot as MenuSnapshot;
     expect(snap.kind).toBe("blank");
     expect(snap.targets).toEqual([]);
-    expect(snap.entries.map((e) => (e.type === "separator" ? "---" : e.label))).toEqual(["新規作成...", "---", "ペースト"]);
+    expect(snap.entries.map((e) => (e.type === "separator" ? "---" : e.label))).toEqual(["新規作成…", "---", "貼り付け"]);
   });
 });
 
@@ -670,7 +670,7 @@ describe("R-1056-1 / MUST-117 / AC-1042: the selection is restored to the menu's
     expect(o.deps.status.show).not.toHaveBeenCalled();
   });
 
-  it("the blank menu's 新規作成... / ペースト are EXEMPT: no restore", async () => {
+  it("the blank menu's 新規作成… / 貼り付け are EXEMPT: no restore", async () => {
     const h = setup({ selected: [A.path] });
     await h.openBlank();
     h.log.length = 0;
@@ -814,7 +814,7 @@ describe("keys while open (R-1080~R-1084, AC-1070, AC-1071, AC-1073)", () => {
     expect(h.wiring.state.isOpen).toBe(true);
   });
 
-  it("blank menu: Enter without a highlight runs the first item 新規作成... (R-1082)", async () => {
+  it("blank menu: Enter without a highlight runs the first item 新規作成… (R-1082)", async () => {
     const h = setup();
     await h.openBlank();
     h.wiring.handleKey(k("Enter"));

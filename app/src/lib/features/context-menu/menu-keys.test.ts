@@ -101,7 +101,7 @@ describe("moveMenuHighlight (R-1081, AC-1070)", () => {
     expect(moveMenuHighlight(TWO_SELECTED, null, "down")).toBe("copy");
   });
 
-  it("Up from no highlight -> the LAST enabled item (ZIPに圧縮; disabled ZIPを解凍 is skipped)", () => {
+  it("Up from no highlight -> the LAST enabled item (ZIPに圧縮; disabled ZIPを展開 is skipped)", () => {
     expect(moveMenuHighlight(TWO_SELECTED, null, "up")).toBe("zip_create");
   });
 
@@ -141,11 +141,11 @@ describe("moveMenuHighlight (R-1081, AC-1070)", () => {
     expect(moveMenuHighlight(one, "delete", "up")).toBe("delete");
   });
 
-  it("blank menu: 新規作成... / ペースト (separator between) cycle", () => {
+  it("blank menu: 新規作成… / 貼り付け (separator between) cycle", () => {
     const blank: MenuEntry[] = [
-      { type: "item", id: "new_file", label: "新規作成...", enabled: true },
+      { type: "item", id: "new_file", label: "新規作成…", enabled: true },
       { type: "separator" },
-      { type: "item", id: "paste", label: "ペースト", enabled: true },
+      { type: "item", id: "paste", label: "貼り付け", enabled: true },
     ];
     expect(moveMenuHighlight(blank, "new_file", "down")).toBe("paste");
     expect(moveMenuHighlight(blank, "paste", "down")).toBe("new_file");

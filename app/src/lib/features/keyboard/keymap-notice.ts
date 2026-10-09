@@ -3,9 +3,14 @@
 // features/keyboard/, not in routes/startup-wiring.ts, which only
 // concatenates the three startup notices, §4.1 SHOULD-19).
 
+import { KEYMAP_MESSAGES } from "./messages";
+
 export interface KeymapParseErrorLike {
   message: string;
   line: number | null;
+  // SPEC-0200-0001 §3.13.7: false only for the one route where `input_keymap_custom` is not a table (W-30-2).
+  // undefined / true: the whole file was unreadable.
+  wholeFile?: boolean;
 }
 
 // R-45-2 (syntax error) takes precedence over R-45-5 (per-element issues) --
@@ -19,14 +24,15 @@ export function buildKeymapLoadNotice(
   opts?: { alsoDefaultsTheme?: boolean },
 ): string | null {
   if (parseError !== null) {
-    const at = parseError.line !== null ? ` (line ${parseError.line})` : "";
+    // W-30-2: the type error carries its own full sentence (no detail, the theme is not touched).
+    if (parseError.wholeFile === false) return KEYMAP_MESSAGES.customKeymapUnreadable;
     const defaults = opts?.alsoDefaultsTheme
-      ? "Using the default keymap and the default theme (following the OS)."
-      : "Using the default keymap.";
-    return `config.toml could not be read${at}: ${parseError.message}. ${defaults}`;
+      ? KEYMAP_MESSAGES.closingKeymapAndTheme
+      : KEYMAP_MESSAGES.closingKeymapOnly;
+    return KEYMAP_MESSAGES.readFailed(KEYMAP_MESSAGES.readTarget(parseError.line), defaults, parseError.message);
   }
   if (invalidActions.length > 0) {
-    return `Ignored ${invalidActions.length} invalid keymap override(s) in config.toml: ${invalidActions.join(", ")}.`;
+    return KEYMAP_MESSAGES.invalidOverrides(invalidActions.length, invalidActions);
   }
   return null;
 }

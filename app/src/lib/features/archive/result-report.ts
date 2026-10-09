@@ -4,6 +4,7 @@
 // success are statuses.
 
 import { formatArchiveError, type ArchiveErrorLike } from "./error-format";
+import { ARCHIVE_MESSAGES } from "./messages";
 import { basename } from "./path-util";
 
 export interface ArchiveReport {
@@ -27,15 +28,15 @@ export interface ExtractResultLike {
   error?: ArchiveErrorLike;
 }
 
-const CREATE_CANCELED = "ZIPの作成をキャンセルしました";
-const EXTRACT_CANCELED = "展開をキャンセルしました";
+const CREATE_CANCELED = ARCHIVE_MESSAGES.createCanceled;
+const EXTRACT_CANCELED = ARCHIVE_MESSAGES.extractCanceled;
 
 // R-396 / R-327-8: the output name (+ the number of skipped links).
 export function buildCreateSuccessReport(result: CreateResultLike): ArchiveReport {
-  const skipped = result.skippedLinks > 0 ? `(リンク${result.skippedLinks}件をスキップ)` : "";
+  const skipped = result.skippedLinks > 0 ? ARCHIVE_MESSAGES.skippedLinks(result.skippedLinks) : "";
   return {
     kind: "success",
-    status: `${basename(result.outputPath)} を作成しました${skipped}`,
+    status: ARCHIVE_MESSAGES.createSuccess(basename(result.outputPath), skipped),
     dialog: null,
   };
 }
@@ -45,7 +46,7 @@ export function buildCreateErrorReport(err: ArchiveErrorLike): ArchiveReport {
   return {
     kind: "failed",
     status: null,
-    dialog: { title: "ZIPを作成できませんでした", lines: [formatArchiveError(err)] },
+    dialog: { title: ARCHIVE_MESSAGES.createFailedTitle, lines: [formatArchiveError(err)] },
   };
 }
 
@@ -55,7 +56,7 @@ export function buildExtractErrorReport(err: ArchiveErrorLike): ArchiveReport {
   return {
     kind: "failed",
     status: null,
-    dialog: { title: "展開できませんでした", lines: [formatArchiveError(err)] },
+    dialog: { title: ARCHIVE_MESSAGES.extractFailedTitle, lines: [formatArchiveError(err)] },
   };
 }
 
@@ -63,8 +64,8 @@ export function buildExtractResultReport(result: ExtractResultLike): ArchiveRepo
   const { extracted, skipped, total, destination } = result;
 
   if (result.outcome === "completed") {
-    const skip = skipped > 0 ? `(${skipped}件をスキップ)` : "";
-    return { kind: "success", status: `${destination} に${extracted}件を展開しました${skip}`, dialog: null };
+    const skip = skipped > 0 ? ARCHIVE_MESSAGES.skippedFiles(skipped) : "";
+    return { kind: "success", status: ARCHIVE_MESSAGES.extractSuccess(destination, extracted, skip), dialog: null };
   }
 
   if (result.outcome === "canceled") {
@@ -72,7 +73,7 @@ export function buildExtractResultReport(result: ExtractResultLike): ArchiveRepo
     if (extracted === 0) return { kind: "canceled", status: EXTRACT_CANCELED, dialog: null };
     return {
       kind: "canceled",
-      status: `展開を途中までキャンセルしました(${extracted}/${total}件を ${destination} に展開済み)`,
+      status: ARCHIVE_MESSAGES.extractPartiallyCanceled(extracted, total, destination),
       dialog: null,
     };
   }
@@ -83,21 +84,21 @@ export function buildExtractResultReport(result: ExtractResultLike): ArchiveRepo
     return {
       kind: "failed",
       status: null,
-      dialog: { title: "展開に失敗しました", lines: [formatArchiveError(error)] },
+      dialog: { title: ARCHIVE_MESSAGES.extractFailedTitle, lines: [formatArchiveError(error)] },
     };
   }
   return {
     kind: "failed",
     status: null,
     dialog: {
-      title: "展開に失敗しました",
+      title: ARCHIVE_MESSAGES.extractFailedTitle,
       lines: [
-        `途中まで展開しました(${extracted}/${total}件)。`,
-        `展開先: ${destination}`,
+        ARCHIVE_MESSAGES.extractPartialLine(extracted, total),
+        ARCHIVE_MESSAGES.extractDestinationLine(destination),
         formatArchiveError(error),
       ],
       // R-350: not a rollback.
-      note: "展開済みのファイルは残っています。",
+      note: ARCHIVE_MESSAGES.extractedFilesRemain,
     },
   };
 }

@@ -49,7 +49,7 @@ export const RGB = {
 export const FRAME_FOCUS = { width: "1px", style: "solid", color: RGB.focused, offset: "-1px" };
 export const NO_OUTLINE_STYLE = "none";
 
-const SORT_LABELS = { name: "Name", size: "Size", type: "Type", modified: "Modified" };
+const SORT_LABELS = { name: "名前", size: "サイズ", type: "種類", modified: "更新日時" };
 const SORT_STATUS_KEYS = { 名前: "name", サイズ: "size", 種類: "type", 更新日時: "modified" };
 
 /** Current sort as shown by the status bar item `並び替え: {キー} {↑|↓}`. */
@@ -143,7 +143,7 @@ const VIEWER_KIND_SELECTOR = {
 
 /**
  * Waits until the viewer shows `fileName` AND its body is really rendered (kind: text | error | markdown | image).
- * Guards against the one-off "No file selected" that never filled in (seen once by the orchestrator, not
+ * Guards against the one-off "ファイルが選択されていません" that never filled in (seen once by the orchestrator, not
  * reproduced): when the body is still the placeholder after the timeout a failed check says REPRODUCED.
  */
 export async function waitViewerShows(t, viewer, fileName, kind, { timeout = 20000, contains } = {}) {
@@ -165,9 +165,9 @@ export async function waitViewerShows(t, viewer, fileName, kind, { timeout = 200
     if (Date.now() > deadline) break;
     await sleep(200);
   }
-  const stuck = last.placeholder === "No file selected";
+  const stuck = last.placeholder === "ファイルが選択されていません";
   t.fail(
-    `${stuck ? "REPRODUCED: the viewer stayed on \"No file selected\" and never showed the content. " : ""}` +
+    `${stuck ? "REPRODUCED: the viewer stayed on \"ファイルが選択されていません\" and never showed the content. " : ""}` +
       `expected ${kind} view of ${fileName}, got name=${JSON.stringify(last.name)} placeholder=${JSON.stringify(last.placeholder)} shown=${last.shown} position=${JSON.stringify(last.pos)}${contains === undefined ? "" : ` (wanted text ${JSON.stringify(contains)}, body starts ${JSON.stringify(last.text.slice(0, 40))})`}`,
   );
   return false;

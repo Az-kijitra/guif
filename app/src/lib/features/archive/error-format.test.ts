@@ -97,6 +97,33 @@ describe("translateArchiveErrorCode (R-394, R-395, AC-381)", () => {
   });
 });
 
+// SPEC-0300-0019 W-25 (フォルダ -> フォルダー) and AC-1211 / R-1204 1 (Japanese body, English detail).
+describe("SPEC-0300-0019 W-25 / AC-1211: ZIP error wording", () => {
+  it("W-25: destination_not_found uses `フォルダー`", () => {
+    expect(translateArchiveErrorCode("destination_not_found")).toBe("出力先のフォルダーが見つかりません。");
+  });
+
+  it("W-25: destination_not_dir uses `フォルダー`", () => {
+    expect(translateArchiveErrorCode("destination_not_dir")).toBe("展開先がフォルダーではありません。");
+  });
+
+  it("W-25: no translation uses the bare `フォルダ` (a `フォルダ` not followed by `ー`)", () => {
+    for (const c of ALL_CODES) {
+      expect(`${translateArchiveErrorCode(c)}`).not.toMatch(/フォルダ(?!ー)/);
+    }
+  });
+
+  it("AC-1211 / R-1204 1 / T-06: a known code is `{日本語の翻訳} 詳細: {message}` with the message left in English", () => {
+    expect(formatArchiveError({ code: "zip_corrupt", message: "invalid Zip archive: Could not find EOCD" })).toBe(
+      "ZIPファイルが壊れているか、読み取れません。 詳細: invalid Zip archive: Could not find EOCD",
+    );
+  });
+
+  it("AC-1211 / R-1204 2: an unknown code shows the original message as it is", () => {
+    expect(formatArchiveError({ code: "brand_new_code", message: "Some OS error" })).toBe("Some OS error");
+  });
+});
+
 describe("formatArchiveError (R-394, R-395-4, AC-382)", () => {
   it("a known code shows the translation AND keeps the original library message as a detail (R-395-4)", () => {
     const text = formatArchiveError({ code: "zip_corrupt", message: "invalid Zip archive: Could not find EOCD" });

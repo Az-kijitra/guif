@@ -77,7 +77,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "config"];
+const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "wording", "config"];
 
 async function loadTests() {
   const all = [];

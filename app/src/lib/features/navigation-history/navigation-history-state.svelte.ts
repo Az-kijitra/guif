@@ -4,6 +4,7 @@
 // navigationPersistence.requestSave() itself (R-243); hydrate() does not.
 
 import { navigationPersistence } from "$lib/shared/state/navigation-persistence.svelte";
+import { COMMON } from "$lib/shared/messages";
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import {
   addJumpEntry,
@@ -18,7 +19,7 @@ import {
 
 export type NavigationHistoryMode = "history" | "jump";
 
-const NO_ITEMS_MESSAGE = "No items"; // R-218
+const NO_ITEMS_MESSAGE = COMMON.noItems; // R-218
 
 export function createNavigationHistoryState() {
   let visitHistory = $state<string[]>([]);

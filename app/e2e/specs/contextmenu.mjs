@@ -143,7 +143,7 @@ export const tests = [
       t.eq(await selectedNames(ctx), ["a.txt"], "selection");
       t.eq(await focusedName(ctx), "a.txt", "focus row");
       const items = await menuItems(ctx);
-      t.eq(items.map((i) => (i.sep ? "---" : i.label)), ["新規作成...", "---", "ペースト"], "items");
+      t.eq(items.map((i) => (i.sep ? "---" : i.label)), ["新規作成…", "---", "貼り付け"], "items");
     },
   },
   {
@@ -254,7 +254,7 @@ export const tests = [
       const items = await menuItems(ctx);
       t.eq(
         items.map((i) => (i.sep ? "---" : i.label)),
-        ["開く", "OSの関連付けで開く", "---", "コピー", "カット", "ペースト", "パスのコピー", "---", "削除", "名前の変更", "---", "ZIPに圧縮", "ZIPを解凍"],
+        ["開く", "OSの関連付けで開く", "---", "コピー", "切り取り", "貼り付け", "パスのコピー", "---", "削除", "名前の変更", "---", "ZIPに圧縮", "ZIPを展開"],
         "item order",
       );
       t.ok(items.every((i) => i.sep || !/Ctrl|Shift|Alt|F\d/.test(i.label)), "no shortcut text");
@@ -278,12 +278,12 @@ export const tests = [
   },
   {
     id: "AC-1023",
-    title: "folder d: OS open disabled (フォルダには使えません), unzip disabled (ZIPファイルではありません), open enabled",
+    title: "folder d: OS open disabled (フォルダーには使えません), unzip disabled (ZIPファイルではありません), open enabled",
     async run(t, ctx) {
       await prep(ctx);
       await openRowMenu(ctx, "d");
       const items = Object.fromEntries((await menuItems(ctx)).filter((i) => !i.sep).map((i) => [i.id, i]));
-      t.eq([items.os_open.disabled, items.os_open.reason], [true, "フォルダには使えません"], "os_open");
+      t.eq([items.os_open.disabled, items.os_open.reason], [true, "フォルダーには使えません"], "os_open");
       t.eq([items.zip_extract.disabled, items.zip_extract.reason], [true, "ZIPファイルではありません"], "zip_extract");
       t.eq(items.open.disabled, false, "open enabled");
     },
@@ -362,7 +362,7 @@ export const tests = [
   },
   {
     id: "AC-1037",
-    title: "blank menu 新規作成...: the new-entry dialog opens with kind = file",
+    title: "blank menu 新規作成…: the new-entry dialog opens with kind = file",
     async run(t, ctx) {
       await prep(ctx);
       await openBlankMenu(ctx);
@@ -376,7 +376,7 @@ export const tests = [
   },
   {
     id: "AC-1038",
-    title: "ZIPに圧縮 (2 rows) and ZIPを解凍 (c.zip) open their dialogs",
+    title: "ZIPに圧縮 (2 rows) and ZIPを展開 (c.zip) open their dialogs",
     async run(t, ctx) {
       await prep(ctx);
       await selectRows(ctx, ["a.txt", "b.txt"]);
@@ -522,7 +522,7 @@ export const tests = [
       await ctx.press.up();
       t.eq(await active(), "ctx-item-zip_create", "Up wraps to the last");
       await ctx.press.up();
-      t.eq(await active(), "ctx-item-delete", "Up skips the disabled items 名前の変更 / ZIPを解凍");
+      t.eq(await active(), "ctx-item-delete", "Up skips the disabled items 名前の変更 / ZIPを展開");
     },
   },
   {
@@ -639,7 +639,7 @@ export const tests = [
       const cut = await ctx.m.center("#ctx-item-cut");
       await ctx.hover(cut.x, cut.y);
       await ctx.settle(100);
-      t.eq(await active(), "ctx-item-cut", "hover highlights カット");
+      t.eq(await active(), "ctx-item-cut", "hover highlights 切り取り");
       await ctx.press.down();
       t.eq(await active(), "ctx-item-paste", "ArrowDown continues from the hovered item");
       await clickItem(ctx, "rename"); // disabled (2 targets)

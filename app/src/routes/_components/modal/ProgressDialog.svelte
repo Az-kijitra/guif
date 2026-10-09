@@ -3,6 +3,7 @@
   // button uses aria-disabled (not disabled) so focus never falls to <body>
   // (SHOULD-79); the state module ignores repeated cancels (R-43).
   import type { ProgressSpec } from "$lib/shared/state/modal-host.svelte";
+  import { ROUTE_MESSAGES } from "../../messages";
 
   interface Props {
     spec: ProgressSpec;
@@ -32,7 +33,7 @@
   </div>
   <div class="buttons">
     <button type="button" data-modal-initial aria-disabled={!canCancel} onclick={onCancel}>
-      {canCancel ? spec.cancelLabel : "キャンセル中…"}
+      {canCancel ? spec.cancelLabel : ROUTE_MESSAGES.cancelling}
     </button>
   </div>
 </div>

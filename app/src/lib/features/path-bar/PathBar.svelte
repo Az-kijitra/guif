@@ -6,6 +6,8 @@
   // the single global listener (features/keyboard/key-dispatch.ts, R-14-4,
   // R-760). Focus/blur/input events are forwarded to routes/path-bar-wiring.ts
   // (decision logic: R-704/R-704-1 live there, SPEC-0200-0001 §3.7.10.4).
+  import { PATH_BAR_MESSAGES } from "./messages";
+
   interface Props {
     text: string;
     inputEl?: HTMLInputElement;
@@ -24,7 +26,7 @@
     bind:this={inputEl}
     type="text"
     class="path-bar"
-    aria-label="Current directory"
+    aria-label={PATH_BAR_MESSAGES.inputLabel}
     spellcheck="false"
     autocomplete="off"
     value={text}

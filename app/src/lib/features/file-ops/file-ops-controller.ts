@@ -13,10 +13,12 @@ import type { FileOpsConflict, FileOpsItemResolutions, FileOpsSummary } from "$l
 import type { ClipboardPort } from "./clipboard-port";
 import { resolvePasteMode } from "./clipboard-mode";
 import { appendPasteNotice, formatCopyCutStatus } from "./clipboard-messages";
+import { FILE_OPS_MESSAGES } from "./messages";
 import { createConflictDialogState, runConflictSessionAsync, type ConflictChoice } from "./conflict-flow";
 import { initialCreateState } from "./create-flow";
 import { buildDeleteConfirmContent, resolveDeleteMode, type DeleteMode } from "./delete-flow";
 import { translateErrorCode } from "./error-format";
+import { COMMON, SHARED_SENTENCES } from "$lib/shared/messages";
 import { isNameBlank } from "./name-validation";
 import {
   applyProgressEvent,
@@ -77,9 +79,9 @@ export interface FileOpsDeps {
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
-const BUSY_MESSAGE = "別のファイル操作を実行中です";
-const NO_SELECTION_MESSAGE = "選択がありません";
-const BLANK_NAME_MESSAGE = "名前を入力してください";
+const BUSY_MESSAGE = FILE_OPS_MESSAGES.busy;
+const NO_SELECTION_MESSAGE = SHARED_SENTENCES.noSelection;
+const BLANK_NAME_MESSAGE = FILE_OPS_MESSAGES.blankName;
 const CODE_FORMAT = /^code=([^;]+);\s*([\s\S]*)$/;
 
 // R-84: translate a rejected IPC value ("code=<code>; <message>" or a bare
@@ -118,20 +120,20 @@ export function createFileOpsController(deps: FileOpsDeps) {
   async function askConflict(conflict: FileOpsConflict, total: number) {
     const state = createConflictDialogState(conflict.name);
     const result = await modal.confirm({
-      title: "同じ名前の項目があります",
+      title: FILE_OPS_MESSAGES.conflictTitle,
       lines: [
-        `「${state.name}」はすでに存在します。`,
-        "上書きすると、フォルダはマージ(同名ファイルは置換)されます。",
-        ...(total > 1 ? [`(競合: 全${total}件)`] : []),
+        FILE_OPS_MESSAGES.conflictExists(state.name),
+        FILE_OPS_MESSAGES.conflictFolderMerge,
+        ...(total > 1 ? [FILE_OPS_MESSAGES.conflictCount(total)] : []),
       ],
       buttons: [
-        { id: "overwrite", label: "上書き" },
-        { id: "skip", label: "スキップ" },
-        { id: "cancel", label: "キャンセル" },
+        { id: "overwrite", label: COMMON.overwrite },
+        { id: "skip", label: COMMON.skip },
+        { id: "cancel", label: COMMON.cancel },
       ],
       defaultButtonId: state.defaultFocus,
       cancelButtonId: "cancel",
-      checkbox: { label: "すべてに適用", checked: state.applyToAll },
+      checkbox: { label: COMMON.applyToAll, checked: state.applyToAll },
     });
     return { choice: result.buttonId as ConflictChoice, applyToAll: result.checked };
   }
@@ -141,7 +143,7 @@ export function createFileOpsController(deps: FileOpsDeps) {
       title: dialog.title,
       lines: dialog.lines,
       ...(dialog.note !== undefined ? { note: dialog.note } : {}),
-      buttons: [{ id: "close", label: "閉じる" }],
+      buttons: [{ id: "close", label: COMMON.close }],
       defaultButtonId: "close",
       cancelButtonId: "close",
     });
@@ -150,7 +152,7 @@ export function createFileOpsController(deps: FileOpsDeps) {
   async function paste(): Promise<void> {
     const clip = await clipboard.get();
     if (clip === null || clip.paths.length === 0) {
-      status.show("貼り付ける項目がありません");
+      status.show(FILE_OPS_MESSAGES.noPasteItems);
       return;
     }
     const mode = resolvePasteMode({ origin: clip.origin, paths: clip.paths });
@@ -176,7 +178,7 @@ export function createFileOpsController(deps: FileOpsDeps) {
     }
 
     const operationId = ipc.newOperationId();
-    const prefix = mode === "move" ? "移動中" : "コピー中";
+    const prefix = mode === "move" ? FILE_OPS_MESSAGES.progressMovePrefix : FILE_OPS_MESSAGES.progressCopyPrefix;
     let unlisten: (() => void) | undefined;
     let handle: ProgressHandle | undefined;
     let summary: FileOpsSummary;
@@ -194,8 +196,8 @@ export function createFileOpsController(deps: FileOpsDeps) {
         });
       });
       handle = modal.showProgress({
-        title: mode === "move" ? "移動" : "コピー",
-        cancelLabel: "キャンセル",
+        title: mode === "move" ? FILE_OPS_MESSAGES.progressMoveTitle : FILE_OPS_MESSAGES.progressCopyTitle,
+        cancelLabel: COMMON.cancel,
         onCancel: () => {
           void Promise.resolve(ipc.cancel(operationId)).catch(() => {});
         },
@@ -223,18 +225,28 @@ export function createFileOpsController(deps: FileOpsDeps) {
   // --- delete (R-11, R-53~R-56-4, R-45, R-82) ------------------------------
   function buildDeleteConfirm(names: string[], mode: DeleteMode): ConfirmSpec {
     const content = buildDeleteConfirmContent(names, mode);
-    const head = content.count === 1 ? `「${names[0]}」` : `${content.count}件の項目`;
+    const head =
+      content.count === 1 ? FILE_OPS_MESSAGES.deleteHeadSingle(names[0]) : FILE_OPS_MESSAGES.deleteHeadMany(content.count);
     const lines =
       mode === "permanent"
-        ? [`${head}を完全に削除します。`, ...(content.count > 1 ? content.shownNames : []), ...(content.truncated ? ["…"] : []), "この操作は取り消せません。"]
-        : [`${head}をごみ箱に移動します。`, ...(content.count > 1 ? content.shownNames : []), ...(content.truncated ? ["…"] : [])];
+        ? [
+            FILE_OPS_MESSAGES.deletePermanentLine(head),
+            ...(content.count > 1 ? content.shownNames : []),
+            ...(content.truncated ? [FILE_OPS_MESSAGES.deleteMoreMark] : []),
+            FILE_OPS_MESSAGES.deleteIrreversible,
+          ]
+        : [
+            FILE_OPS_MESSAGES.deleteTrashLine(head),
+            ...(content.count > 1 ? content.shownNames : []),
+            ...(content.truncated ? [FILE_OPS_MESSAGES.deleteMoreMark] : []),
+          ];
     return {
-      title: mode === "permanent" ? "完全に削除" : "削除の確認",
+      title: mode === "permanent" ? FILE_OPS_MESSAGES.deletePermanentTitle : FILE_OPS_MESSAGES.deleteConfirmTitle,
       lines,
       tone: mode === "permanent" ? "danger" : "normal",
       buttons: [
-        { id: "delete", label: mode === "permanent" ? "完全に削除する" : "削除する" },
-        { id: "cancel", label: "キャンセル" },
+        { id: "delete", label: mode === "permanent" ? FILE_OPS_MESSAGES.deletePermanentButton : FILE_OPS_MESSAGES.deleteTrashButton },
+        { id: "cancel", label: COMMON.cancel },
       ],
       defaultButtonId: "cancel", // R-55
       cancelButtonId: "cancel",
@@ -271,25 +283,25 @@ export function createFileOpsController(deps: FileOpsDeps) {
     const target = resolveRenameTarget(ctx.selected, ctx.focusedPath);
     if (target === null) {
       // R-12: a multi-selection has no rename target.
-      status.show(ctx.selected.length > 1 ? "名前の変更は1件ずつ行えます" : NO_SELECTION_MESSAGE);
+      status.show(ctx.selected.length > 1 ? FILE_OPS_MESSAGES.renameOneAtATime : NO_SELECTION_MESSAGE);
       return;
     }
     const oldName = nameOf(ctx, target);
     const selection = computeRenameInitialSelection(oldName);
     const renamed: { newPath?: string } = {};
     const result = await modal.form({
-      title: "名前の変更",
+      title: FILE_OPS_MESSAGES.renameTitle,
       fields: [
         {
           id: "name",
-          label: "名前",
+          label: FILE_OPS_MESSAGES.renameNameLabel,
           type: "text",
           value: oldName,
           selection: [selection.selectionStart, selection.selectionEnd],
         },
       ],
-      submitLabel: "OK",
-      cancelLabel: "キャンセル",
+      submitLabel: FILE_OPS_MESSAGES.renameSubmit,
+      cancelLabel: COMMON.cancel,
       onSubmit: async (values) => {
         const name = values.name ?? "";
         if (isNameBlank(name)) return BLANK_NAME_MESSAGE; // R-62-1: only the blank check is frontend-side
@@ -311,22 +323,22 @@ export function createFileOpsController(deps: FileOpsDeps) {
     const initial = initialCreateState(action);
     const parent = deps.context().currentPath;
     const result = await modal.form({
-      title: "新規作成",
+      title: FILE_OPS_MESSAGES.createTitle,
       fields: [
         {
           id: "kind",
-          label: "種別",
+          label: FILE_OPS_MESSAGES.createKindLabel,
           type: "select",
           value: initial.kind,
           options: [
-            { value: "file", label: "ファイル" },
-            { value: "folder", label: "フォルダ" },
+            { value: "file", label: FILE_OPS_MESSAGES.createKindFile },
+            { value: "folder", label: FILE_OPS_MESSAGES.createKindFolder },
           ],
         },
-        { id: "name", label: "名前", type: "text", value: initial.name },
+        { id: "name", label: FILE_OPS_MESSAGES.createNameLabel, type: "text", value: initial.name },
       ],
-      submitLabel: "作成",
-      cancelLabel: "キャンセル",
+      submitLabel: FILE_OPS_MESSAGES.createSubmit,
+      cancelLabel: COMMON.cancel,
       onSubmit: async (values) => {
         const name = values.name ?? "";
         if (isNameBlank(name)) return BLANK_NAME_MESSAGE;

@@ -155,11 +155,14 @@ export function createViewerContentLoader(deps: ViewerLoaderDeps) {
     }
   }
 
-  // R-430: consumes the pending-open slot and loads its content.
-  async function loadFromPending(): Promise<ViewerLoadResult | null> {
+  // R-430: consumes the pending-open slot and loads its content. `onTaken` runs as soon as a file was handed
+  // over and BEFORE its content is read, so the page can show `読み込み中…` (R-512) instead of the
+  // "no file" placeholder (R-514) while the first file loads.
+  async function loadFromPending(opts: { onTaken?: () => void } = {}): Promise<ViewerLoadResult | null> {
     const token = sequencer.begin();
     const pending = await deps.takePending();
     if (pending === null) return null;
+    opts.onTaken?.();
     const content = await loadKind(pending.path, pending.kind);
     if (!sequencer.isCurrent(token)) {
       revokeIfImage(content); // R-520: a superseded image's blob URL must not leak.

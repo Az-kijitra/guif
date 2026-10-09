@@ -10,6 +10,8 @@
   // navigation-history-state.svelte.ts) and does not render the empty-list
   // notice (R-218 is delegated to shared/state/status-message, §3.2.9-2).
 
+  import { NAVIGATION_HISTORY_MESSAGES } from "./messages";
+
   interface Props {
     items: readonly string[];
     selectedIndex: number;
@@ -54,7 +56,7 @@
         type="button"
         class="remove"
         tabindex="-1"
-        aria-label={`Remove ${path}`}
+        aria-label={NAVIGATION_HISTORY_MESSAGES.removeItem(path)}
         onmousedown={(event) => event.preventDefault()}
         onclick={(event) => {
           event.stopPropagation();

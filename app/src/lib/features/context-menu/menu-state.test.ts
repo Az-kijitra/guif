@@ -51,7 +51,7 @@ describe("createContextMenuState", () => {
     expect(s.highlightedId).toBeNull();
   });
 
-  it("moveHighlight: Down from none -> 開く, Up from none -> last enabled (ZIPを解凍 is disabled for a.txt -> ZIPに圧縮)", () => {
+  it("moveHighlight: Down from none -> 開く, Up from none -> last enabled (ZIPを展開 is disabled for a.txt -> ZIPに圧縮)", () => {
     const s = createContextMenuState();
     s.open(snap([t("a.txt")]));
     s.moveHighlight("down");
@@ -62,7 +62,7 @@ describe("createContextMenuState", () => {
     expect(s.highlightedId).toBe("zip_create");
   });
 
-  it("AC-1077 flow: hover カット highlights it, then ArrowDown -> ペースト", () => {
+  it("AC-1077 flow: hover 切り取り highlights it, then ArrowDown -> 貼り付け", () => {
     const s = createContextMenuState();
     s.open(snap([t("a.txt"), t("b.txt")]));
     s.highlight("cut");
@@ -106,7 +106,7 @@ describe("createContextMenuState", () => {
     expect(s.highlightedId).toBeNull();
   });
 
-  it("blank menu: Down walks 新規作成... -> ペースト", () => {
+  it("blank menu: Down walks 新規作成… -> 貼り付け", () => {
     const s = createContextMenuState();
     s.open(snap([], true, "blank"));
     s.moveHighlight("down");

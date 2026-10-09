@@ -9,6 +9,9 @@
   import { renderMarkdown } from "$lib/features/viewer/markdown-render";
   import { resolveViewerKeyAction, shouldSuppressWebviewDefault } from "$lib/features/viewer/viewer-keys";
   import type { ViewerContent } from "$lib/features/viewer/viewer-controller";
+  import { formatViewerError } from "$lib/features/viewer/error-format";
+  import { COMMON } from "$lib/shared/messages";
+  import { ROUTE_MESSAGES } from "../messages";
   import { initializeViewer, listenPendingChanged, viewerContentLoader } from "./viewer-wiring";
   import "./viewer-theme.css";
 
@@ -26,6 +29,9 @@
 
   let bodyEl: HTMLDivElement | undefined = $state();
   let hasFile = $derived(fileName !== "");
+  // R-512 / R-514: true once a file was handed over, so the first load shows `読み込み中…` rather than the
+  // "no file" placeholder (fileName is only known when the content has arrived).
+  let fileTaken = $state(false);
 
   function contentKind(): "text" | "markdown" | "image" | "error" {
     if (content.status === "text") return "text";
@@ -52,7 +58,7 @@
   }
 
   async function loadPending(): Promise<void> {
-    applyLoadResult(await viewerContentLoader.loadFromPending());
+    applyLoadResult(await viewerContentLoader.loadFromPending({ onTaken: () => (fileTaken = true) }));
   }
 
   async function navigate(direction: "prev" | "next"): Promise<void> {
@@ -201,7 +207,7 @@
       <button onclick={() => zoomImage("200")}>200%</button>
       <span class="zoom">{Math.round(currentImageScale() * 100)}%</span>
     {/if}
-    <button onclick={closeViewer}>✕</button>
+    <button aria-label={COMMON.close} onclick={closeViewer}>✕</button>
   </header>
 
   {#if content.status === "text" || content.status === "markdown"}
@@ -211,14 +217,14 @@
   {/if}
 
   <div class="viewer-body" bind:this={bodyEl}>
-    {#if !hasFile && content.status === "loading"}
-      <p class="placeholder">No file selected</p>
+    {#if !hasFile && !fileTaken && content.status === "loading"}
+      <p class="placeholder">{ROUTE_MESSAGES.viewerNoFile}</p>
     {:else if content.status === "loading"}
-      <p class="placeholder">Loading…</p>
+      <p class="placeholder">{COMMON.loading}</p>
     {:else if content.status === "error"}
       <p class="placeholder error" role="alert">{content.message}</p>
     {:else if content.status === "unsupported"}
-      <p class="placeholder">このファイルはビューアで表示できません。</p>
+      <p class="placeholder">{formatViewerError("unsupported_kind")}</p>
     {:else if content.status === "text"}
       <pre class="text-view">{#each content.payload.content.split("\n") as line, i}<span class="line"><span class="lineno">{i + 1}</span>{line}</span>
 {/each}</pre>

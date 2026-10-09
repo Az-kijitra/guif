@@ -22,6 +22,7 @@ import {
   type NavigationData,
 } from "$lib/shared/ipc/config";
 import { createPersistenceCoordinator } from "$lib/shared/persistence-coordinator";
+import { SHARED_NOTICES } from "$lib/shared/messages";
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
 
 export type NavigationPersistenceParticipant = {
@@ -34,12 +35,12 @@ export function createNavigationPersistenceCoordinator() {
     load: async () => {
       const result = await configLoadNavigation();
       const notice = result.recoveredFromCorruption
-        ? "Navigation data was corrupted and has been reset. The original file was backed up." // R-242 item 3
+        ? SHARED_NOTICES.navigationCorrupted // R-242 item 3
         : null;
       return { data: result.data, notice };
     },
     save: configSaveNavigation,
-    onSaveError: () => statusMessage.show("Failed to save navigation data."),
+    onSaveError: () => statusMessage.show(SHARED_NOTICES.navigationSaveFailed),
   });
 }
 

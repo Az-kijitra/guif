@@ -4,6 +4,8 @@
 // `features/file-list/` directly (R-129/AC-128); the caller supplies the
 // entries array and reads back the filtered result.
 
+import { SEARCH_MESSAGES } from "./messages";
+
 export interface SearchMatchEntry {
   name: string;
   path: string;
@@ -21,7 +23,7 @@ export interface SearchMatchResult<T extends SearchMatchEntry> {
 }
 
 // R-113-4: 1-line "invalid regular expression" message (ja).
-const INVALID_REGEX_MESSAGE = "正規表現が不正です";
+const INVALID_REGEX_MESSAGE = SEARCH_MESSAGES.invalidRegex;
 
 // R-116: recomputed from 4 inputs (entries/active/query/regexMode). R-110/
 // R-133: synchronous, no debounce/throttle — the return value is a plain

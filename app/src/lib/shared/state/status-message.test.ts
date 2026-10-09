@@ -40,15 +40,15 @@ describe("initial state", () => {
 describe("show (R-218, R-242 item 3)", () => {
   it("sets the message text", () => {
     const s = createStatusMessageState();
-    s.show("No items");
-    expect(s.text).toBe("No items");
+    s.show("項目なし");
+    expect(s.text).toBe("項目なし");
   });
 
   it("defaults to auto-dismissing after 2500ms", () => {
     const s = createStatusMessageState();
-    s.show("No items");
+    s.show("項目なし");
     vi.advanceTimersByTime(2499);
-    expect(s.text).toBe("No items");
+    expect(s.text).toBe("項目なし");
     vi.advanceTimersByTime(1);
     expect(s.text).toBeNull();
   });
@@ -77,7 +77,7 @@ describe("show (R-218, R-242 item 3)", () => {
 describe("clear", () => {
   it("immediately nulls the message and cancels the pending auto-dismiss timer", () => {
     const s = createStatusMessageState();
-    s.show("No items");
+    s.show("項目なし");
     s.clear();
     expect(s.text).toBeNull();
     // Advancing time past the original dismiss deadline must not throw or

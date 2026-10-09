@@ -8,6 +8,7 @@
 
 import { pathComparisonKey } from "$lib/shared/path-key";
 import { computeTreeTopLevel, isAncestorPath, mergeDriveList, pathsEqual, resolveAncestorChain } from "./tree";
+import { FILE_LIST_NOTICES } from "./messages";
 
 export interface TreeStateEntry {
   path: string;
@@ -165,7 +166,7 @@ export function createTreeState(deps: TreeStateDeps) {
   function notifyIfNeeded(result: { success: false; code: string; stale: boolean }): void {
     if (result.stale) return;
     if (result.code === "access_denied" || result.code === "not_found") return; // R-40-3: silent
-    deps.onLoadFailureNotice("Some folders could not be listed.");
+    deps.onLoadFailureNotice(FILE_LIST_NOTICES.someFoldersNotListed);
   }
 
   // R-40/R-40-1/R-40-5/R-40-7/AC-600~AC-608: build/extend the tree toward

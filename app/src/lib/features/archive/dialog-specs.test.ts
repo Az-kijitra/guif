@@ -16,13 +16,13 @@ import { describe, expect, it, vi } from "vitest";
 //   AC-341, AC-342.
 // Architecture: SPEC-0200-0001 §3.4.6 (dialog-specs.ts: pure generators of
 //   FormSpec / ConfirmSpec / ProgressSpec for the shared modal-host; progress
-//   label `<作成中|展開中> <name> (<index>/<total>)`).
+//   label `<圧縮中|展開中> <name> (<index>/<total>)`).
 // Module under test (not yet implemented): ./dialog-specs.ts
 //
 // Contract assumed (documented in the handback report):
 //   buildCreateFormSpec({ count, outputPath, onSubmit }) -> FormSpec
-//        (title "ZIPを作成"; lines[0] mentions `${count}件`; ONE text field
-//         id "outputPath" prefilled; submitLabel "作成"; cancelLabel "キャンセル")
+//        (title "ZIPに圧縮" (W-40); lines[0] mentions `${count}件`; ONE text field
+//         id "outputPath" prefilled; submitLabel "圧縮" (W-41); cancelLabel "キャンセル")
 //   buildExtractFormSpec({ zipPath, destination, onSubmit }) -> FormSpec
 //        (title "ZIPを展開"; lines contain zipPath; ONE text field id
 //         "destination"; submitLabel "展開"; cancelLabel "キャンセル")
@@ -70,7 +70,8 @@ describe("buildCreateFormSpec (R-320, R-320-1, AC-308)", () => {
   it("has create / cancel labels and forwards onSubmit untouched", () => {
     const onSubmit = vi.fn(async () => null);
     const s = buildCreateFormSpec({ count: 1, outputPath: "x", onSubmit });
-    expect(s.submitLabel).toBe("作成");
+    expect(s.submitLabel).toBe("圧縮");
+    expect(s.title).toBe("ZIPに圧縮");
     expect(s.cancelLabel).toBe("キャンセル");
     expect(s.onSubmit).toBe(onSubmit);
   });
@@ -111,6 +112,7 @@ describe("buildExtractFormSpec (R-340, R-340-1, R-340-2, AC-326)", () => {
     const onSubmit = vi.fn(async () => null);
     const s = buildExtractFormSpec({ zipPath: "z", destination: "d", onSubmit });
     expect(s.submitLabel).toBe("展開");
+    expect(s.title).toBe("ZIPを展開");
     expect(s.cancelLabel).toBe("キャンセル");
     expect(s.onSubmit).toBe(onSubmit);
   });
@@ -175,7 +177,7 @@ describe("buildConflictConfirmSpec (R-374, R-374-1, R-374-3, AC-340~AC-342)", ()
 
 describe("buildErrorConfirmSpec (R-351-1, R-395-1: errors after the start are shown as an error dialog)", () => {
   it("a single 'close' button that is both the default and the Escape target", () => {
-    const spec = buildErrorConfirmSpec({ title: "展開に失敗しました", lines: ["途中まで展開しました"] });
+    const spec = buildErrorConfirmSpec({ title: "ZIPを展開できませんでした", lines: ["途中まで展開しました"] });
     expect(spec.buttons.map((b) => b.id)).toEqual(["close"]);
     expect(spec.defaultButtonId).toBe("close");
     expect(spec.cancelButtonId).toBe("close");
@@ -196,6 +198,8 @@ describe("buildProgressSpec (R-380: modal progress with a cancel button)", () =>
     const c = buildProgressSpec("create", onCancel);
     const e = buildProgressSpec("extract", onCancel);
     expect(c.title).not.toBe(e.title);
+    expect(c.title).toBe("ZIPに圧縮"); // W-42
+    expect(e.title).toBe("ZIPを展開"); // W-42
     expect(c.cancelLabel).toBe("キャンセル");
     expect(e.cancelLabel).toBe("キャンセル");
     c.onCancel();
@@ -204,8 +208,8 @@ describe("buildProgressSpec (R-380: modal progress with a cancel button)", () =>
 });
 
 describe("formatArchiveProgressLabel (R-381, AC-350)", () => {
-  it("create: `作成中 <name> (<index>/<total>)` with the archive-internal path", () => {
-    expect(formatArchiveProgressLabel("create", { name: "docs/a.txt", index: 3, total: 10 })).toBe("作成中 docs/a.txt (3/10)");
+  it("create: `圧縮中 <name> (<index>/<total>)` with the archive-internal path", () => {
+    expect(formatArchiveProgressLabel("create", { name: "docs/a.txt", index: 3, total: 10 })).toBe("圧縮中 docs/a.txt (3/10)");
   });
 
   it("extract: `展開中 <name> (<index>/<total>)`", () => {

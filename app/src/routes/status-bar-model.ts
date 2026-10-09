@@ -2,6 +2,8 @@
 // bar's permanent items. DOM/Svelte-independent.
 
 import { sortKeyLabel, sortOrderMark, type SortKey, type SortOrder } from "$lib/features/file-list/sort";
+import { REGION_NAMES } from "$lib/shared/messages";
+import { ROUTE_MESSAGES } from "./messages";
 
 export type FocusArea = "dialog" | "history" | "jump" | "sort-menu" | "context-menu" | "path" | "search" | "tree" | "list" | "none";
 export type DomFocusArea = "search" | "tree" | "list" | null;
@@ -46,16 +48,16 @@ export function resolveFocusArea(input: FocusAreaInput): FocusArea {
 }
 
 const FOCUS_AREA_LABELS: Record<FocusArea, string> = {
-  dialog: "ダイアログ",
-  history: "訪問履歴",
-  jump: "ジャンプリスト",
-  "sort-menu": "ソートメニュー",
-  "context-menu": "右クリックメニュー",
-  path: "パス",
-  search: "検索",
-  tree: "ツリー",
-  list: "一覧",
-  none: "なし",
+  dialog: REGION_NAMES.dialog,
+  history: REGION_NAMES.history,
+  jump: REGION_NAMES.jumpList,
+  "sort-menu": REGION_NAMES.sortMenu,
+  "context-menu": REGION_NAMES.contextMenu,
+  path: REGION_NAMES.path,
+  search: REGION_NAMES.search,
+  tree: REGION_NAMES.tree,
+  list: REGION_NAMES.list,
+  none: REGION_NAMES.none,
 };
 
 export function focusAreaLabel(area: FocusArea): string {
@@ -66,13 +68,13 @@ export function focusAreaLabel(area: FocusArea): string {
 // query is non-blank; the query is shown as typed.
 export function buildStatusItems(input: StatusItemsInput): StatusItem[] {
   const items: StatusItem[] = [
-    { id: "focus", text: `フォーカス: ${focusAreaLabel(input.focusArea)}` },
-    { id: "sort", text: `並び替え: ${sortKeyLabel(input.sortKey)} ${sortOrderMark(input.sortOrder)}` },
-    { id: "selected", text: `選択: ${input.selectedVisibleCount}` },
-    { id: "hidden", text: `隠し: ${input.showHidden ? "オン" : "オフ"}` },
+    { id: "focus", text: `${ROUTE_MESSAGES.statusFocus}${focusAreaLabel(input.focusArea)}` },
+    { id: "sort", text: `${ROUTE_MESSAGES.statusSort}${sortKeyLabel(input.sortKey)} ${sortOrderMark(input.sortOrder)}` },
+    { id: "selected", text: `${ROUTE_MESSAGES.statusSelected}${input.selectedVisibleCount}` },
+    { id: "hidden", text: `${ROUTE_MESSAGES.statusHidden}${input.showHidden ? ROUTE_MESSAGES.statusOn : ROUTE_MESSAGES.statusOff}` },
   ];
   if (input.searchActive && input.query.trim() !== "") {
-    const text = `絞り込み: ${input.query}`;
+    const text = `${ROUTE_MESSAGES.statusFilter}${input.query}`;
     items.push({ id: "filter", text, title: text });
   }
   return items;

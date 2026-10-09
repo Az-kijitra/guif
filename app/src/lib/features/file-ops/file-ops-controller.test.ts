@@ -398,6 +398,15 @@ describe("paste: conflict dialog (R-31, R-33, R-34, R-34-1, R-35; AC-20~AC-28, A
     expect(spec.lines.join("\n")).toContain("a.txt");
   });
 
+  it("SPEC-0300-0019 W-25: the dialog body says `フォルダー` (not `フォルダ`) in the merge note, with the exact text", async () => {
+    const h = makeHarness({ clipboard: { paths: src, origin: "internal-copy" }, conflicts, confirmAnswers: [{ buttonId: "cancel", checked: true }] });
+    await h.run("paste");
+    const spec = h.confirmSpec(0);
+    expect(spec.title).toBe("同じ名前の項目があります");
+    expect(spec.lines).toContain("上書きすると、フォルダーはマージ(同名ファイルは置換)されます。");
+    expect(spec.lines.join("\n")).not.toMatch(/フォルダ(?!ー)/);
+  });
+
   it("apply-to-all ON + overwrite: ONE dialog, every conflict resolved 'overwrite', passed as itemResolutions keyed by source path", async () => {
     const h = makeHarness({ clipboard: { paths: src, origin: "internal-copy" }, conflicts, confirmAnswers: [{ buttonId: "overwrite", checked: true }] });
     await h.run("paste");
@@ -793,6 +802,16 @@ describe("rename (R-12, R-36, R-60~R-64; AC-48-1/-2, AC-50, AC-52~AC-56)", () =>
     expect(h.status.show).toHaveBeenCalled();
   });
 
+  it("SPEC-0300-0019 W-15 / AC-1208 (i): the rename dialog is titled `名前の変更` and its buttons are `変更` / `キャンセル` (not `OK`)", async () => {
+    const h = makeHarness({ selected: [p("a.txt")] });
+    await h.run("rename");
+    const spec = h.formSpec();
+    expect(spec.title).toBe("名前の変更");
+    expect(spec.submitLabel).toBe("変更");
+    expect(spec.cancelLabel).toBe("キャンセル");
+    h.resolveForm("cancelled");
+  });
+
   it("nothing selected and nothing focused => nothing opens", async () => {
     const h = makeHarness();
     await h.run("rename");
@@ -925,6 +944,17 @@ describe("new_file / new_folder (R-70~R-78, R-72-1, R-72-2; AC-58~AC-63)", () =>
     const h = makeHarness();
     await h.run("new_folder");
     expect(fieldsOf(h.formSpec()).kind.value).toBe("folder");
+    h.resolveForm("cancelled");
+  });
+
+  it("SPEC-0300-0019 W-25: the kind select offers `ファイル` / `フォルダー` (not `フォルダ`)", async () => {
+    const h = makeHarness();
+    await h.run("new_file");
+    const { kind } = fieldsOf(h.formSpec());
+    expect(kind.options).toEqual([
+      { value: "file", label: "ファイル" },
+      { value: "folder", label: "フォルダー" },
+    ]);
     h.resolveForm("cancelled");
   });
 

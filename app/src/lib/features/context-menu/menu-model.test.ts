@@ -50,15 +50,15 @@ describe("buildMenu: row menu layout (R-1030, AC-1020, AC-1063)", () => {
       "OSの関連付けで開く",
       "---",
       "コピー",
-      "カット",
-      "ペースト",
+      "切り取り",
+      "貼り付け",
       "パスのコピー",
       "---",
       "削除",
       "名前の変更",
       "---",
       "ZIPに圧縮",
-      "ZIPを解凍",
+      "ZIPを展開",
     ]);
   });
 
@@ -103,9 +103,9 @@ describe("buildMenu: row menu layout (R-1030, AC-1020, AC-1063)", () => {
 });
 
 describe("buildMenu: blank menu and degenerate input (R-1031, AC-1002)", () => {
-  it("blank: 新規作成... / separator / ペースト (3 entries, 1 separator)", () => {
+  it("blank: 新規作成… / separator / 貼り付け (3 entries, 1 separator)", () => {
     const entries = buildMenu(input({ kind: "blank", targets: [] }));
-    expect(entries.map((e) => (e.type === "separator" ? "---" : e.label))).toEqual(["新規作成...", "---", "ペースト"]);
+    expect(entries.map((e) => (e.type === "separator" ? "---" : e.label))).toEqual(["新規作成…", "---", "貼り付け"]);
     expect(entries.filter((e) => e.type === "separator")).toHaveLength(1);
   });
 
@@ -181,7 +181,7 @@ describe("evaluateItem / buildMenu: enable table R-1040 (AC-1021)", () => {
 
   it("reason strings are the exact wording (G-2: no space in ZIPファイル)", () => {
     expect(REASON_ONE_ONLY).toBe("1件だけ選択してください");
-    expect(REASON_FOLDER).toBe("フォルダには使えません");
+    expect(REASON_FOLDER).toBe("フォルダーには使えません");
     expect(REASON_NOT_ZIP).toBe("ZIPファイルではありません");
     expect(REASON_NOT_ZIP).not.toContain(" ");
     expect(REASON_CLIPBOARD_EMPTY).toBe("クリップボードが空です");
@@ -204,7 +204,7 @@ describe("evaluateItem / buildMenu: enable table R-1040 (AC-1021)", () => {
     expect(item(entries, "open").reason).toBeUndefined();
   });
 
-  it("two selected: 開く / OSの関連付けで開く / 名前の変更 / ZIPを解凍 disabled with 1件だけ…, all others enabled (AC-1022)", () => {
+  it("two selected: 開く / OSの関連付けで開く / 名前の変更 / ZIPを展開 disabled with 1件だけ…, all others enabled (AC-1022)", () => {
     const entries = buildMenu(input({ targets: [file("a.txt"), file("b.txt")] }));
     for (const id of ["open", "os_open", "rename", "zip_extract"] as const) {
       expect(item(entries, id)).toMatchObject({ enabled: false, reason: REASON_ONE_ONLY });
