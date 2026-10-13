@@ -5,6 +5,7 @@
 // into the dispatch context by the caller (R-17: no central action
 // dispatcher/store).
 
+import { matchesMenuBarActivation, type MenuBarActivationKind } from "./menubar-activation";
 import { ACTION_IDS, DEFAULT_KEYMAP } from "./keymap-defaults";
 import { matchesAction, resolveBinding, type KeydownLikeEvent } from "./keymap-resolve";
 
@@ -91,6 +92,9 @@ export interface DispatchContext {
   onExitAction: (action: string) => boolean;
   onOverlayKey: (action: string | null, event: KeydownLikeEvent) => boolean;
   onMenuBarKey: (action: string | null, event: KeydownLikeEvent) => boolean;
+  // SPEC-0300-0010 第16版 R-14-5-1: whether F10 / Alt+F/E/V/G may activate the menu bar now (the wiring decides), and the activation callback.
+  canActivateMenuBar?: boolean;
+  onMenuBarActivate?: (kind: MenuBarActivationKind, event: KeydownLikeEvent) => boolean;
   onTreeAction: (action: string, event: KeydownLikeEvent) => boolean;
   onListAction: (action: string | null, event: KeydownLikeEvent) => boolean;
   // R-14-2/R-121: fired for Escape/Enter/ArrowUp/ArrowDown while the search
@@ -185,13 +189,27 @@ function matchesSearchInputAction(event: KeydownLikeEvent): SearchAction | null 
 //      (SPEC-0300-0016 R-760~R-765); evaluated before the search-active Escape.
 //   3. exit action resolved via the keymap (in case it's rebound)
 //   4. overlay (modal/dropdown/sort menu/context menu) — traps all keys (R-13)
-//   5. menu bar
+//   5. menu bar (moved: active -> right after priority 1 and stops, R-14-5-2; activation keys R-14-5-1 follow it)
 //   6. tree (only the 7 TREE_HANDLED_ACTIONS, only while tree-focused, R-15)
 //   7. file list (fallback)
 export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): boolean {
   const hardcoded = matchesHardcodedShortcut(event);
   if (hardcoded !== null) {
     return !!ctx.onHardcodedShortcut(hardcoded);
+  }
+
+  // R-14-5-2: while the menu bar is active the key goes to it right after priority 1 and the chain stops there.
+  if (ctx.isMenuBarActive) {
+    return !!ctx.onMenuBarKey(null, event);
+  }
+
+  // R-14-5-1: the activation keys are evaluated before R-14 / R-14-2 / R-14-4 / R-14-3.
+  if (ctx.canActivateMenuBar === true && ctx.onMenuBarActivate !== undefined) {
+    const kind = matchesMenuBarActivation(event);
+    if (kind !== null) {
+      ctx.onMenuBarActivate(kind, event);
+      return true;
+    }
   }
 
   if (ctx.isSettingsOpen) {
@@ -263,12 +281,6 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
 
   if (ctx.isOverlayOpen) {
     return !!ctx.onOverlayKey(action, event);
-  }
-
-  if (ctx.isMenuBarActive) {
-    if (ctx.onMenuBarKey(action, event)) {
-      return true;
-    }
   }
 
   if (action !== null && ctx.isTreeFocused && isTreeHandledAction(action)) {

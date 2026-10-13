@@ -34,15 +34,17 @@ const errorCtx = { contentKind: "error" as const };
 describe("resolveViewerKeyAction: scrolling (R-500 row 1/2/3, R-500-2, AC-500)", () => {
   it("Arrow keys scroll 72px; Shift+Arrow scrolls 240px, in every content kind", () => {
     for (const ctx of [textCtx, markdownCtx, imageCtx, errorCtx]) {
-      expect(resolveViewerKeyAction(key("ArrowUp"), ctx)).toEqual({ kind: "scroll", axis: "y", amount: 72 });
+      // PHASE 13 UPDATE (SPEC-0300-0015 第8版 R-500 / AC-516, SPEC-0200-0001 §3.14.3): the former expectation
+      // (every Arrow key resolves to a POSITIVE amount) pinned the reported defect (Up/Left did not work). The
+      // amount is now SIGNED: Up/Left negative, Down/Right positive (type widened from `72 | 240` to `number`).
+      expect(resolveViewerKeyAction(key("ArrowUp"), ctx)).toEqual({ kind: "scroll", axis: "y", amount: -72 });
       expect(resolveViewerKeyAction(key("ArrowDown"), ctx)).toEqual({ kind: "scroll", axis: "y", amount: 72 });
-      expect(resolveViewerKeyAction(key("ArrowLeft"), ctx)).toEqual({ kind: "scroll", axis: "x", amount: 72 });
+      expect(resolveViewerKeyAction(key("ArrowLeft"), ctx)).toEqual({ kind: "scroll", axis: "x", amount: -72 });
       expect(resolveViewerKeyAction(key("ArrowRight"), ctx)).toEqual({ kind: "scroll", axis: "x", amount: 72 });
-      expect(resolveViewerKeyAction(key("ArrowDown", { shiftKey: true }), ctx)).toEqual({
-        kind: "scroll",
-        axis: "y",
-        amount: 240,
-      });
+      expect(resolveViewerKeyAction(key("ArrowUp", { shiftKey: true }), ctx)).toEqual({ kind: "scroll", axis: "y", amount: -240 });
+      expect(resolveViewerKeyAction(key("ArrowDown", { shiftKey: true }), ctx)).toEqual({ kind: "scroll", axis: "y", amount: 240 });
+      expect(resolveViewerKeyAction(key("ArrowLeft", { shiftKey: true }), ctx)).toEqual({ kind: "scroll", axis: "x", amount: -240 });
+      expect(resolveViewerKeyAction(key("ArrowRight", { shiftKey: true }), ctx)).toEqual({ kind: "scroll", axis: "x", amount: 240 });
     }
   });
 

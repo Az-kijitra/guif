@@ -13,7 +13,11 @@ import path from "node:path";
 import { MOD, sleep } from "../lib/cdp.mjs";
 import { fixedThemeNote } from "../lib/os-theme.mjs";
 import { openFiles, RGB_DARK, setSort, openViewerWindow, waitViewerShows } from "./_util.mjs";
-import { checkViewerPalette, VIEWER_LOOK, VIEWER_PALETTE } from "./viewer.mjs";
+import { MENU_STYLE_PROBE, focusRowByName, prepMenu, waitActive, waitDropdown, closeBar } from "./_menu.mjs";
+import { checkRustColours, checkHighlightFollowsOs } from "./viewer-highlight.mjs";
+import { checkTextLook, FIFTY } from "./viewer-text.mjs";
+import { closeViewerWindow, showInViewer } from "./_viewer.mjs";
+import { checkViewerPalette, unquoteFonts, VIEWER_FONT, VIEWER_LOOK, VIEWER_PALETTE } from "./viewer.mjs";
 
 // W-33 (SPEC-0300-0019)
 const THEME_NOTICE = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
@@ -185,7 +189,7 @@ const s1Tests = [
       if (viewer === undefined) return;
       try {
         if (!(await waitViewerShows(t, viewer, "note.txt", "text", { contains: "dark viewer line one" }))) return;
-        const body = await viewer.ev(`document.querySelector('.viewer-body .text-view')?.textContent ?? ''`);
+        const body = await viewer.ev(`document.querySelector('.viewer-body .code')?.textContent ?? ''`);
         t.ok(body.includes("dark viewer line one"), "the viewer body shows the file's text", JSON.stringify(body.slice(0, 80)));
         const s = await viewer.ev(VIEWER_LOOK);
         t.eq(s.htmlBg, "rgb(30, 30, 30)", "html background");
@@ -195,7 +199,7 @@ const s1Tests = [
         t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
         t.eq(s.htmlScheme, "dark", "html color-scheme (R-913-2)");
         t.eq(s.rootColor, "rgb(221, 221, 221)", "viewer text colour");
-        t.eq(s.rootFont, "sans-serif", "viewer root font-family");
+        t.eq(unquoteFonts(s.rootFont), VIEWER_FONT, "viewer root font-family is --vw-font");
         t.eq([s.uiBg, s.rowHeight, s.uiVars], ["", "", []], "the main window's variables are not defined in the viewer");
         t.eq(s.prefersDark, true, "the viewer follows the pinned dark theme without emulation");
         const note = fixedThemeNote("dark", ctx.osTheme ?? null);
@@ -210,6 +214,48 @@ const s1Tests = [
     title: "viewer palette (ui_theme = dark): header, truncation banner, error and line numbers use the R-913-1 dark values",
     async run(t, ctx) {
       await checkViewerPalette(t, ctx, VIEWER_PALETTE.dark);
+    },
+  },
+  {
+    id: "AC-1361",
+    title: "dark theme: the menu bar and the dropdown use the R-911-1 dark values (bar / dropdown surface, lit item, shortcut text)",
+    async run(t, ctx) {
+      await prepMenu(ctx, "mb-dark");
+      await focusRowByName(ctx, "d");
+      await ctx.press.f10();
+      await waitActive(ctx);
+      await ctx.press.down();
+      await waitDropdown(ctx);
+      const s = await ctx.ev(MENU_STYLE_PROBE);
+      t.eq(s.bar["background-color"], RGB_DARK.surface, "menu bar background");
+      t.eq(s.bar["border-top-color"], RGB_DARK.border, "menu bar border");
+      t.eq(s.dropdown["background-color"], RGB_DARK.surface, "dropdown background");
+      t.eq(s.highlighted?.["background-color"], RGB_DARK.hover, "lit item background");
+      t.eq(s.shortcut.color, RGB_DARK.muted, "shortcut text colour");
+      t.eq([s.bar.padding, s.item.padding, s.item["font-size"], s.dropdown["min-width"]], ["3px 6px", "6px 12px", "13px", "260px"], "the sizes are the light ones");
+      await closeBar(ctx);
+    },
+  },
+  {
+    id: "AC-522-ii",
+    title: "dark: the text view keeps its fonts and sizes; the number column uses the dark gutter colours",
+    async run(t, ctx) {
+      ctx.fx.mkdir("vt-dark");
+      fs.writeFileSync(ctx.fx.at("vt-dark", "a.txt"), FIFTY);
+      const viewer = await showInViewer(t, ctx, "vt-dark", "a.txt", "text", { contains: "line 1 text" });
+      if (viewer === undefined) return;
+      try {
+        await checkTextLook(t, viewer, { header: "rgb(37, 37, 38)", border: "rgb(58, 58, 58)" });
+      } finally {
+        await closeViewerWindow(ctx, viewer);
+      }
+    },
+  },
+  {
+    id: "AC-528-ii",
+    title: "dark: the Rust sample's keyword / string / comment / built-in colours are the dark palette",
+    async run(t, ctx) {
+      await checkRustColours(t, ctx, "dark");
     },
   },
   {
@@ -394,6 +440,13 @@ const s2Tests = [
     },
   },
   {
+    id: "AC-528-os",
+    title: "viewer (no config.toml): OS light -> dark (emulated) recolours the highlighted code without a reload; the scroll position stays",
+    async run(t, ctx) {
+      await checkHighlightFollowsOs(t, ctx);
+    },
+  },
+  {
     id: "AC-953-1",
     title: "viewer (no config.toml): OS light -> dark leaves the Markdown zoom / HTML-Text mode and the image's 200% display unchanged",
     async run(t, ctx) {
@@ -409,7 +462,7 @@ const s2Tests = [
       const state = () =>
         viewer.ev(`(() => ({ marker: window.__themeMarker ?? null, name: document.querySelector('.filename')?.textContent, zoom: document.querySelector('.zoom')?.textContent ?? null,
           pressed: [...document.querySelectorAll('.viewer-header button[aria-pressed]')].map((b) => b.textContent.trim() + ':' + b.getAttribute('aria-pressed')),
-          htmlView: !!document.querySelector('.markdown-html'), imgStyle: document.querySelector('.image-view img')?.getAttribute('style') ?? null }))()`);
+          htmlView: !!document.querySelector('.markdown-html'), imgStyle: document.querySelector('.image-stage img')?.getAttribute('style') ?? null }))()`);
       const bgNow = () => viewer.ev(`getComputedStyle(document.documentElement).backgroundColor`);
       const toDark = async () => {
         await ctx.emulateColorScheme("light", viewer);
@@ -441,7 +494,7 @@ const s2Tests = [
         const imgGiven = await toDark();
         t.eq(imgGiven.zoom, "200%", "image shows 200% before the change");
         t.eq(await bgNow(), "rgb(30, 30, 30)", "image view: dark now");
-        t.eq(await state(), imgGiven, "image: the 200% display / transform and the marker are unchanged");
+        t.eq(await state(), imgGiven, "image: the 200% display (width / height) and the marker are unchanged");
         t.note("実際の OS の切替は [目視]");
       } finally {
         await ctx.emulateColorScheme("", viewer).catch(() => {});

@@ -5,7 +5,7 @@ import { sortKeyLabel, sortOrderMark, type SortKey, type SortOrder } from "$lib/
 import { REGION_NAMES } from "$lib/shared/messages";
 import { ROUTE_MESSAGES } from "./messages";
 
-export type FocusArea = "dialog" | "history" | "jump" | "sort-menu" | "context-menu" | "path" | "search" | "tree" | "list" | "none";
+export type FocusArea = "dialog" | "history" | "jump" | "sort-menu" | "context-menu" | "menu-bar" | "path" | "search" | "tree" | "list" | "none";
 export type DomFocusArea = "search" | "tree" | "list" | null;
 
 export interface FocusAreaInput {
@@ -14,6 +14,7 @@ export interface FocusAreaInput {
   historyMode: "history" | "jump";
   sortMenuOpen: boolean;
   contextMenuOpen?: boolean; // SPEC-0300-0018 R-1113
+  menuBarActive?: boolean; // SPEC-0300-0020 R-1372 (W-89)
   pathEditing: boolean;
   domArea: DomFocusArea;
 }
@@ -40,6 +41,7 @@ export function resolveFocusArea(input: FocusAreaInput): FocusArea {
   if (input.historyOpen) return input.historyMode === "jump" ? "jump" : "history";
   if (input.sortMenuOpen) return "sort-menu";
   if (input.contextMenuOpen) return "context-menu";
+  if (input.menuBarActive) return "menu-bar";
   if (input.pathEditing) return "path";
   if (input.domArea === "search") return "search";
   if (input.domArea === "tree") return "tree";
@@ -53,6 +55,7 @@ const FOCUS_AREA_LABELS: Record<FocusArea, string> = {
   jump: REGION_NAMES.jumpList,
   "sort-menu": REGION_NAMES.sortMenu,
   "context-menu": REGION_NAMES.contextMenu,
+  "menu-bar": REGION_NAMES.menuBar,
   path: REGION_NAMES.path,
   search: REGION_NAMES.search,
   tree: REGION_NAMES.tree,

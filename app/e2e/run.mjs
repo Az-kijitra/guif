@@ -77,7 +77,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "wording", "config"];
+const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "viewer-highlight", "viewer-keys", "viewer-text", "menubar", "wording", "config"];
 
 async function loadTests() {
   const all = [];
@@ -89,8 +89,12 @@ async function loadTests() {
 }
 
 // Scenario modules: `scenarios = [{ id, title, configToml?, navigationToml?, tests }]` (one app start each).
-// theme.mjs: config.toml scenarios (Phase 12); history-invalid.mjs: navigation.toml scenarios (AC-256 / AC-257).
-const SCENARIO_FILES = ["theme", "history-invalid"];
+// theme.mjs: config.toml scenarios (Phase 12); history-invalid.mjs: navigation.toml scenarios (AC-256 / AC-257);
+// os-input.mjs: the OS key input checks (SPEC-0400-0001 R-12). A scenario may carry `skipReason()` (null = run): when it
+// returns a string the app is NOT started and the scenario's tests are recorded as SKIP with that reason. os-input is
+// opt-in (REFLEXFILES_E2E_OS_INPUT=1, R-12-5; the reason text begins "OS のキー入力のテストは無効") because it uses the
+// user's screen and keyboard.
+const SCENARIO_FILES = ["theme", "history-invalid", "menubar-keymap", "os-input"];
 
 async function loadScenarios() {
   const all = [];
@@ -286,6 +290,11 @@ async function main() {
     if (report.aborted) {
       // MUST-124 (3): after an abort the remaining scenarios are not started.
       for (const t of scenario.selected) report.record("SKIP", t.id, t.title, 0, [`scenario ${scenario.id} not started: the run was aborted`]);
+      continue;
+    }
+    const skipReason = scenario.skipReason?.() ?? null;
+    if (skipReason !== null) {
+      for (const t of scenario.selected) report.record("SKIP", t.id, t.title, 0, [`scenario ${scenario.id}: ${skipReason}`]);
       continue;
     }
     log(`scenario ${scenario.id}: ${scenario.title}`);

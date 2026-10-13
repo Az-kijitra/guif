@@ -260,13 +260,15 @@ describe("AC-1200 (static part): app.html", () => {
 });
 
 describe("scan-size guards (SHOULD-194 (c): an empty scan must not pass)", () => {
-  it("finds exactly 11 messages.ts (shared 1 + feature 9 + routes 1)", () => {
+  // PHASE 13 UPDATE (SPEC-0200-0001 §3.14.12-1 / MUST-129): features/menu-bar/messages.ts is added -> 12 (shared 1 + feature 10 + routes 1).
+  it("finds exactly 12 messages.ts (shared 1 + feature 10 + routes 1)", () => {
     expect(PROD.filter((f) => f.isMessages).map((f) => f.rel).sort()).toEqual([
       "lib/features/archive/messages.ts",
       "lib/features/context-menu/messages.ts",
       "lib/features/file-list/messages.ts",
       "lib/features/file-ops/messages.ts",
       "lib/features/keyboard/messages.ts",
+      "lib/features/menu-bar/messages.ts",
       "lib/features/navigation-history/messages.ts",
       "lib/features/path-bar/messages.ts",
       "lib/features/search/messages.ts",

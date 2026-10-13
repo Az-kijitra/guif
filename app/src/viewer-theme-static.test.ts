@@ -90,6 +90,9 @@ const normHex = (v: string | undefined): string => {
 };
 
 // R-913-1 table, expressed as the --vw-* variables of design §3.11.7.
+// PHASE 13 UPDATE (SPEC-0300-0017 第8版 R-913-1 / R-913-1-1 / R-913-4, SPEC-0200-0001 §3.14.12-13): the table grows by the gutter colours (2), the
+// `--vw-hl-*` highlight colours (13, rows of R-913-1-1) and -- light only -- the two font variables (2); the dark line-number colour is `#8c8c8c`
+// (承認時の発注者決定 2026-10-10; it was `#777`). The old "9 values" expectation became "9 + 2 + 13 (+ 2 fonts in the light part)".
 const LIGHT: Record<string, string> = {
   "--vw-bg": "#fff", // html / body / viewer root background
   "--vw-fg": "#111", // text colour
@@ -100,6 +103,23 @@ const LIGHT: Record<string, string> = {
   "--vw-muted": "#666", // loading / no-file text
   "--vw-error": "#b00020",
   "--vw-lineno": "#666",
+  // 第8版: the line-number gutter (SPEC-0300-0015 R-462-1 / R-462-4)
+  "--vw-gutter-bg": "#f0f0f0",
+  "--vw-gutter-border": "#d0d0d0",
+  // 第8版: highlight colours (R-913-1-1; the full check incl. selectors / contrast is viewer-theme-highlight.test.ts)
+  "--vw-hl-keyword": "#d73a49",
+  "--vw-hl-title": "#6f42c1",
+  "--vw-hl-constant": "#005cc5",
+  "--vw-hl-string": "#032f62",
+  "--vw-hl-builtin": "#c24e00",
+  "--vw-hl-comment": "#6a737d",
+  "--vw-hl-name": "#22863a",
+  "--vw-hl-section": "#005cc5",
+  "--vw-hl-bullet": "#735c0f",
+  "--vw-hl-addition-fg": "#1e7f35",
+  "--vw-hl-addition-bg": "#f0fff4",
+  "--vw-hl-deletion-fg": "#b31d28",
+  "--vw-hl-deletion-bg": "#ffeef0",
 };
 const DARK: Record<string, string> = {
   "--vw-bg": "#1e1e1e",
@@ -110,7 +130,22 @@ const DARK: Record<string, string> = {
   "--vw-banner-fg": "#ffd866",
   "--vw-muted": "#999",
   "--vw-error": "#ff8080",
-  "--vw-lineno": "#777",
+  "--vw-lineno": "#8c8c8c", // 第8版: was #777 (3.4:1); #8c8c8c is 4.55 / 4.96 (R-462-4)
+  "--vw-gutter-bg": "#252526",
+  "--vw-gutter-border": "#3a3a3a",
+  "--vw-hl-keyword": "#ff7b72",
+  "--vw-hl-title": "#d2a8ff",
+  "--vw-hl-constant": "#79c0ff",
+  "--vw-hl-string": "#a5d6ff",
+  "--vw-hl-builtin": "#ffa657",
+  "--vw-hl-comment": "#8b949e",
+  "--vw-hl-name": "#7ee787",
+  "--vw-hl-section": "#4a8cf7",
+  "--vw-hl-bullet": "#f2cc60",
+  "--vw-hl-addition-fg": "#aff5b4",
+  "--vw-hl-addition-bg": "#033a16",
+  "--vw-hl-deletion-fg": "#ffdcd7",
+  "--vw-hl-deletion-bg": "#67060c",
 };
 
 const R911_NAMES = [
@@ -128,15 +163,32 @@ const normTable = (t: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(t).map(([k, v]) => [k, normHex(v)]));
 
 describe("R-913-1: the viewer colour table in viewer-theme.css (SPEC-0200-0001 §3.11.7)", () => {
-  it("the light `html` rule defines all 9 --vw-* values of the table", () => {
+  it("the light `html` rule defines all 24 --vw-* values of the table (9 + gutter 2 + highlight 13)", () => {
+    expect(Object.keys(LIGHT).length).toBe(24);
     const { light } = split(cssText());
     expect(pick(htmlDecls(light), LIGHT)).toEqual(normTable(LIGHT));
   });
 
-  it("the dark `@media (prefers-color-scheme: dark)` block's `html` rule defines the 9 dark values (the previous fixed-dark values are kept)", () => {
+  it("the dark `@media (prefers-color-scheme: dark)` block's `html` rule defines the 24 dark values (the previous fixed-dark values are kept, except the line number colour #8c8c8c)", () => {
+    expect(Object.keys(DARK).length).toBe(24);
     const { dark, blocks } = split(cssText());
     expect(blocks).toBe(1);
     expect(pick(htmlDecls(dark), DARK)).toEqual(normTable(DARK));
+  });
+
+  it("R-913-4: --vw-font and --vw-font-mono are declared in the LIGHT `html` rule only (fonts do not change with the theme)", () => {
+    const { light, dark } = split(cssText());
+    expect(htmlDecls(light).has("--vw-font")).toBe(true);
+    expect(htmlDecls(light).has("--vw-font-mono")).toBe(true);
+    expect(htmlDecls(dark).has("--vw-font")).toBe(false);
+    expect(htmlDecls(dark).has("--vw-font-mono")).toBe(false);
+  });
+
+  it("the light and the dark parts declare the same colour variables (every --vw-* except the two font variables, which are light-only)", () => {
+    const { light, dark } = split(cssText());
+    const names = (d: Map<string, string>): string[] => [...d.keys()].filter((k) => k.startsWith("--vw-") && !k.startsWith("--vw-font")).sort();
+    expect(names(htmlDecls(light))).toEqual(names(htmlDecls(dark)));
+    expect(names(htmlDecls(light)).length).toBe(24);
   });
 
   it("R-913-2: `html` color-scheme is `light` in the light part and `dark` in the dark block", () => {
@@ -175,7 +227,8 @@ describe("R-913 / m-5 / AC-907: the viewer never carries the main window's --ui-
 
   it("every custom property declared in viewer-theme.css is named --vw-*", () => {
     const names = [...cssText().matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]);
-    expect(names.length).toBeGreaterThanOrEqual(18);
+    // PHASE 13 UPDATE: was >= 18 (9 light + 9 dark). Now 26 light (24 + the two font variables) + 24 dark = 50.
+    expect(names.length).toBeGreaterThanOrEqual(50);
     expect(names.filter((n) => !n.startsWith("--vw-"))).toEqual([]);
     expect(names.filter((n) => R911_NAMES.includes(n))).toEqual([]);
   });

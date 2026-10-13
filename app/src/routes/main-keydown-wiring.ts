@@ -13,6 +13,7 @@ import {
   type PathBarOverlayAction,
   type SearchAction,
 } from "$lib/features/keyboard/key-dispatch";
+import type { MenuBarActivationKind } from "$lib/features/keyboard/menubar-activation";
 import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
 import { computeDispatchOverlayFlags } from "./overlay-wiring";
 
@@ -51,6 +52,12 @@ export interface MainKeydownWiringDeps {
     onKey: (key: PathBarFixedKey, event: KeydownLikeEvent) => void;
     onOverlayAction: (action: PathBarOverlayAction) => void;
   };
+  // SPEC-0300-0020 / SPEC-0300-0010 第16版 R-14-5 (Phase 13): the menu bar (optional so existing callers stay valid).
+  menuBar?: {
+    readonly active: boolean;
+    onKey: (action: string | null, event: KeydownLikeEvent) => boolean;
+    onActivate: (kind: MenuBarActivationKind, event: KeydownLikeEvent) => boolean;
+  };
 }
 
 // Builds the `(event: Event) => void` handler `attachGlobalKeydownListener`
@@ -79,7 +86,10 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
     });
     const ctx: DispatchContext = {
       isSettingsOpen: false,
-      isMenuBarActive: false, // SPEC-0100-0005 R-08: no menu bar in this app.
+      isMenuBarActive: deps.menuBar?.active ?? false,
+      // R-14-5-1: not while an overlay is shown or the path bar is being edited.
+      canActivateMenuBar: deps.menuBar !== undefined && !flags.isOverlayOpen && !flags.isPathBarEditing,
+      onMenuBarActivate: deps.menuBar?.onActivate,
       isTreeFocused: deps.isTreeFocused(),
       isOverlayOpen: flags.isOverlayOpen,
       isSearchActive: flags.isSearchActive,
@@ -100,7 +110,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
         if (!deps.history.isOpen) return false;
         return deps.resolveHistoryIntent(overlayEvent, action);
       },
-      onMenuBarKey: () => false,
+      onMenuBarKey: (action, menuEvent) => deps.menuBar?.onKey(action, menuEvent) ?? false,
       onTreeAction: deps.onTreeAction,
       onListAction: deps.onListAction,
       onSearchAction: deps.onSearchAction,

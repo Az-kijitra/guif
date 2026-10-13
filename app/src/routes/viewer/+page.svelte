@@ -1,18 +1,30 @@
 <script lang="ts">
   // routes/viewer/+page.svelte (SPEC-0300-0015 §5, §7~§13; SPEC-0200-0001
-  // §3.5.7): composition layer only. All decision logic lives in
-  // features/viewer/* and this file's own `viewer-wiring.ts`. Kept at/under
-  // 400 lines (§7.1) -- this is a MVP-scope UI (no virtual scroll, no image
-  // cache, R-530).
+  // §3.5.7, §3.14): composition layer only. All decision logic lives in
+  // features/viewer (the feature folder) and this folder's wiring files (viewer-wiring,
+  // highlight-wiring, image-interaction, focus-wiring) and components
+  // (_components/TextView, ImageView). Kept at/under 400 lines (§7.1).
   import { onMount, onDestroy } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { renderMarkdown } from "$lib/features/viewer/markdown-render";
-  import { resolveViewerKeyAction, shouldSuppressWebviewDefault } from "$lib/features/viewer/viewer-keys";
+  import {
+    resolveViewerKeyAction,
+    selectAllTarget,
+    shouldSuppressWebviewDefault,
+  } from "$lib/features/viewer/viewer-keys";
   import type { ViewerContent } from "$lib/features/viewer/viewer-controller";
   import { formatViewerError } from "$lib/features/viewer/error-format";
+  import { lineCount } from "$lib/features/viewer/text-lines";
+  import { canHighlight } from "$lib/features/viewer/highlight/limits";
+  import { languageForPath } from "$lib/features/viewer/highlight/language-map";
   import { COMMON } from "$lib/shared/messages";
   import { ROUTE_MESSAGES } from "../messages";
   import { initializeViewer, listenPendingChanged, viewerContentLoader } from "./viewer-wiring";
+  import { createHighlighter, newHighlightWorker } from "./highlight-wiring";
+  import { attachImageInteraction, type ImageInteraction, type ZoomMode } from "./image-interaction";
+  import { focusBody, installBodyFocus } from "./focus-wiring";
+  import TextView from "./_components/TextView.svelte";
+  import ImageView from "./_components/ImageView.svelte";
   import "./viewer-theme.css";
 
   let content: ViewerContent = $state({ status: "loading" });
@@ -25,9 +37,14 @@
   // R-471-1/R-471-2: 50~300%, 10-point steps, never persisted.
   let markdownZoom = $state(100);
   // R-481/R-482: 1~800% (0.01~8), Fit by default; R-487: reset on file switch.
-  let imageZoomMode: "fit" | number = $state("fit");
+  let imageZoomMode: ZoomMode = $state("fit");
+  // The REAL displayed image scale (Fit: clientWidth / naturalWidth), reported by ImageView.
+  let imageScale = $state(1);
+  let imgEl: HTMLImageElement | undefined = $state();
 
   let bodyEl: HTMLDivElement | undefined = $state();
+  let markdownEl: HTMLDivElement | undefined = $state();
+  let imageInteraction: ImageInteraction | undefined;
   let hasFile = $derived(fileName !== "");
   // R-512 / R-514: true once a file was handed over, so the first load shows `読み込み中…` rather than the
   // "no file" placeholder (fileName is only known when the content has arrived).
@@ -39,6 +56,39 @@
     if (content.status === "image") return "image";
     return "error"; // "loading"/"unsupported"/"error" all use the fixed-key error bucket (R-500-5).
   }
+
+  // The text shown in the two-column view: a text file, or Markdown in Text mode (null otherwise).
+  function codeTextOf(c: ViewerContent, mode: "html" | "text"): string | null {
+    if (c.status === "text" || (c.status === "markdown" && mode === "text")) return c.payload.content;
+    return null;
+  }
+  let codeText = $derived(codeTextOf(content, markdownMode));
+  let codeLines = $derived(codeText === null ? 1 : lineCount(codeText));
+
+  // R-466: colour the body in a Web Worker. The result is kept together with the text it was made for, so a result is
+  // never shown over a different text (R-431); the body is shown uncoloured first and in every failure case (R-466-9).
+  const highlighter = createHighlighter({ createWorker: newHighlightWorker });
+  let highlighted: { text: string; chunks: string[] } | null = $state(null);
+  function chunksFor(h: { text: string; chunks: string[] } | null, text: string | null): string[] | null {
+    return h !== null && text !== null && h.text === text ? h.chunks : null;
+  }
+  let highlightChunks = $derived(chunksFor(highlighted, codeText));
+
+  $effect(() => {
+    const text = codeText;
+    const language = languageForPath(fileName, { mode: content.status === "markdown" ? markdownMode : "text" });
+    if (text === null || language === null || !canHighlight(text, language)) {
+      highlighter.cancel(); // R-431: a previous file's Worker must not keep running for a body that is not coloured.
+      return;
+    }
+    let stale = false;
+    void highlighter.request(text, language).then((chunks) => {
+      if (!stale && chunks !== null) highlighted = { text, chunks };
+    });
+    return () => {
+      stale = true;
+    };
+  });
 
   // R-520: `content.blobUrl` is an object URL the loader created via
   // `URL.createObjectURL` over the raw image bytes (no more base64/data-URL
@@ -55,6 +105,9 @@
     markdownMode = "html";
     markdownZoom = 100;
     imageZoomMode = "fit";
+    highlighted = null;
+    bodyEl?.scrollTo({ top: 0, left: 0 });
+    focusBody(bodyEl); // R-500-8: also when an already open viewer is reused for another file.
   }
 
   async function loadPending(): Promise<void> {
@@ -83,28 +136,7 @@
     else markdownZoom = clamp(markdownZoom - 10, 50, 300);
   }
 
-  function currentImageScale(): number {
-    return imageZoomMode === "fit" ? 1 : imageZoomMode;
-  }
-
-  function zoomImage(op: "in" | "out" | "reset" | "fit" | "200"): void {
-    if (op === "fit") {
-      imageZoomMode = "fit";
-      return;
-    }
-    if (op === "reset") {
-      imageZoomMode = 1;
-      return;
-    }
-    if (op === "200") {
-      imageZoomMode = 2;
-      return;
-    }
-    const base = currentImageScale();
-    const next = op === "in" ? base * 1.25 : base / 1.25;
-    imageZoomMode = clamp(next, 0.01, 8);
-  }
-
+  // R-500: the amount is signed (Up / Left negative), so it goes to scrollBy as it is.
   function scrollBody(axis: "y" | "x", amount: number): void {
     bodyEl?.scrollBy(axis === "y" ? { top: amount } : { left: amount });
   }
@@ -123,6 +155,13 @@
     bodyEl.scrollTo({ top: bodyEl.scrollHeight, left: 0 });
   }
 
+  // R-500-9: Ctrl+A selects the body text only (image / error: no selection).
+  function selectBody(): void {
+    const target = selectAllTarget({ contentKind: contentKind(), markdownMode });
+    const element = target === "code" ? bodyEl?.querySelector("pre.code") : target === "markdown-html" ? markdownEl : null;
+    if (element) window.getSelection()?.selectAllChildren(element);
+  }
+
   function onKeydown(event: KeyboardEvent): void {
     const keyLike = {
       key: event.key,
@@ -139,7 +178,7 @@
 
     switch (action.kind) {
       case "scroll":
-        scrollBody(action.axis, action.axis === "y" ? action.amount : action.amount);
+        scrollBody(action.axis, action.amount);
         return;
       case "page":
         pageScroll(action.direction);
@@ -157,8 +196,11 @@
         if (content.status === "markdown") {
           if (action.op === "in" || action.op === "out" || action.op === "reset") zoomMarkdown(action.op);
         } else if (content.status === "image") {
-          zoomImage(action.op);
+          void imageInteraction?.applyOp(action.op);
         }
+        return;
+      case "select_all":
+        selectBody();
         return;
       case "close":
         closeViewer();
@@ -167,6 +209,7 @@
   }
 
   let unlistenPending: (() => void) | undefined;
+  let removeFocus: (() => void) | undefined;
 
   onMount(() => {
     // MUST-75: `initializeViewer` awaits `listenPendingChanged` BEFORE the
@@ -176,18 +219,33 @@
       unlistenPending = unlisten;
     });
     window.addEventListener("keydown", onKeydown, { capture: true });
+    removeFocus = installBodyFocus(() => bodyEl);
+    if (bodyEl !== undefined) {
+      imageInteraction = attachImageInteraction({
+        body: bodyEl,
+        isActive: () => content.status === "image",
+        getImage: () => imgEl,
+        getMode: () => imageZoomMode,
+        setMode: (mode) => (imageZoomMode = mode),
+      });
+    }
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", onKeydown, { capture: true });
     unlistenPending?.();
+    removeFocus?.();
+    imageInteraction?.dispose();
+    highlighter.dispose();
     if (content.status === "image") URL.revokeObjectURL(content.blobUrl);
   });
 </script>
 
 <!-- R-511 / R-913: the viewer follows the main window's theme; colours come from viewer-theme.css. -->
 <div class="viewer">
-  <header class="viewer-header">
+  <!-- R-500-3: a mouse press on the header must not take the keyboard focus away from the body. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <header class="viewer-header" onmousedown={(e) => e.preventDefault()}>
     <button onclick={() => void navigate("prev")} disabled={total <= 1}>◀ Prev</button>
     <span class="position">{hasFile ? `${currentIndex + 1} / ${total}` : ""}</span>
     <button onclick={() => void navigate("next")} disabled={total <= 1}>Next ▶</button>
@@ -202,10 +260,10 @@
     {:else if content.status === "text"}
       <span class="encoding">{content.payload.encoding}</span>
     {:else if content.status === "image"}
-      <button onclick={() => zoomImage("fit")}>Fit</button>
-      <button onclick={() => zoomImage("reset")}>100%</button>
-      <button onclick={() => zoomImage("200")}>200%</button>
-      <span class="zoom">{Math.round(currentImageScale() * 100)}%</span>
+      <button onclick={() => void imageInteraction?.applyOp("fit")}>Fit</button>
+      <button onclick={() => void imageInteraction?.applyOp("reset")}>100%</button>
+      <button onclick={() => void imageInteraction?.applyOp("200")}>200%</button>
+      <span class="zoom">{Math.round(imageScale * 100)}%</span>
     {/if}
     <button aria-label={COMMON.close} onclick={closeViewer}>✕</button>
   </header>
@@ -216,7 +274,8 @@
     {/if}
   {/if}
 
-  <div class="viewer-body" bind:this={bodyEl}>
+  <!-- R-500-8: focusable (tabindex -1) so the keys work as soon as the window opens; not a tab stop. -->
+  <div class="viewer-body" class:image={content.status === "image"} bind:this={bodyEl} tabindex="-1" role="document">
     {#if !hasFile && !fileTaken && content.status === "loading"}
       <p class="placeholder">{ROUTE_MESSAGES.viewerNoFile}</p>
     {:else if content.status === "loading"}
@@ -225,24 +284,19 @@
       <p class="placeholder error" role="alert">{content.message}</p>
     {:else if content.status === "unsupported"}
       <p class="placeholder">{formatViewerError("unsupported_kind")}</p>
-    {:else if content.status === "text"}
-      <pre class="text-view">{#each content.payload.content.split("\n") as line, i}<span class="line"><span class="lineno">{i + 1}</span>{line}</span>
-{/each}</pre>
+    {:else if codeText !== null}
+      <TextView
+        text={codeText}
+        lines={codeLines}
+        highlight={highlightChunks}
+        scale={content.status === "markdown" ? markdownZoom / 100 : 1}
+      />
     {:else if content.status === "markdown"}
-      {#if markdownMode === "html"}
-        <div class="markdown-html" style="font-size: {markdownZoom}%">{@html renderMarkdown(content.payload.content)}</div>
-      {:else}
-        <pre class="text-view" style="font-size: {markdownZoom}%">{#each content.payload.content.split("\n") as line, i}<span class="line"><span class="lineno">{i + 1}</span>{line}</span>
-{/each}</pre>
-      {/if}
+      <div class="markdown-html" bind:this={markdownEl} style="font-size: {markdownZoom}%">{@html renderMarkdown(content.payload.content)}</div>
     {:else if content.status === "image"}
-      <div class="image-view" class:fit={imageZoomMode === "fit"}>
-        <img
-          src={content.blobUrl}
-          alt={fileName}
-          style={imageZoomMode === "fit" ? "" : `transform: scale(${currentImageScale()});`}
-        />
-      </div>
+      {#key content.blobUrl}
+        <ImageView src={content.blobUrl} alt={fileName} mode={imageZoomMode} bind:img={imgEl} bind:scale={imageScale} />
+      {/key}
     {/if}
   </div>
 </div>
@@ -254,7 +308,7 @@
     height: 100vh;
     background: var(--vw-bg);
     color: var(--vw-fg);
-    font-family: sans-serif;
+    font-family: var(--vw-font);
   }
   .viewer-header {
     display: flex;
@@ -263,6 +317,11 @@
     padding: 0.25rem 0.5rem;
     background: var(--vw-header-bg);
     border-bottom: 1px solid var(--vw-border);
+    font-size: 13px;
+    user-select: none;
+  }
+  .viewer-header button {
+    font: inherit;
   }
   .filename {
     font-weight: bold;
@@ -284,39 +343,24 @@
     overflow: auto;
     padding: 0.5rem;
   }
+  .viewer-body:focus {
+    outline: none;
+  }
+  /* R-483-1: the image display has no padding, so both ends of the scroll range are reached exactly. */
+  .viewer-body.image {
+    padding: 0;
+  }
   .placeholder {
     color: var(--vw-muted);
   }
   .placeholder.error {
     color: var(--vw-error);
   }
-  .text-view {
-    white-space: pre;
-    font-family: "Consolas", "Courier New", monospace;
-    tab-size: 4;
-    margin: 0;
-  }
-  .line {
-    display: block;
-  }
-  .lineno {
-    display: inline-block;
-    width: 4em;
-    color: var(--vw-lineno);
-    user-select: none;
-  }
   .markdown-html {
     max-width: 60rem;
   }
-  .image-view {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-  }
-  .image-view.fit img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+  .markdown-html :global(code),
+  .markdown-html :global(pre) {
+    font-family: var(--vw-font-mono);
   }
 </style>

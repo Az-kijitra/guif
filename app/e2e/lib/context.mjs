@@ -391,6 +391,22 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     toggleTime: () => ctx.key("T", MOD.Ctrl | MOD.Shift, "KeyT"),
     toggleHidden: () => ctx.key("h", MOD.Ctrl, "KeyH"),
     del: () => ctx.key("Delete"),
+    // SPEC-0300-0020: F10 and the access keys (Alt + F / E / V / G). Through CDP (the OS path is specs/os-input.mjs).
+    f10: () => ctx.key("F10"),
+    home: () => ctx.key("Home"),
+    end: () => ctx.key("End"),
+    accessKey: (letter) => ctx.key(letter.toLowerCase(), MOD.Alt, `Key${letter.toUpperCase()}`),
+  };
+
+  /** Alt pressed and released with the keys of `between` (names handed to cdp.key) pressed in between; the same guard as ctx.key. */
+  ctx.altSequence = async (between = []) => {
+    await assertSafeToSend();
+    await cdp.keyDown("Alt", MOD.Alt, "AltLeft");
+    for (const k of between) {
+      await cdp.keyDown(k.key, MOD.Alt | (k.modifiers ?? 0), k.code);
+      await cdp.keyUp(k.key, MOD.Alt | (k.modifiers ?? 0), k.code);
+    }
+    await cdp.keyUp("Alt", 0, "AltLeft");
   };
 
   /** Go to a folder through the path bar (Ctrl+L, type, Enter) and wait for the listing. */

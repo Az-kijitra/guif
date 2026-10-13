@@ -4,22 +4,27 @@ import { BORDER_SIDES, borders, expectedBorders, openFiles, RGB } from "./_util.
 export const tests = [
   {
     id: "AC-900",
-    title: "bars/body stack in order, 2px outer margin, 3px gaps, no menu bar, page does not scroll",
+    title: "menu bar / path bar / body / status bar stack in order, 2px outer margin, 3px gaps (SPEC-0300-0020 AC-1300), page does not scroll",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100);
       await ctx.setViewport(1000, 700);
+      const menuBar = await ctx.m.rect(".app-shell > .menubar");
       const pathBar = await ctx.m.rect(".app-shell > .path-bar-row");
       const body = await ctx.m.rect(".app-shell > .body");
       const status = await ctx.m.rect(".app-shell > .status-bar");
-      t.ok(pathBar && body && status, "path bar, body and status bar exist");
-      t.ok(pathBar.top < body.top && body.top < status.top, "top increases: path bar < body < status bar");
-      t.approx(pathBar.top, 2, "path bar top");
+      t.ok(menuBar && pathBar && body && status, "menu bar, path bar, body and status bar exist");
+      t.ok(menuBar.top < pathBar.top && pathBar.top < body.top && body.top < status.top, "top increases: menu bar < path bar < body < status bar");
+      t.approx(menuBar.top, 2, "menu bar top");
+      t.approx(menuBar.left, 2, "menu bar left");
+      t.approx(menuBar.right, 998, "menu bar right");
+      t.approx(pathBar.top - menuBar.bottom, 3, "gap menu bar -> path bar");
       t.approx(pathBar.left, 2, "path bar left");
       t.approx(pathBar.right, 998, "path bar right");
       t.approx(status.bottom, 698, "status bar bottom");
       t.approx(body.top - pathBar.bottom, 3, "gap path bar -> body");
       t.approx(status.top - body.bottom, 3, "gap body -> status bar");
-      t.eq(await ctx.m.count('[role=menubar], [role=menu]:not(.sort-menu), header, nav, .menubar'), 0, "no menu bar element");
+      t.eq(await ctx.m.count('[role=menubar]'), 1, "exactly one menu bar element (role=menubar)");
+      t.eq(await ctx.m.count('[role=menu]'), 0, "no dropdown is open at the start");
       const doc = await ctx.ev(`({ sh: document.documentElement.scrollHeight, ch: document.documentElement.clientHeight, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth })`);
       t.eq(doc.sh, doc.ch, "document scrollHeight = clientHeight");
       t.eq(doc.sw, doc.cw, "document scrollWidth = clientWidth");

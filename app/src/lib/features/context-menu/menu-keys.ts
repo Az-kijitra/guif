@@ -1,5 +1,6 @@
 // SPEC-0300-0018 R-1080~R-1084 / SPEC-0200-0001 §3.9.5. Pure.
 
+import { firstEnabled, nextEnabled } from "$lib/shared/menu-navigation";
 import type { MenuEntry, MenuItemId } from "./menu-model";
 
 export interface MenuKeyEvent {
@@ -33,27 +34,16 @@ export function resolveContextMenuKey(event: MenuKeyEvent): MenuKeyIntent {
   }
 }
 
-function enabledIds(items: readonly MenuEntry[]): MenuItemId[] {
-  const ids: MenuItemId[] = [];
-  for (const e of items) if (e.type === "item" && e.enabled) ids.push(e.id);
-  return ids;
-}
-
 export function moveMenuHighlight(
   items: readonly MenuEntry[],
   current: MenuItemId | null,
   dir: "up" | "down",
 ): MenuItemId | null {
-  const ids = enabledIds(items);
-  if (ids.length === 0) return null;
-  const at = current === null ? -1 : ids.indexOf(current);
-  if (at === -1) return dir === "down" ? ids[0] : ids[ids.length - 1];
-  const next = dir === "down" ? (at + 1) % ids.length : (at - 1 + ids.length) % ids.length;
-  return ids[next];
+  return nextEnabled(items, current, dir, true);
 }
 
 export function resolveEnterTarget(items: readonly MenuEntry[], current: MenuItemId | null): MenuItemId | null {
-  const ids = enabledIds(items);
-  if (current !== null && ids.includes(current)) return current;
-  return ids.length > 0 ? ids[0] : null;
+  // `current` counts only when it is an enabled item of the list.
+  const isEnabled = items.some((e) => e.type === "item" && e.enabled && e.id === current);
+  return isEnabled ? current : firstEnabled(items);
 }

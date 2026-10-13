@@ -137,6 +137,15 @@ fn persist_current_geometry(window: &tauri::WebviewWindow, app: &AppHandle) {
     }
 }
 
+/// R-500-8 (SPEC-0200-0001 §3.14.3): bring the viewer window to the front AND hand the keyboard focus to its webview
+/// (the page then focuses its body element itself, see routes/viewer/focus-wiring.ts). `WebviewWindow::set_focus`
+/// only focuses the native window; `Webview::set_focus` is stable API (no `unstable` feature).
+fn focus_viewer(window: &tauri::WebviewWindow) {
+    let _ = window.set_focus();
+    let webview: &tauri::Webview = window.as_ref();
+    let _ = webview.set_focus();
+}
+
 /// R-421/MUST-76/82: creates the viewer window (if absent) or shows/focuses/
 /// switches the existing one. `title` is `ReflexViewer - <file name>` (R-423,
 /// set on the Rust side); `generation` is the window-generation this build is
@@ -152,7 +161,7 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
         if let Some(existing) = app.get_webview_window(VIEWER_WINDOW_LABEL) {
             let _ = existing.unminimize();
             let _ = existing.show();
-            let _ = existing.set_focus();
+            focus_viewer(&existing);
             let _ = existing.set_title(&title);
             return;
         }
@@ -196,7 +205,7 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
         window.on_window_event(move |event| handle_viewer_window_event(&app_for_events, generation, event));
         // R-422: apply saved geometry before the first paint (no flash).
         let _ = window.show();
-        let _ = window.set_focus();
+        focus_viewer(&window);
         // MUST-82 rule 3: `closing` is lowered only once the (re)build this
         // generation needed has actually completed -- a no-op when this
         // build was not itself a reopen (closing was already false).

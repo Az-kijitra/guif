@@ -1,6 +1,6 @@
 /*
- * SPEC-0300-0017 R-913 / R-913-1 / R-913-2 (Phase 12, dark theme), R-913-3 (6th edition: zero page
- * margin); SPEC-0300-0015 R-511; SPEC-0200-0001 §3.11.7.
+ * SPEC-0300-0017 R-913 / R-913-1 / R-913-1-1 / R-913-2 (Phase 12, dark theme), R-913-3 (6th edition: zero page
+ * margin), R-913-4 (fonts); SPEC-0300-0015 R-511; SPEC-0200-0001 §3.11.7, §3.14.
  *
  * Imported ONLY by routes/viewer/+page.svelte. The viewer is its own document and has its own palette:
  * `--vw-*` variables on `html` (light), overridden inside the dark `prefers-color-scheme` media query. The
@@ -19,6 +19,27 @@ html {
   --vw-muted: #666;
   --vw-error: #b00020;
   --vw-lineno: #666;
+  --vw-gutter-bg: #f0f0f0;
+  --vw-gutter-border: #d0d0d0;
+  /* R-913-1-1: highlight colours (GitHub light). Two are adjusted for contrast (>= 4.5:1, R-466-8):
+     built_in, official #e36209; addition text, official #22863a. */
+  --vw-hl-keyword: #d73a49;
+  --vw-hl-title: #6f42c1;
+  --vw-hl-constant: #005cc5;
+  --vw-hl-string: #032f62;
+  --vw-hl-builtin: #c24e00;
+  --vw-hl-comment: #6a737d;
+  --vw-hl-name: #22863a;
+  --vw-hl-section: #005cc5;
+  --vw-hl-bullet: #735c0f;
+  --vw-hl-addition-fg: #1e7f35;
+  --vw-hl-addition-bg: #f0fff4;
+  --vw-hl-deletion-fg: #b31d28;
+  --vw-hl-deletion-bg: #ffeef0;
+  /* R-913-4: the fonts. The values are the same as the main window's base and monospace fonts (kept equal by a
+     static test); they do not change with the theme, so they are not repeated in the dark block. */
+  --vw-font: "Segoe UI", "Meiryo", sans-serif;
+  --vw-font-mono: ui-monospace, "Cascadia Mono", "Consolas", "Menlo", "Monaco", "Courier New", monospace;
   color-scheme: light;
 }
 
@@ -32,7 +53,23 @@ html {
     --vw-banner-fg: #ffd866;
     --vw-muted: #999;
     --vw-error: #ff8080;
-    --vw-lineno: #777;
+    --vw-lineno: #8c8c8c;
+    --vw-gutter-bg: #252526;
+    --vw-gutter-border: #3a3a3a;
+    /* GitHub dark. One is adjusted for contrast: section, official #1f6feb. */
+    --vw-hl-keyword: #ff7b72;
+    --vw-hl-title: #d2a8ff;
+    --vw-hl-constant: #79c0ff;
+    --vw-hl-string: #a5d6ff;
+    --vw-hl-builtin: #ffa657;
+    --vw-hl-comment: #8b949e;
+    --vw-hl-name: #7ee787;
+    --vw-hl-section: #4a8cf7;
+    --vw-hl-bullet: #f2cc60;
+    --vw-hl-addition-fg: #aff5b4;
+    --vw-hl-addition-bg: #033a16;
+    --vw-hl-deletion-fg: #ffdcd7;
+    --vw-hl-deletion-bg: #67060c;
     color-scheme: dark;
   }
 }
@@ -42,4 +79,79 @@ html,
 body {
   margin: 0;
   background: var(--vw-bg);
+}
+
+/* R-466-7 / R-913-1-1: highlight.js token colours. The selectors keep the official stylesheet's compound form, so the
+   specificity is the same as the official one (no !important, no reliance on source order). Classes the official
+   stylesheet leaves unstyled inherit the body colour. */
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  color: var(--vw-hl-keyword);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  color: var(--vw-hl-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--vw-hl-constant);
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  color: var(--vw-hl-string);
+}
+.hljs-built_in,
+.hljs-symbol {
+  color: var(--vw-hl-builtin);
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  color: var(--vw-hl-comment);
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  color: var(--vw-hl-name);
+}
+.hljs-subst {
+  color: var(--vw-fg);
+}
+.hljs-section {
+  color: var(--vw-hl-section);
+  font-weight: bold;
+}
+.hljs-bullet {
+  color: var(--vw-hl-bullet);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+.hljs-addition {
+  color: var(--vw-hl-addition-fg);
+  background-color: var(--vw-hl-addition-bg);
+}
+.hljs-deletion {
+  color: var(--vw-hl-deletion-fg);
+  background-color: var(--vw-hl-deletion-bg);
 }

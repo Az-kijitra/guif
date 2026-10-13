@@ -20,7 +20,9 @@ export function exitOnly(action: string): boolean {
 }
 
 export interface BootstrapDeps {
-  keydown: MainKeydownWiringDeps;
+  keydown: Omit<MainKeydownWiringDeps, "menuBar">;
+  // SPEC-0300-0020 / SPEC-0300-0010 第16版 R-14-5: the menu bar's key entry points (active flag, onKey, onActivate).
+  menuBar?: MainKeydownWiringDeps["menuBar"];
   initialDirectory: InitialDirectoryDeps;
   focusContainer: () => void;
   // R-244/R-77-2-1: flushes both persistence coordinators.
@@ -32,7 +34,7 @@ export interface BootstrapDeps {
 }
 
 export async function runBootstrap(deps: BootstrapDeps): Promise<{ unlistenClose?: () => void }> {
-  const keydownHandler = createMainKeydownHandler(deps.keydown);
+  const keydownHandler = createMainKeydownHandler({ ...deps.keydown, menuBar: deps.menuBar });
   deps.onKeydownHandler(keydownHandler);
   attachGlobalKeydownListener(window, keydownHandler);
 

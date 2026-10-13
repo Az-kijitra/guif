@@ -93,7 +93,7 @@ describe("formatViewerError: invalid_path (R-447, SPEC-0200-0001 §3.12.6)", () 
   });
 });
 
-// SPEC-0300-0019 W-25 / W-55 / R-1221: the viewer wording (stage B; RED until stage C).
+// SPEC-0300-0019 W-25 / W-55 / R-1221: the viewer wording.
 describe("formatViewerError: SPEC-0300-0019 wording (W-25 / W-55)", () => {
   it("W-25: not_a_file says `フォルダーは表示できません。`", () => {
     expect(formatViewerError("not_a_file")).toBe("フォルダーは表示できません。");

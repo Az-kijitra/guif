@@ -88,12 +88,17 @@ const ZIP_ACTIONS = new Set(["zip_create", "zip_extract"]);
 // history/go_parent -- keeps working as usual).
 const TREE_FOCUS_BLOCKED_ACTIONS = new Set([...FILE_OP_ACTIONS, ...ZIP_ACTIONS]);
 
+// SPEC-0300-0020 R-1340-1: where the call comes from. The key-only suppression (R-14-14 / R-15-1) does not apply to the menu.
+export interface ListActionOptions {
+  source?: "key" | "menu";
+}
+
 export function createListActionHandler<E extends EntryLike>(deps: ListActionDeps<E>) {
-  return function onListAction(action: string | null, event: { shiftKey: boolean }): boolean {
+  return function onListAction(action: string | null, event: { shiftKey: boolean }, opts?: ListActionOptions): boolean {
     if (action === null) return false;
 
-    // R-14-14: consumed but a no-op while the tree has focus.
-    if ((deps.isTreeFocused?.() ?? false) && TREE_FOCUS_BLOCKED_ACTIONS.has(action)) return true;
+    // R-14-14: consumed but a no-op while the tree has focus (keys only; the menu skips this guard, R-1340-1).
+    if (opts?.source !== "menu" && (deps.isTreeFocused?.() ?? false) && TREE_FOCUS_BLOCKED_ACTIONS.has(action)) return true;
 
     // SPEC-0300-0011 R-14: file operations are not navigation (R-208/R-209),
     // so afterUserNavigation is never involved.

@@ -17,12 +17,19 @@ export const VIEWER_LOOK = `(() => {
     overflow: [cs(document.documentElement).overflowX, cs(document.documentElement).overflowY, cs(document.body).overflowX, cs(document.body).overflowY],
     htmlScheme: cs(document.documentElement).colorScheme,
     rootColor: cs(root).color, rootFont: cs(root).fontFamily,
+    // R-913-4 (SPEC-0300-0017 8th edition): the viewer's own font variables (the --ui-* ones stay undefined)
+    vwFont: cs(document.documentElement).getPropertyValue('--vw-font').trim(),
+    vwFontMono: cs(document.documentElement).getPropertyValue('--vw-font-mono').trim(),
     uiBg: cs(document.documentElement).getPropertyValue('--ui-bg'),
     rowHeight: cs(document.documentElement).getPropertyValue('--list-row-height'),
     uiVars: ['--ui-bg','--ui-fg','--ui-surface','--ui-border','--ui-focused','--ui-error'].map((n) => cs(document.documentElement).getPropertyValue(n)).filter((v) => v !== ''),
     prefersDark: matchMedia('(prefers-color-scheme: dark)').matches,
   };
 })()`;
+
+/** `"Segoe UI", Meiryo, sans-serif` whatever quoting the engine prints. */
+export const VIEWER_FONT = "Segoe UI, Meiryo, sans-serif";
+export const unquoteFonts = (value) => String(value).replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
 
 export const tests = [
   {
@@ -39,7 +46,7 @@ export const tests = [
       try {
         // The content must appear (not just the frame): a one-off "No file selected" was seen once.
         if (!(await waitViewerShows(t, viewer, "note.txt", "text", { contains: "viewer content line one" }))) return;
-        const body = await viewer.ev(`document.querySelector('.viewer-body .text-view')?.textContent ?? ''`);
+        const body = await viewer.ev(`document.querySelector('.viewer-body .code')?.textContent ?? ''`);
         t.ok(body.includes("viewer content line one") && body.includes("second line"), "the viewer body shows the file's text", JSON.stringify(body.slice(0, 80)));
         t.eq(await viewer.ev(`!!document.querySelector('.viewer-body .placeholder')`), false, "no placeholder is left in the body");
 
@@ -51,7 +58,9 @@ export const tests = [
         t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
         t.eq(s.htmlScheme, "light", "html color-scheme (R-913-2)");
         t.eq(s.rootColor, "rgb(17, 17, 17)", "viewer text colour");
-        t.eq(s.rootFont, "sans-serif", "viewer root font-family");
+        t.eq(unquoteFonts(s.rootFont), VIEWER_FONT, "viewer root font-family is --vw-font (R-913-4)");
+        t.ok(unquoteFonts(s.vwFont) === VIEWER_FONT, "--vw-font is defined in the viewer", s.vwFont);
+        t.ok(s.vwFontMono.startsWith("ui-monospace"), "--vw-font-mono is defined in the viewer and starts with ui-monospace", s.vwFontMono);
         t.eq(s.uiBg, "", "--ui-bg is not defined in the viewer (app.css is not loaded)");
         t.eq(s.rowHeight, "", "--list-row-height is not defined in the viewer");
         t.eq(s.uiVars, [], "none of the R-911 variables is defined in the viewer");
@@ -70,7 +79,7 @@ export const tests = [
 /** R-913-1 as getComputedStyle prints it. */
 export const VIEWER_PALETTE = {
   light: { header: "rgb(240, 240, 240)", border: "rgb(208, 208, 208)", bannerBg: "rgb(255, 244, 206)", bannerFg: "rgb(92, 68, 0)", error: "rgb(176, 0, 32)", lineno: "rgb(102, 102, 102)" },
-  dark: { header: "rgb(42, 42, 42)", border: "rgb(68, 68, 68)", bannerBg: "rgb(74, 59, 0)", bannerFg: "rgb(255, 216, 102)", error: "rgb(255, 128, 128)", lineno: "rgb(119, 119, 119)" },
+  dark: { header: "rgb(42, 42, 42)", border: "rgb(68, 68, 68)", bannerBg: "rgb(74, 59, 0)", bannerFg: "rgb(255, 216, 102)", error: "rgb(255, 128, 128)", lineno: "rgb(140, 140, 140)" },
 };
 
 const SIZE_OVER_LIMIT = 2.5 * 1024 * 1024; // "2 MiB を超える" -> the truncation banner
@@ -99,7 +108,7 @@ export async function checkViewerPalette(t, ctx, p) {
     // The viewer now holds the 3-file list; delete c-gone.txt (inside the test folder only) so reaching it is an error.
     fs.rmSync(ctx.fx.at(name, "c-gone.txt"), { force: true });
     t.eq(await look(".viewer-header", ["background-color", "border-bottom-color"]), [p.header, p.border], "header background / bottom border");
-    t.eq((await look(".viewer-body .lineno", ["color"]))?.[0], p.lineno, "line number colour");
+    t.eq((await look(".viewer-body .gutter", ["color"]))?.[0], p.lineno, "line number colour");
 
     // the viewer's own Next button moves through the list the main window handed over (c-gone.txt is in it)
     const next = () => viewer.ev(`(() => { const b = [...document.querySelectorAll('.viewer-header button')].find((x) => x.textContent.includes('Next')); if (!b || b.disabled) return false; b.click(); return true; })()`);

@@ -34,6 +34,8 @@
   import { createFocusedPathView, createTabStopController, resolveCurrentStop } from "./focus-wiring";
   import { createMainContextMenu } from "./context-menu-main.svelte";
   import ContextMenuHost from "./_components/ContextMenuHost.svelte";
+  import MenuBar from "$lib/features/menu-bar/MenuBar.svelte";
+  import { createMenuBarWiring } from "./menu-bar-wiring.svelte";
   import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
   import { createMainViewerOpenController } from "./viewer-open-wiring";
   import { createRowInteractionHandlers } from "./row-interaction-wiring";
@@ -210,6 +212,12 @@
     untrack(() => contextMenu.onCurrentPathChange(path)); // R-1056: a changed directory closes the menu.
   });
 
+  // SPEC-0300-0020: menu bar; calls the same handlers as the keys (with source "menu") on the file list's targets.
+  const menuBar = createMenuBarWiring({
+    fileList: fileListState, filteredEntries: () => filteredEntries, focusedPath, clipboard, focus, search: searchState,
+    overlays: [modalHost, navigationHistoryState, sortMenuState, contextMenu.state], pathEditing: () => pathBar.state.editing, isTreeFocused, onListAction,
+  });
+
   const { handleModalKey } = createModalWiring({
     modal: modalHost,
     history: navigationHistoryState,
@@ -226,6 +234,7 @@
     history: navigationHistoryState,
     sortMenu: sortMenuState,
     contextMenu: contextMenu.state,
+    menuBar: menuBar.view,
     modal: modalHost,
     pathEditing: () => pathBar.state.editing,
     filteredEntries: () => filteredEntries,
@@ -233,12 +242,8 @@
 
   onMount(() => {
     void bootstrap();
-    const detachStatus = status.attach(document, window);
-    const detachMenu = contextMenu.attach(document, window);
-    return () => {
-      detachStatus();
-      detachMenu();
-    };
+    const detach = [status.attach(document, window), contextMenu.attach(document, window), menuBar.attach(window)];
+    return () => detach.forEach((d) => d());
   });
 
   // §3.6.2/§3.6.11.11: startup notices are concatenated (config -> ui-state ->
@@ -254,6 +259,7 @@
     ready = true;
 
     const boot = await runBootstrap({
+      menuBar: menuBar.keys,
       keydown: {
         isTreeFocused,
         customOverrides: () => keymapState.customOverrides,
@@ -300,10 +306,11 @@
 </script>
 
 <!-- §3.3.2: inert while a modal shows (<ModalHost> is outside <main>). R-10-11: path bar -> body
-     -> status bar, no menu bar (SPEC-0100-0005 R-08). R-901/R-913: <main> is always rendered
+     -> status bar; the menu bar is the first child (SPEC-0300-0020 R-1300). R-901/R-913: <main> is always rendered
      (document rules apply from the first paint); its body is gated on `ready` (SHOULD-120). -->
 <main class="app-shell ui-root" inert={modalHost.isOpen}>
   {#if ready}
+    <MenuBar view={menuBar.view} actions={menuBar.actions} />
     <PathBar
       text={pathBar.state.text}
       bind:inputEl={pathBarInputEl}

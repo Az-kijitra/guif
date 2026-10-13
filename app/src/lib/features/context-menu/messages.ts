@@ -22,7 +22,7 @@ export const MENU_ITEM_LABELS = {
 // Disabled reasons (R-1040).
 export const MENU_REASONS = {
   oneOnly: "1件だけ選択してください",
-  folder: "フォルダーには使えません", // W-25
+  folder: SHARED_SENTENCES.folderNotAllowed, // W-25
   notZip: SHARED_SENTENCES.notZipFile,
   clipboardEmpty: "クリップボードが空です",
 } as const;

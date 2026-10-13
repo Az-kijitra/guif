@@ -138,7 +138,7 @@ const VIEWER_KIND_SELECTOR = {
   text: ".viewer-body .text-view",
   error: ".viewer-body .placeholder.error",
   markdown: ".viewer-body .markdown-html, .viewer-body .text-view",
-  image: ".viewer-body .image-view img",
+  image: ".viewer-body .image-stage img",
 };
 
 /**
@@ -152,7 +152,7 @@ export async function waitViewerShows(t, viewer, fileName, kind, { timeout = 200
     const name = document.querySelector('.viewer .filename')?.textContent ?? null;
     const placeholder = document.querySelector('.viewer-body .placeholder')?.textContent ?? null;
     const pos = document.querySelector('.viewer .position')?.textContent ?? null;
-    const text = document.querySelector('.viewer-body')?.textContent ?? '';
+    const text = (document.querySelector('.viewer-body .code') ?? document.querySelector('.viewer-body'))?.textContent ?? '';
     return { text, pos, name, shown: !!document.querySelector(${JSON.stringify(selector)}), placeholder };
   })()`;
   const deadline = Date.now() + timeout;

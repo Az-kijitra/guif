@@ -26,6 +26,7 @@ export const REGION_NAMES = {
   search: "検索", // W-02
   tree: "ツリー",
   list: "一覧",
+  menuBar: "メニュー", // W-89
   none: "なし",
 } as const;
 
@@ -48,6 +49,9 @@ export const SHARED_SENTENCES = {
   noSelection: "選択がありません",
   notZipFile: "ZIPファイルではありません",
   extractOneAtATime: "展開は1件ずつ指定してください",
+  renameOneAtATime: "名前の変更は1件ずつ行えます", // SPEC-0300-0020 R-1320 (shared with the menu bar)
+  noPasteItems: "貼り付ける項目がありません",
+  folderNotAllowed: "フォルダーには使えません", // W-25
 } as const;
 
 // W-25: the file-operation error-code table (read by `translateErrorCode` in shared/error-text.ts).

@@ -7,7 +7,7 @@ export { sleep };
 // Windows virtual-key codes for the keys the tests press.
 const VK = {
   Tab: 9, Enter: 13, Escape: 27, Backspace: 8, Delete: 46, Space: 32,
-  F5: 116, PageUp: 33, PageDown: 34, End: 35, Home: 36,
+  F5: 116, F10: 121, Shift: 16, Control: 17, Alt: 18, PageUp: 33, PageDown: 34, End: 35, Home: 36,
   ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
 };
 // Modifier bits of Input.dispatchKeyEvent.
@@ -33,6 +33,12 @@ export class Cdp {
       cdp.#ws.onerror = () => reject(new Error("CDP WebSocket error"));
     });
     cdp.#ws.onmessage = (event) => cdp.#onMessage(JSON.parse(event.data));
+    cdp.#ws.onclose = () => {
+      for (const [id, { reject }] of cdp.#pending) {
+        cdp.#pending.delete(id);
+        reject(new Error("CDP socket closed (the page was closed or crashed)"));
+      }
+    };
     await cdp.send("Runtime.enable");
     await cdp.send("Page.enable");
     return cdp;
@@ -60,11 +66,33 @@ export class Cdp {
     return errors;
   }
 
-  send(method, params = {}) {
+  /**
+   * A request that gets no answer (a page that crashed, froze or was closed on purpose) must not hang the whole run:
+   * it is rejected after `timeoutMs` (default 120 s), and every pending request is rejected when the socket closes.
+   */
+  send(method, params = {}, timeoutMs = 120000) {
     const id = ++this.#nextId;
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
-      this.#ws.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        if (this.#pending.delete(id)) reject(new Error(`CDP ${method} got no answer within ${timeoutMs} ms (the page is gone or frozen)`));
+      }, timeoutMs);
+      this.#pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      try {
+        this.#ws.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.#pending.delete(id);
+        reject(error);
+      }
     });
   }
 
@@ -94,6 +122,29 @@ export class Cdp {
     else if (key.length === 1 && !(modifiers & (MOD.Ctrl | MOD.Alt | MOD.Meta))) down.text = key;
     await this.send("Input.dispatchKeyEvent", down);
     await this.send("Input.dispatchKeyEvent", { ...down, type: "keyUp", text: undefined });
+  }
+
+  /** Only the keyDown half (a modifier held while other keys follow, e.g. Alt, Ctrl+Alt+Z). Pair it with keyUp. */
+  async keyDown(key, modifiers = 0, code) {
+    const event = {
+      type: "keyDown",
+      key,
+      code: code ?? key,
+      windowsVirtualKeyCode: VK[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : undefined),
+      modifiers,
+    };
+    await this.send("Input.dispatchKeyEvent", event);
+  }
+
+  async keyUp(key, modifiers = 0, code) {
+    const event = {
+      type: "keyUp",
+      key,
+      code: code ?? key,
+      windowsVirtualKeyCode: VK[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : undefined),
+      modifiers,
+    };
+    await this.send("Input.dispatchKeyEvent", event);
   }
 
   type(text) {

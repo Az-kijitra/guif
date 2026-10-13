@@ -19,6 +19,35 @@
 | 2026-10-07 | 未採番(SPEC-0300-0011 第9版 / 0016 第4版 / 0009 第14版 / 0013 第6版 / 0014 第5版 / 0015 第6版、絶対パス検査の二重防御・ISS-0204〜0206) | PASS(フロント・バック・E2E) | 以下「## 2026-10-07 絶対パス検査の二重防御」セクション参照 | unit-test-writer → code-generator → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
 | 2026-10-08 | 未採番(SPEC-0300-0017 第6版、ISS-0203 (b)(c)(d)) | PASS(フロント・E2E) | 以下「## 2026-10-08 ISS-0203 の片付け」セクション参照 | オーケストレーター(調査・実装・実アプリ確認) → spec-writer / spec-reviewer(第6版) |
 | 2026-10-09 | 未採番(SPEC-0300-0019 第1版 画面文言の日本語統一、SPEC-0300-0009 第16版 空の一覧の「項目なし」ほか関連7本、ISS-0176 / 0207〜0210) | PASS(フロント・バック・E2E) | 以下「## 2026-10-09 画面文言の日本語統一」セクション参照 | code-generator(段階 A / C) → unit-test-writer(段階 B) → code-reviewer(PR作成可) → test-automation-engineer → オーケストレーター |
+| 2026-10-13 | 未採番(Phase 13 単体。SPEC-0300-0020 第1版 / 0015 第10版 / 0017 第8版 / 0019 第2版 / 0009 第17版 / 0010 第16版 / 0012 第7版 / 0013 第8版 / 0014 第7版 / SPEC-0400-0001 第5版) | PASS(vitest 165 ファイル / 3550 件、cargo test --lib 1050 件、svelte-check 0 エラー〈警告 6、既存 a11y〉) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\tasks\a1ec42cddc4384825.output`(21:28 時点。以下「## 2026-10-13 Phase 13」セクション参照) | オーケストレーター(実行・確認)。unit-test-writer → code-generator → code-reviewer の経緯は同セクション |
+| 2026-10-13 | 未採番(Phase 13 E2E 1回目。R-08 を含む) | 199 PASS / 1 FAIL / 12 SKIP(R-08 PASS) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\e2e-1013.txt`(20:40。末尾に集計と SKIP 一覧) | オーケストレーター(実行) |
+| 2026-10-13 | AC-1321(E2E 1回目の FAIL) | FAIL(`コピー: expected "Ctrl+Insert", got "Ctrl+C"`)。仕様の例を承認後の追補で `Ctrl+Shift+C,Ctrl+C` に訂正(ISS-0215 (1)) | `e2e-1013.txt`(同上の FAIL 行) | オーケストレーター |
+| 2026-10-13 | 未採番(Phase 13 E2E 2回目。修正後の全体実行) | 183 PASS / 0 FAIL / 30 SKIP(EXIT 0) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\tasks\afc11c8f677b2f1f5.output`(21:17。集計行はバイト位置 2321173 付近) | E2E 担当(サブエージェント) |
+| 2026-10-13 | AC-1321(E2E 2回目) | 同じ証跡内に PASS 行あり(`PASS  AC-1321 ... Ctrl+Shift+C`)。2回目の集計は FAIL 0 件 | `afc11c8f677b2f1f5.output`(バイト位置 2257770 付近。集計行〈183 件〉との個別の対応は未確認) | E2E 担当 |
+| 2026-10-13 | AC-520 の CDP 側(ビューアのフォーカス・Enter 後 1 秒以内) | PASS(1回目。2回目の個別の結果は証跡の抜粋から確認できなかった) | `e2e-1013.txt`(PASS 行) | オーケストレーター |
+| 2026-10-13 | AC-520-os(OS 入力で ↓ を押し本文が 72px 動く) | NOT_RUN(OS 入力の E2E は無効。`REFLEXFILES_E2E_OS_INPUT` 未設定。1回目・2回目とも SKIP) | `e2e-1013.txt`(SKIP 行)、`afc11c8f677b2f1f5.output`(SKIP 2 件の内訳) | 未実施(発注者の了承待ち。チェックリスト VWR-01) |
+| 2026-10-13 | AC-520(後半: メインを前面にして再利用したとき、OS のキーでスクロール) | NOT_RUN([目視]) | なし(目視項目) | 未実施(チェックリスト VWR-02) |
+| 2026-10-13 | AC-1348(OS 入力: F10 → → ↓、Alt+F、Esc。Alt 単独を含む) | NOT_RUN(OS 入力。1回目・2回目とも SKIP。Alt 単独は未実装〈保留〉) | `e2e-1013.txt`(SKIP 行)、`afc11c8f677b2f1f5.output`(SKIP 2 件の内訳) | 未実施(発注者の了承待ち。チェックリスト MBR-14、MBR-13) |
+| 2026-10-13 | AC-1341(Alt 単独で「ファイル」を強調する部分) | NOT_RUN(Alt 単独は未実装〈保留〉)。同じ AC の Ctrl+Alt+Z の部分は PASS | `e2e-1013.txt`(`PASS  AC-1341 Ctrl+Alt+Z ...`)、`afc11c8f677b2f1f5.output`(PASS 行) | 未実施(保留。ISS-0212 (1)、チェックリスト MBR-13) |
+| 2026-10-13 | AC-1365(R-1395 ユーザーマニュアル、[目視]) | NOT_RUN | なし(目視項目) | 未実施(チェックリスト MBR-17) |
+| 2026-10-13 | AC-942-title / AC-927-1 / AC-945-shrink / AC-946-restore / AC-931 / AC-1027 / AC-1040 / AC-1041 / AC-1042 / AC-06-8(1回目の SKIP のうち、上記以外の 10 件) | NOT_RUN(理由は各 SKIP 行のとおり: [目視]、[単体]で担保、リストの再読込が無い、ウィンドウのタイトルバーに CDP で届かない、等) | `e2e-1013.txt`(SKIP 一覧) | 未実施(目視・単体扱い) |
+| 2026-10-13 | 2回目の SKIP 30 件のうち、クリップボード系 20 件 | NOT_RUN(ユーザーの OS クリップボードが復元不能な形式のため。個別の AC の一覧は証跡の抜粋から確定できなかった) | `afc11c8f677b2f1f5.output`(集計 `30 skipped`)。1回目では同系統が PASS(例: `PASS  AC-04`、`PASS  AC-1051`、`PASS  AC-1311`〈`e2e-1013.txt`〉) | 環境起因(E2E 担当の報告) |
+| 2026-10-13 | 2回目の SKIP 30 件のうち、目視・単体扱い 8 件 | NOT_RUN(個別の AC の一覧は証跡の抜粋から確定できなかった) | `afc11c8f677b2f1f5.output`(集計 `30 skipped`) | 未実施(目視・単体扱い) |
+| 2026-10-13 | 1,000,000 文字のファイルを開く時間(release ビルド、チェックリスト PRF-01) | NOT_RUN(release 未計測)。dev 計測の初回は約 28 秒(オーケストレーター計測。計測出力の保存先は本台帳の作成時点で特定できなかった) | なし(本台帳作成時点で証跡ファイル未特定。ISS-0216 に記録) | 未実施 |
+
+## 2026-10-13 Phase 13 メニューバー・ビューアのキー・スクロール・見た目・シンタックスハイライト・Fit の拡大 テスト実行結果
+
+- 対象: SPEC-0300-0020 第1版(メニューバー)、SPEC-0300-0015 第8版〜第10版(ビューア。第9版: Fit の拡大・上限 800%、第10版: 最長の行が 10,000 文字を超えるファイルは色分けしない)、SPEC-0300-0017 第8版、SPEC-0300-0019 第2版、SPEC-0300-0009 第17版、SPEC-0300-0010 第16版、SPEC-0300-0012 第7版、SPEC-0300-0013 第8版、SPEC-0300-0014 第7版、SPEC-0400-0001 第5版(OS キー入力 E2E の仕様)。
+- 手動確認チェックリスト: `tests/manual/phase13-menu-viewer-checklist.md`(2026-10-13 作成。全項目 未実施)。
+- **単体**: vitest 165 ファイル / 3550 件すべて成功(`Test Files 165 passed (165)`、`Tests 3550 passed (3550)`。OS キー入力ヘルパーのテストを含む)。cargo test --lib 1050 件成功(0 failed)。svelte-check 694 ファイル 0 エラー・警告 6(既存 a11y)。証跡: `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\tasks\a1ec42cddc4384825.output`。
+- **静的計測(wc -l、2026-10-13)**: `app/src/routes/+page.svelte` 388 行、`app/src/routes/viewer/+page.svelte` 366 行(上限 400 行)。
+- **E2E 1回目**(`npm run e2e` 相当、`scratchpad/e2e-1013.txt`): 199 PASS / 1 FAIL / 12 SKIP、R-08 PASS。FAIL は AC-1321 のみ(例の `Ctrl+Insert` が、キーマップの認めるキー名に無い。`keymap-validate.ts` が上書きを捨てるため)。この FAIL の後、仕様の例を `Ctrl+Shift+C,Ctrl+C` に訂正した(SPEC-0300-0020 AC-1321 の承認後の追補、ISS-0215 (1))。
+- **E2E 2回目**(修正後の全体実行、`tasks/afc11c8f677b2f1f5.output`): 183 PASS / 0 FAIL / 30 SKIP(EXIT 0)。SKIP の内訳は E2E 担当の報告による: クリップボード系 20 件(ユーザーの OS クリップボードが復元不能な形式)、OS キー入力 2 件(AC-1348 / AC-520-os。`REFLEXFILES_E2E_OS_INPUT` 未設定)、目視・単体扱い 8 件。
+- 件数の差(1回目 212 件 / 2回目 213 件)の理由は、この台帳では判定しない。1回目で PASS だったクリップボード系(例: AC-04、AC-1051、AC-1311)が 2回目の SKIP 20 件に含まれるかは、2回目の個別の一覧が証跡から確定できないため確認していない(上の表の 2 行を参照)。
+- **code-reviewer**(レビュー報告の記録。判定は人間): PR作成可(MUST なし)。SHOULD 3 件(Fit の安全網の CSS 削除、+page.svelte の行数、ハイライト Worker の cancel)と MINOR は修正済み(オーケストレーターの報告)。
+- **観察(テストの判定ではない。ISS-0216 に記録)**: 1,000,000 文字のスクリプト風ファイルを、テストが書いた直後に初めてビューアで開くと、dev ビルドで約 28 秒かかった(250k 約 1.8 秒 / 500k 約 7.2 秒 / 1M 約 28.2 秒。時間は文字数の 2 乗に比例)。アプリ側の処理は decode 9 ms、転送 0.3 秒、表示と色付け約 1.5 秒。同じファイルの 2 回目は約 3 ms。署名の無いプロセスが新しいファイルを開くときのウイルス対策のスキャンと推定(未確認)。計測の出力は本台帳の作成時点で証跡ファイルを特定できなかった(オーケストレーターの報告による)。
+- **保留(テストとして未実行)**: Alt 単独でのメニュー起動と、Windows のメニュー モードへの対策(案 A、`win_keymenu.rs` は未作成、REQUIRES_HUMAN_APPROVAL)は、実機スパイク後の人間判断待ち(ISS-0212 (1)、SPEC-0300-0020 R-1350-3)。OS キー入力の E2E(AC-520-os / AC-1348)は発注者の了承待ち。
+- **未実施**: チェックリスト `tests/manual/phase13-menu-viewer-checklist.md` の全項目(MBR-01〜17、VWR-01〜08、HL-01〜06、PRF-01)。release ビルドでの計測(AC-527 の 1,000,000 文字の時間、PRF-01)。リリース判定は人間が行う。
 
 ## 2026-10-09 画面文言の日本語統一(SPEC-0300-0019 第1版、SPEC-0300-0009 第16版ほか)テスト実行結果
 

@@ -3,12 +3,12 @@
 // Pure strings and pure templates only; which message to show is decided by the caller.
 // Imports only `$lib/shared/messages`.
 
-import { COMMON, OPERATION_NAMES } from "$lib/shared/messages";
+import { COMMON, OPERATION_NAMES, SHARED_SENTENCES } from "$lib/shared/messages";
 
 export const FILE_OPS_MESSAGES = {
   busy: "別のファイル操作を実行中です",
   blankName: "名前を入力してください",
-  noPasteItems: "貼り付ける項目がありません",
+  noPasteItems: SHARED_SENTENCES.noPasteItems,
 
   // conflict dialog (paste)
   conflictTitle: "同じ名前の項目があります",
@@ -35,7 +35,7 @@ export const FILE_OPS_MESSAGES = {
   deleteTrashButton: "削除する",
 
   // rename
-  renameOneAtATime: "名前の変更は1件ずつ行えます",
+  renameOneAtATime: SHARED_SENTENCES.renameOneAtATime,
   renameTitle: OPERATION_NAMES.rename,
   renameNameLabel: COMMON.name,
   renameSubmit: "変更", // W-15

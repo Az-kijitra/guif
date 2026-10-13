@@ -21,6 +21,17 @@ export default defineConfig({
       "@tauri-apps/api/window",
       "@tauri-apps/api/path",
       "markdown-it",
+      // Only the highlight Worker imports these, so without them the first highlighted file would make the dev server
+      // discover them late and reload the page (MUST-138, same cause as ISS-0203 (b)).
+      "highlight.js/lib/core",
+      "highlight.js/lib/languages/c",
+      "highlight.js/lib/languages/cpp",
+      "highlight.js/lib/languages/rust",
+      "highlight.js/lib/languages/javascript",
+      "highlight.js/lib/languages/typescript",
+      "highlight.js/lib/languages/python",
+      "highlight.js/lib/languages/json",
+      "highlight.js/lib/languages/markdown",
     ],
   },
   server: {
