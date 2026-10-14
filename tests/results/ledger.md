@@ -45,6 +45,25 @@
 | 2026-10-14 | AC-1345 の Alt 単独の部分 | PASS(E2E 3回目の全体実行に含まれる。個別の行は未確認) | 上の E2E 3回目の証跡 | E2E 担当 |
 | 2026-10-14 | AC-1348(起動直後の前面化の部分。OS 入力) | FAIL(2026-10-14 の前回実行〈`scratchpad\os-1348.txt`〉。再実行していない) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\os-1348.txt`(19:39) | 前回と同じ。残る [目視](チェックリスト MBR-14) |
 | 2026-10-14 | AC-1348 / AC-1341 の Alt 単独(プローブ2回目。OS 入力) | 観測 2回目: Alt 単独で「ファイル」が強調、OS のメニュー モードに入らない、もう一度の Alt で一覧へ戻る、続く ↓ で a.txt → b.txt。矩形は全ステップで 182,182,1198,921 のまま(前回の一時的な変化は再現せず)。Alt+Space ではシステム メニューが開き〈GUI_INMENUMODE / SYSTEMMENUMODE = true〉、その時点で前面がシステム メニューに移ったためプローブが停止し、続く Esc は送られなかった | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\keymenu2.txt`(19:59。`tests/results/evidence/2026-10-14/keymenu2.txt` にもコピー済み。`result: STOPPED`) | 発注者の目視: 「Alt 単独で『ファイル』が強調され、もう一度で戻った」 |
+| 2026-10-14 | 未採番(release ビルドでの起動・表示。PRF-01 / AC-527 の計測、ISS-0216) | PASS(起動〜ファイル一覧 0.72 秒。1,000,000 文字の a.ts を開く: 書いた直後に読み込み中を経て約 6.2 秒以内に本文と色分け。2回目は約 2.1 秒以内) | 証跡ファイルなし(オーケストレーターの実行出力はセッション内。計測スクリプトは `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\release-check.mjs` / `release-check2.mjs` / `release-check3.mjs`〈未保存の出力〉) | オーケストレーター(実行・確認) |
+| 2026-10-14 | 未採番(release ビルドでの小さなファイル・250,000 文字) | 250,000 文字: 本文 4.8 秒、色付き 5.6 秒。小さい .rs: 本文 0.5 秒、色付き 0.7 秒(hljs-keyword / title function_ / number / comment の色付きを確認) | 同上(証跡ファイルなし) | オーケストレーター |
+| 2026-10-14 | 未採番(release ビルドのテスト中の設定フォルダの扱い) | 確認: 本物の設定フォルダ %APPDATA%\dev.reflexfiles.successor の 3 ファイル(navigation.toml / ui-state.toml / viewer-window.toml)は、確認後に退避した内容で上書きし、sha256 が 3 件とも一致(更新日時のみ変化)。viewer-window.toml.tmp が残っていたので削除 | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\cfg-backup.sha256`(退避時の sha256。20:12) | 発注者の承認のもとオーケストレーター。次回起動時の .tmp の扱いは未確認(ISS-0216 に記録) |
+
+## 2026-10-14 release ビルドでの確認(PRF-01 / AC-527 の計測、ISS-0216)
+
+- ビルド: `npx tauri build --no-bundle`(インストーラーは作らない)で `target/release/reflexfiles-successor.exe` を作成。1 分 58 秒、成功(オーケストレーターの報告)。
+- 操作: CDP でパスバーの移動と Enter / Esc のみ。ファイル操作なし。release 版はテスト用の安全機能(設定フォルダの差し替え・操作範囲の制限)が無効のため、本物の設定フォルダを使った。発注者の承認のもとで実施。
+- 設定フォルダの扱い: 事前に退避し sha256 を記録。確認後、退避した内容で上書きし、3 ファイルの sha256 が一致(更新日時のみ変化)。アプリを強制終了した影響で `viewer-window.toml.tmp` が残っていたので削除(原子的書き込みの途中で終了した一時ファイル。次回起動時の扱いは未確認)。
+- 結果:
+  - 起動からファイル一覧表示まで 0.72 秒。メニューバーあり、`html lang="ja"`。
+  - 書いた直後の 1,000,000 文字の `a.ts` を Enter で開く: 「読み込み中…」を経て、約 6.2 秒以内に本文 1,000,000 文字と色分けを確認。2 秒間隔のポーリングで、4.2 秒時点は読み込み中、6.2 秒時点で表示・色付き済み。
+  - 同じファイルの 2 回目: 約 2.1 秒以内に表示・色付き。
+  - 書いた直後の 250,000 文字: 本文 4.8 秒、色付き 5.6 秒。
+  - 小さい `.rs`: 本文 0.5 秒、色付き 0.7 秒(hljs-keyword / title function_ / number / comment)。
+- 比較: ISS-0216 の dev 計測(書いた直後の 1,000,000 文字で約 28 秒)より大幅に短い。debug の未最適化 Rust と、署名の無いプロセスの新規ファイル読み込みのスキャンの組み合わせと推定(原因は断定しない)。数秒の初回遅延は残る。
+- 注意: 当初の確認スクリプトで 1,000,000 文字が 180 秒のタイムアウトに見えたのは、スクリプトの待ち条件と接続先(about:blank のターゲット)の誤りで、アプリの問題ではなかった(オーケストレーターの報告)。
+- 証跡の注記: オーケストレーターの実行出力はセッション内にあり、本台帳の作成時点でファイルとして保存されていない。計測スクリプト(`scratchpad\release-check*.mjs`)は一時領域にある。
+- 未実施: 署名付き配布での再確認(ISS-0216)。release の PRF-01 の (ii)(作成から 20 秒以上後)と (iii)(2 回目)は、今回の 2 回目の値のみ記録。
 
 ## 2026-10-14 追記(Alt 単独の実装、プローブ2回目、E2E 3回目)
 
