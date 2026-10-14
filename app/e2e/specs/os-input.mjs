@@ -8,7 +8,6 @@
 // brings a window to the front: if the app did not get the foreground by itself the test FAILS (R-12-4), it is not skipped.
 //
 // Not driven here:
-//   * Alt pressed and released alone (AC-1348 (i)): the assignment is on hold (SPEC-0300-0020 R-1350-3 3).
 //   * That the system menu really opens for Alt+Space, and the AC-520 "main window in front, then the viewer is reused"
 //     half: both need a window the test may not bring to the front -> [目視] (listed in the report notes).
 
@@ -51,7 +50,7 @@ const windowRect = (ctx) => ctx.ev(`({ x: window.screenX, y: window.screenY, w: 
 const scenarioTests = [
   {
     id: "AC-1348",
-    title: "[OS input] right after the start: F10 then Right, Down opens 編集; Alt+F opens ファイル with the first enabled item lit; no system menu, the window does not move; Esc returns to the list (Alt alone: on hold)",
+    title: "[OS input] right after the start: F10 then Right, Down opens 編集; Alt+F opens ファイル with the first enabled item lit; no system menu, the window does not move; Esc returns to the list; Alt alone then Down opens ファイル",
     async run(t, ctx) {
       // the page is NOT reloaded and nothing is brought to the front: the app has to be in front by itself
       await prepMenu(ctx, "osk"); // shows a fixture folder (the same safety rule as every spec); no OS input yet
@@ -60,8 +59,28 @@ const scenarioTests = [
       const rect0 = await windowRect(ctx);
       await guard(ctx);
 
+      // (i) Alt alone (pressed and released), then Down
+      await guard(ctx);
+      let ok = sent(t, "(i) Alt alone", await sendKeys(s.target, ["AltTap"], s.deps), ["AltTap"]);
+      if (!ok) return; // the foreground was not the app: stop here (FAIL, never SKIP)
+      await sleep(250);
+      let st = await barState(ctx);
+      t.eq([st.current, st.hasDropdown], [0, false], "(i) Alt alone lit ファイル without a dropdown (the OS did not enter its menu mode)");
+      await guard(ctx);
+      ok = sent(t, "(i) Down", await sendKeys(s.target, ["ArrowDown"], s.deps), ["ArrowDown"]);
+      if (!ok) return;
+      await waitDropdown(ctx);
+      st = await barState(ctx);
+      const first0 = items(await dropdown(ctx)).find((e) => e.enabled)?.label ?? null;
+      t.eq([st.open, st.highlight], [0, first0], "(i) the ファイル dropdown is open with the first enabled item lit");
+      await guard(ctx);
+      ok = sent(t, "(i) Esc", await sendKeys(s.target, ["Escape"], s.deps), ["Escape"]);
+      if (!ok) return;
+      await sleep(250);
+      t.eq(await statusFocus(ctx), "フォーカス: 一覧", "(i) Esc: the focus is back on the list");
+
       // (ii) F10, Right, Down
-      let ok = sent(t, "(ii) F10", await sendKeys(s.target, ["F10"], s.deps), ["F10"]);
+      ok = sent(t, "(ii) F10", await sendKeys(s.target, ["F10"], s.deps), ["F10"]);
       if (!ok) return; // the foreground was not the app: stop here (FAIL, never SKIP)
       await sleep(250);
       t.eq((await barState(ctx)).current, 0, "(ii) F10 lit ファイル (the OS did not take the key)");
@@ -104,7 +123,7 @@ const scenarioTests = [
 
       const rect1 = await windowRect(ctx);
       t.eq(rect1, rect0, "the window position and size did not change");
-      t.note("(i) Alt 単独 → ↓ は保留(R-1350-3 3)のため送らない。Alt+Space でシステムメニューが開くことの確認は [目視]");
+      t.note("Alt+Space でシステムメニューが開くことの確認は [目視]");
     },
   },
   {

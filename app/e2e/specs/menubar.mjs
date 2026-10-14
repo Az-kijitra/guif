@@ -8,8 +8,7 @@
 // runs a copy or a cut does it inside ctx.withClipboardGuard.
 //
 // Not driven here (kept visible as notes in the report):
-//   * Alt pressed and released alone (R-1350 2; AC-1341 first half, AC-1345 Alt part): the assignment is on hold
-//     (R-1350-3 3), the activation predicate is F10 and Alt + F/E/V/G only. The CDP checks for it are skipped, not faked.
+//   * (Alt pressed and released alone is covered: AC-1341-alt and the Alt part of AC-1345 / AC-92.)
 //   * IME composition (AC-92 (vi)): cannot be produced through Input.dispatchKeyEvent; it is a unit test (AC-1347).
 //   * Ctrl+Q ends the app and `exit = "Q"` does not: specs/menubar-keymap.mjs (its own app start with that key map).
 
@@ -23,7 +22,6 @@ import {
   MENU_STYLE_PROBE, statusText, waitActive, waitDialog, waitDropdown, waitInactive, waitNoDropdown,
 } from "./_menu.mjs";
 
-const ALT_ONLY_NOTE = "Alt 単独(R-1350 の 2)は保留(R-1350-3 の 3)のため、この確認は行わない";
 const dlgOpen = (ctx) => ctx.ev(`!!document.querySelector('[role=dialog]')`);
 const wait = (ctx, expr, label) => ctx.waitFor(expr, { label });
 
@@ -531,7 +529,7 @@ export const tests = [
   },
   {
     id: "AC-1341",
-    title: "Ctrl+Alt+Z (Alt down, other key, Alt up) does not activate the bar and opens the zip dialog; (Alt alone: on hold, not checked)",
+    title: "Ctrl+Alt+Z (Alt down, other key, Alt up) does not activate the bar and opens the zip dialog (Alt alone: AC-1341-alt)",
     async run(t, ctx) {
       await prepMenu(ctx);
       await focusRowByName(ctx, "a.txt");
@@ -539,7 +537,60 @@ export const tests = [
       await waitDialog(ctx, "the zip create dialog");
       t.eq((await barState(ctx)).current, -1, "the menu bar did not become active");
       await closeDialog(ctx);
-      t.note(ALT_ONLY_NOTE);
+    },
+  },
+  {
+    id: "AC-1341-alt",
+    title: "Alt pressed and released alone activates the bar (list and tree) and a second Alt alone closes it and returns the focus; another key, a modifier key, Ctrl held first, or a mouse press in between does not activate",
+    async run(t, ctx) {
+      await prepMenu(ctx);
+      await focusRowByName(ctx, "a.txt");
+      const rowBefore = await focusedName(ctx);
+      for (const [label, toTree, back] of [["list", false, "フォーカス: 一覧"], ["tree", true, "フォーカス: ツリー"]]) {
+        await ctx.focusList();
+        if (toTree) {
+          await ctx.press.tab();
+          await ctx.settle(150);
+        }
+        t.eq(await statusFocus(ctx), back, `${label}: the start focus`);
+        await ctx.altSequence([]);
+        await waitActive(ctx);
+        let s = await barState(ctx);
+        t.eq([s.current, s.hasDropdown, s.activeIsHeading, s.focus], [0, false, true, "フォーカス: メニュー"], `${label}: Alt alone lights ファイル, no dropdown, the heading has the focus, status フォーカス: メニュー`);
+        await ctx.altSequence([]);
+        await waitInactive(ctx);
+        t.eq(await statusFocus(ctx), back, `${label}: a second Alt alone closes the bar and returns the focus`);
+      }
+      t.eq(await focusedName(ctx), rowBefore, "the focus row is unchanged");
+      // with a dropdown open, Alt alone also closes
+      await ctx.focusList();
+      await openByKeys(ctx, 0);
+      await ctx.altSequence([]);
+      await waitInactive(ctx);
+      t.eq(await statusFocus(ctx), "フォーカス: 一覧", "Alt alone with a dropdown open closes everything and returns the focus");
+      // not an Alt-alone press
+      const notActive = async (label) => {
+        await ctx.settle(250);
+        t.eq((await barState(ctx)).current, -1, `${label}: the bar did not become active`);
+      };
+      await ctx.altSequence([{ key: "a", code: "KeyA" }]);
+      await notActive("another key between Alt down and up");
+      const cdp = ctx.cdp;
+      await cdp.keyDown("Alt", MOD.Alt, "AltLeft");
+      await cdp.keyDown("Shift", MOD.Alt | MOD.Shift, "ShiftLeft");
+      await cdp.keyUp("Shift", MOD.Alt, "ShiftLeft");
+      await cdp.keyUp("Alt", 0, "AltLeft");
+      await notActive("a modifier key between Alt down and up");
+      await cdp.keyDown("Control", MOD.Ctrl, "ControlLeft");
+      await cdp.keyDown("Alt", MOD.Ctrl | MOD.Alt, "AltLeft");
+      await cdp.keyUp("Alt", MOD.Ctrl, "AltLeft");
+      await cdp.keyUp("Control", 0, "ControlLeft");
+      await notActive("Ctrl held first, then Alt alone");
+      await cdp.keyDown("Alt", MOD.Alt, "AltLeft");
+      const c = await ctx.m.center(row("b.txt"));
+      await ctx.click(c.x, c.y, { modifiers: MOD.Alt });
+      await cdp.keyUp("Alt", 0, "AltLeft");
+      await notActive("a mouse press between Alt down and up");
     },
   },
   {
@@ -642,11 +693,18 @@ export const tests = [
     title: "F10 does not activate the bar over a delete dialog, the history list, the sort menu, a right-click menu or while the path is edited; their own key handling stays (AC-92, R-1365)",
     async run(t, ctx) {
       await prepMenu(ctx);
+      const activeElement = () => ctx.ev(`(() => { const a = document.activeElement; return a ? a.tagName + '.' + (a.className || '') + '#' + (a.id || '') : null; })()`);
       const inactive = async (label) => {
+        const focusBefore = await activeElement();
         await ctx.press.f10();
         await ctx.settle(200);
-        const s = await barState(ctx);
+        let s = await barState(ctx);
         t.eq([s.current, s.hasDropdown], [-1, false], `${label}: F10 does not activate the menu bar`);
+        await ctx.altSequence([]); // Alt pressed and released alone
+        await ctx.settle(200);
+        s = await barState(ctx);
+        t.eq([s.current, s.hasDropdown], [-1, false], `${label}: Alt alone does not activate the menu bar`);
+        t.eq(await activeElement(), focusBefore, `${label}: the keyboard focus did not move (the default action is unchanged)`);
       };
       // (i) delete confirmation
       await selectRows(ctx, ["a.txt"]);
@@ -689,7 +747,6 @@ export const tests = [
       t.eq((await ctx.pathBarState()).focused, true, "the path bar is still being edited");
       await ctx.press.escape();
       await ctx.settle(100);
-      t.note(ALT_ONLY_NOTE);
     },
   },
   {
@@ -947,7 +1004,6 @@ export const tests = [
       await waitDialog(ctx, "the zip create dialog");
       t.eq((await barState(ctx)).current, -1, "Ctrl+Alt+Z did not activate the bar");
       await closeDialog(ctx);
-      t.note(ALT_ONLY_NOTE);
     },
   },
   {

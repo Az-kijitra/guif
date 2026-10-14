@@ -186,6 +186,22 @@ public static class RfOs {
     if (gi.hwndActive != fg) return 0;
     return fg.ToInt64();
   }
+  // Read-only: GUI_INMENUMODE (0x4) / GUI_SYSTEMMENUMODE (0x8) of the foreground thread: "flags activeHwnd menuOwnerHwnd".
+  public static string GuiState() {
+    IntPtr fg = GetForegroundWindow();
+    if (fg == IntPtr.Zero) return "0 0 0";
+    uint pid;
+    uint tid = GetWindowThreadProcessId(fg, out pid);
+    GUITHREADINFO gi = new GUITHREADINFO();
+    gi.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+    if (!GetGUIThreadInfo(tid, ref gi)) return "0 0 0";
+    return gi.flags + " " + gi.hwndActive.ToInt64() + " " + gi.hwndMenuOwner.ToInt64();
+  }
+  public static string RectOf(long hwnd) {
+    RECT r;
+    if (!GetWindowRect(new IntPtr(hwnd), out r)) return "0 0 0 0";
+    return r.l + " " + r.t + " " + r.r + " " + r.b;
+  }
   public static long ForegroundPid() {
     IntPtr fg = GetForegroundWindow();
     if (fg == IntPtr.Zero) return 0;
@@ -252,6 +268,8 @@ while ($true) {
     switch ($p[0]) {
       'fg' { $out = [RfOs]::Foreground().ToString() + ' ' + [RfOs]::ForegroundPid().ToString() }
       'mods' { $out = [RfOs]::Modifiers() }
+      'gui' { $out = [RfOs]::GuiState() }
+      'rect' { $out = [RfOs]::RectOf([int64]$p[1]) }
       'windows' { $out = [RfOs]::Windows([uint32]$p[1]) }
       'send' { $out = [RfOs]::Send([int64]$p[1], $p[2]) }
       'procs' { $out = ConvertTo-Json -InputObject @(Get-CimInstance Win32_Process | ForEach-Object { @{ pid = [int]$_.ProcessId; ppid = [int]$_.ParentProcessId; exe = $_.ExecutablePath } }) -Compress }
@@ -398,6 +416,13 @@ export async function openSession({ rootPid, appDir, profile = "debug" }) {
         const [hwnd, fgPid] = (await worker.request("fg")).split(" ").map(Number);
         return { hwnd, pid: fgPid };
       },
+      /** Read-only: { flags, inMenuMode, inSystemMenuMode, active, menuOwner } of the foreground thread. */
+      guiState: async () => {
+        const [flags, active, menuOwner] = (await worker.request("gui")).split(" ").map(Number);
+        return { flags, inMenuMode: (flags & 0x4) !== 0, inSystemMenuMode: (flags & 0x8) !== 0, active, menuOwner };
+      },
+      /** Read-only: the window rectangle [left, top, right, bottom]. */
+      rect: async (hwnd) => (await worker.request(`rect ${hwnd}`)).split(" ").map(Number),
       close: () => worker.close(),
     };
   } catch (error) {

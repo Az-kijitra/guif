@@ -150,3 +150,57 @@ export function reduceMenuBarKey(state: MenuBarKeyState, event: MenuBarKeyEvent)
   if (index >= 0) return openMenuAt(index);
   return state.openMenu === null ? reduceHeadingLevel(state, event) : reduceDropdown(state, event);
 }
+
+// R-1350 2 / R-1351: the Alt-alone key (a keyup after a keydown with nothing in between) toggles the bar: activate when inactive,
+// deactivate (one press) when active.
+export function reduceAltAlone(state: MenuBarKeyState): MenuBarKeyResult {
+  if (state.active) return result(INACTIVE_STATE, { kind: "deactivate" });
+  return result({ active: true, headingIndex: 0, openMenu: null, highlightId: null, entries: [] }, { kind: "activate" });
+}
+
+export interface AltTrackerEvent {
+  key: string;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  metaKey?: boolean;
+  isComposing?: boolean;
+  keyCode?: number;
+}
+
+export interface AltTracker {
+  onKeyDown(event: AltTrackerEvent): void;
+  // true exactly when this keyup of Alt completes an "Alt alone" press.
+  onKeyUp(event: AltTrackerEvent): boolean;
+  onPointerDown(): void;
+  // The window lost the focus: forget a press whose keyup will never arrive.
+  reset(): void;
+}
+
+// SPEC-0200-0001 §3.14.12-9: a press is tracked only when ctrl / shift / meta are all false at Alt's keydown; any other keydown or a
+// mouse press while Alt is down cancels it; Alt's own repeats (and the other Alt) are ignored; IME composition never counts.
+export function createAltTracker(): AltTracker {
+  let phase: "idle" | "tracking" | "cancelled" = "idle";
+  const ime = (e: AltTrackerEvent): boolean => e.isComposing === true || e.keyCode === 229;
+  return {
+    onKeyDown(e): void {
+      if (e.key === "Alt") {
+        if (phase !== "idle") return;
+        phase = e.ctrlKey || e.shiftKey || e.metaKey || ime(e) ? "cancelled" : "tracking";
+        return;
+      }
+      if (phase !== "idle") phase = "cancelled";
+    },
+    onKeyUp(e): boolean {
+      if (e.key !== "Alt") return false;
+      const completed = phase === "tracking" && !ime(e);
+      phase = "idle";
+      return completed;
+    },
+    onPointerDown(): void {
+      if (phase !== "idle") phase = "cancelled";
+    },
+    reset(): void {
+      phase = "idle";
+    },
+  };
+}

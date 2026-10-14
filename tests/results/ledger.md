@@ -34,6 +34,38 @@
 | 2026-10-13 | 2回目の SKIP 30 件のうち、クリップボード系 20 件 | NOT_RUN(ユーザーの OS クリップボードが復元不能な形式のため。個別の AC の一覧は証跡の抜粋から確定できなかった) | `afc11c8f677b2f1f5.output`(集計 `30 skipped`)。1回目では同系統が PASS(例: `PASS  AC-04`、`PASS  AC-1051`、`PASS  AC-1311`〈`e2e-1013.txt`〉) | 環境起因(E2E 担当の報告) |
 | 2026-10-13 | 2回目の SKIP 30 件のうち、目視・単体扱い 8 件 | NOT_RUN(個別の AC の一覧は証跡の抜粋から確定できなかった) | `afc11c8f677b2f1f5.output`(集計 `30 skipped`) | 未実施(目視・単体扱い) |
 | 2026-10-13 | 1,000,000 文字のファイルを開く時間(release ビルド、チェックリスト PRF-01) | NOT_RUN(release 未計測)。dev 計測の初回は約 28 秒(オーケストレーター計測。計測出力の保存先は本台帳の作成時点で特定できなかった) | なし(本台帳作成時点で証跡ファイル未特定。ISS-0216 に記録) | 未実施 |
+| 2026-10-14 | AC-520-os(OS 入力。Enter〔CDP〕で開いたビューアが自分で前面になり、OS の ↓ で本文が 72px 動く) | PASS(R-08 PASS) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\os-520.txt`(19:30。`REFLEXFILES_E2E_OS_INPUT=1 npm run e2e -- --filter AC-520-os`) | 発注者の了承のもと オーケストレーターが実行・確認。「メインを前面にして再利用」側は [目視] のまま(チェックリスト VWR-02) |
+| 2026-10-14 | AC-1348(OS 入力。起動直後に F10 → → ↓ / Alt+F / Esc) | FAIL(起動直後にメインウィンドウが前面にならず、前面は別ウィンドウ 0x80424。安全策どおりキーは1つも送られなかった〈entries: expected ["F10"], got []〉。R-08 PASS) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\os-1348.txt`(19:29。`--filter AC-1348`) | 同上。推定(未確認): テストを背景プロセス〈VS Code から起動〉で起動したため、Windows の前面ロックで前面を取れなかった |
+| 2026-10-14 | AC-1348 の F10 / Alt+F の部分(プローブによる観測。テスト ID の結果ではない) | 観測: PASS 相当(発注者がタイトルバーを1回クリックして前面にした後のプローブ。F10 → → ↓ で「編集」が開き「切り取り」が強調、Esc で一覧へ戻る。Alt+F で「ファイル」が開き先頭の有効項目「開く」が強調、Esc で戻る。OS のメニュー モードに入らない〈GUI_INMENUMODE / SYSTEMMENUMODE とも false〉) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\keymenu.txt`(19:35。スクリプト `app/e2e/keymenu-probe.mjs`〈未コミット〉) | 発注者 + オーケストレーター |
+| 2026-10-14 | AC-1341 の Alt 単独 / AC-1348 の Alt 単独(プローブ (c)・(d)・(e)) | 観測のみ(保留・Alt 単独は未実装): Alt 単独で OS のメニュー モードに入らず、続く ↓ が WebView に届き一覧のフォーカス行が a.txt → b.txt に動いた。Alt+Space → Esc で閉じ、400ms 後もシステム メニュー状態は false。押しっぱなしの修飾キーは無し | `keymenu.txt`(同上) | 保留(ISS-0217 (b)。Alt 単独の実装後に再確認) |
+| 2026-10-14 | 同上の (c) 直後のウィンドウ矩形(ウィンドウ移動の疑い) | 観測: ↓ の直後に矩形が 208,208,1224,947 → 226,207,1242,946 に変わり、Esc×2 の後に元に戻った。原因は不明。発注者は画面を見ておらず目視では未確認 | `keymenu.txt`(矩形の列) | 未確認(ISS-0217 (b)) |
+| 2026-10-14 | 未採番(Phase 13 単体、Alt 単独の実装後。SPEC-0300-0020 第1版ほか) | PASS(vitest 167 ファイル / 3572 件〈3572 passed を確認〉、svelte-check 0 エラー、cargo test --lib 1050 件〈オーケストレーターの報告。cargo と svelte-check の出力は証跡ファイルと照合できず〉) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\tasks\a6bc10a3e6f327c9c.output`(20:00。vitest の集計 `3572 passed`) | オーケストレーター(実行・確認) |
+| 2026-10-14 | 未採番(Phase 13 E2E 3回目〈Alt 単独の実装後〉。AC-1341-alt と AC-1345 の Alt 単独を追加) | 202 PASS / 0 FAIL / 12 SKIP | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\tasks\a6bc10a3e6f327c9c.output`(20:00。集計行 `202 passed, 0 failed, 12 skipped`) | E2E 担当(サブエージェント)。オーケストレーターが集計行を確認 |
+| 2026-10-14 | AC-1341-alt(Alt 単独で「ファイル」が強調され、もう一度の Alt で非アクティブ) | PASS(E2E 3回目の全体実行に含まれる。個別の行は証跡の抜粋で未確認) | 上の E2E 3回目の証跡(集計行)。`e2e/specs/menubar.mjs` の AC-1341-alt | E2E 担当 |
+| 2026-10-14 | AC-1345 の Alt 単独の部分 | PASS(E2E 3回目の全体実行に含まれる。個別の行は未確認) | 上の E2E 3回目の証跡 | E2E 担当 |
+| 2026-10-14 | AC-1348(起動直後の前面化の部分。OS 入力) | FAIL(2026-10-14 の前回実行〈`scratchpad\os-1348.txt`〉。再実行していない) | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\os-1348.txt`(19:39) | 前回と同じ。残る [目視](チェックリスト MBR-14) |
+| 2026-10-14 | AC-1348 / AC-1341 の Alt 単独(プローブ2回目。OS 入力) | 観測 2回目: Alt 単独で「ファイル」が強調、OS のメニュー モードに入らない、もう一度の Alt で一覧へ戻る、続く ↓ で a.txt → b.txt。矩形は全ステップで 182,182,1198,921 のまま(前回の一時的な変化は再現せず)。Alt+Space ではシステム メニューが開き〈GUI_INMENUMODE / SYSTEMMENUMODE = true〉、その時点で前面がシステム メニューに移ったためプローブが停止し、続く Esc は送られなかった | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\keymenu2.txt`(19:59。`tests/results/evidence/2026-10-14/keymenu2.txt` にもコピー済み。`result: STOPPED`) | 発注者の目視: 「Alt 単独で『ファイル』が強調され、もう一度で戻った」 |
+
+## 2026-10-14 追記(Alt 単独の実装、プローブ2回目、E2E 3回目)
+
+- **Alt 単独でのメニューバーのアクティブ化を実装**(オーケストレーターの報告)。SPEC-0300-0020 R-1350-3 の条件どおりで、案 A(`win_keymenu.rs`、unsafe)は不要。実機スパイクで OS のメニュー モードに入らないことを確認したため。人間判断は不要と、オーケストレーターが確認。実装ファイル: `app/src/lib/features/keyboard/menubar-activation.ts`、`app/src/lib/features/menu-bar/alt-tracker.test.ts` ほか(`app/src-tauri/src/shared/win_keymenu.rs` は作成されていない)。
+- 単体(オーケストレーターの実行): vitest 167 ファイル / 3572 件、svelte-check 0 エラー、cargo test 1050 件。
+- E2E 3回目(全体、Alt 単独の実装後): 202 PASS / 0 FAIL / 12 SKIP。新たに AC-1341-alt と AC-1345 の Alt 単独を追加。
+- プローブ2回目(`app/e2e/keymenu-probe.mjs`、OS キー入力。発注者がタイトルバーを 1 回クリックして前面にした後): (a) F10 → 強調、→ ↓ で「切り取り」、Esc で一覧へ。 (b) Alt+F →「開く」が強調、Esc で戻る。 (c) Alt 単独で「ファイル」が強調し OS のメニュー モードに入らない。もう一度の Alt 単独で非アクティブ化し一覧へ。続く ↓ で a.txt → b.txt。 矩形は全ステップで 182,182,1198,921 のまま(前回 2026-10-14 の一時的な変化は再現せず)。 (d) Alt+Space ではシステム メニューが開いた(仕様どおり OS に任せる)。その時点で前面がシステム メニューに移ったためプローブが安全策で停止し、続く Esc は送られなかった。アプリはプローブ終了時に正常終了。 修飾キーの押しっぱなし無し。R-08 不変。
+- 発注者の目視: 「Alt 単独で『ファイル』が強調され、もう一度で戻った」。
+- **残る [目視]**: (1) 通常起動で自分で前面になるか(AC-1348 の起動直後の前面化、VWR-02 と同じく発注者の目視)。(2) メインを前面にしてビューアを再利用したときのキー(AC-520 の後半)。
+- 注意: 前回の AC-1348 は FAIL のまま。再実行していない。AC-1348 の F10 / Alt+F / Alt 単独の部分は、プローブ2回の観測で動作を確認した(テスト ID の結果ではない)。
+- 注意: 実行結果の証跡は `tasks/a6bc10a3e6f327c9c.output`(vitest の 3572 件と E2E の 202 件を含む)。cargo test の 1050 件と svelte-check の 0 エラーは、オーケストレーターの報告で、証跡ファイルとは照合していない。
+
+## 2026-10-14 OS キー入力の実機確認(AC-520-os / AC-1348、SPEC-0400-0001 R-12)
+
+- 実施: 発注者の了承のもと、オーケストレーターが実行・結果を確認(2026-10-14)。画面とキーボードを使う。`REFLEXFILES_E2E_OS_INPUT=1` を設定して実行。
+- **AC-520-os: PASS**(`scratchpad/os-520.txt`、2 件 PASS / 0 FAIL。R-08 PASS)。ただしメインを前面にしてからビューアを再利用する側は [目視] のままで、テストは行っていない(チェックリスト VWR-02 は未実施)。
+- **AC-1348: FAIL**(`scratchpad/os-1348.txt`、1 PASS〈R-08〉/ 1 FAIL)。起動直後にメインウィンドウが前面にならず、前面は別ウィンドウ(0x80424)だった。安全策どおり、キーは 1 つも送られていない。テストを背景プロセス(VS Code から起動)で起動したため、Windows の前面ロックが掛かったと推定(未確認)。通常の起動で自分で前面になるかは [目視] に回す(チェックリスト MBR-14)。
+- **プローブ(`app/e2e/keymenu-probe.mjs`、未コミット。発注者がテスト用アプリのタイトルバーを 1 回クリックして前面にした後に実行。`scratchpad/keymenu.txt`)**: 上の表の観測 (a)〜(e) のとおり。F10 / Alt+F の部分はキー入力で期待どおりに動いた。Alt 単独は現状未実装で、OS のメニュー モードに入らなかった。Alt 単独の後の ↓ の直後に、ウィンドウ矩形が一時的に 18px ずれた(原因不明。目視未確認)。
+- **SPEC-0300-0020 R-1350-3 のスパイク結論(オーケストレーターの結論。本台帳では採否を確認していない)**: Alt 単独で OS のメニュー モードに入らないため、WebView 側で処理できる見込み。案 A(unsafe)は不要の見込み。ISS-0212 (1) の人間判断の扱いは ISS-0217 に記録。
+- 結果の件数: AC-520-os 1 PASS(0 FAIL)、AC-1348 0 PASS / 1 FAIL(テスト)、R-08 は 2 回とも PASS。
+- **未実施(前回からの継続)**: 通常の起動での前面化(MBR-14)、「メインを前面にして再利用」(VWR-02)、Alt 単独の挙動の目視(MBR-13)、ウィンドウ矩形の変化の目視再確認。
 
 ## 2026-10-13 Phase 13 メニューバー・ビューアのキー・スクロール・見た目・シンタックスハイライト・Fit の拡大 テスト実行結果
 

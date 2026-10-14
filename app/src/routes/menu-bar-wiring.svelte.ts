@@ -3,8 +3,9 @@
 // targets, check states, clipboard), records / restores the focus, and delegates the execution to the existing handlers
 // (routes/menu-bar-exec.ts). All dependencies are injected; `attach` is the only part that touches the DOM.
 //
-// ON HOLD (after the real-machine spike and the client's decision): Alt-alone activation (keyup tracker) and anything that depends on
-// the Rust-side plan A. F10 and the access keys (Alt+F/E/V/G) are implemented here.
+// Activation: F10 and Alt+F/E/V/G arrive through the key dispatch (keys.onActivate); Alt ALONE (a keyup after a clean keydown) is tracked by
+// the window listeners in `attach` (SPEC-0200-0001 §3.14.12-9). The real-machine spike (2026-10-14) showed that preventDefault is enough
+// to keep Windows out of its menu mode, so no Rust-side plan A is needed. The Alt / F10 preventDefault lives ONLY in those listeners.
 
 import { untrack } from "svelte";
 import { isZipFileName } from "$lib/features/archive/target-rules";
@@ -12,7 +13,15 @@ import { buildPathsClipboardText, COPY_PATH_FAILED, formatCopyPathStatus } from 
 import { shouldSwallowAfterOutsideClose } from "$lib/features/context-menu/outside-click-shield";
 import type { MenuBarActivationKind } from "$lib/features/keyboard/menubar-activation";
 import type { KeydownLikeEvent } from "$lib/features/keyboard/keymap-resolve";
-import { INACTIVE_STATE, MENU_ORDER, reduceMenuBarKey, type MenuBarKeyResult, type MenuBarKeyState } from "$lib/features/menu-bar/menu-bar-keys";
+import {
+  createAltTracker,
+  INACTIVE_STATE,
+  MENU_ORDER,
+  reduceAltAlone,
+  reduceMenuBarKey,
+  type MenuBarKeyResult,
+  type MenuBarKeyState,
+} from "$lib/features/menu-bar/menu-bar-keys";
 import type { MenuBarActions, MenuBarView } from "$lib/features/menu-bar/menu-bar-view";
 import { buildMenuBar, type BarEntry, type BarInput, type ItemId, type MenuId } from "$lib/features/menu-bar/menu-model";
 import { firstEnabled } from "$lib/shared/menu-navigation";
@@ -303,6 +312,25 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
     keys,
     // The only DOM-touching part: window subscriptions. Returns the unsubscribe.
     attach(win: Window): () => void {
+      const tracker = createAltTracker();
+      // R-1350-1: not while an overlay is shown or the path bar is being edited.
+      const canActivate = (): boolean => !isOverlayOpen() && !deps.pathEditing();
+      const suppressible = (): boolean => keyState.active || canActivate();
+      const onKeyDown = (e: KeyboardEvent): void => {
+        tracker.onKeyDown(e);
+        const f10 = e.key === "F10" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey;
+        if ((e.key === "Alt" || f10) && !e.isComposing && suppressible()) e.preventDefault(); // R-1350: no default action of Alt / F10
+      };
+      const onKeyUp = (e: KeyboardEvent): void => {
+        const alone = tracker.onKeyUp(e);
+        if (e.key !== "Alt") return;
+        if (!suppressible()) return;
+        if (!e.isComposing) e.preventDefault();
+        if (!alone) return;
+        if (!keyState.active) captureOrigin();
+        apply(reduceAltAlone(keyState)); // inactive: activate; active: deactivate (R-1351)
+      };
+      const onPointerDown = (): void => tracker.onPointerDown();
       let closedAt: { time: number; x: number; y: number } | null = null;
       let swallowUntil = 0;
       const insideBar = (t: EventTarget | null): boolean => (t as Element | null)?.closest?.("[data-menubar]") != null;
@@ -335,18 +363,28 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
       const onCloseTrigger = (): void => {
         if (keyState.active) deactivate(true);
       };
+      const onBlur = (): void => {
+        tracker.reset();
+        onCloseTrigger();
+      };
       const GESTURE = ["mouseup", "click", "auxclick", "dblclick", "contextmenu"] as const;
+      win.addEventListener("keydown", onKeyDown, true);
+      win.addEventListener("keyup", onKeyUp, true);
+      win.addEventListener("pointerdown", onPointerDown, true);
       win.addEventListener("mousedown", onMouseDown, true);
       for (const t of GESTURE) win.addEventListener(t, onGesture, true);
       win.addEventListener("wheel", onWheel, { capture: true, passive: false });
       win.addEventListener("resize", onCloseTrigger);
-      win.addEventListener("blur", onCloseTrigger);
+      win.addEventListener("blur", onBlur);
       return () => {
+        win.removeEventListener("keydown", onKeyDown, true);
+        win.removeEventListener("keyup", onKeyUp, true);
+        win.removeEventListener("pointerdown", onPointerDown, true);
         win.removeEventListener("mousedown", onMouseDown, true);
         for (const t of GESTURE) win.removeEventListener(t, onGesture, true);
         win.removeEventListener("wheel", onWheel, true);
         win.removeEventListener("resize", onCloseTrigger);
-        win.removeEventListener("blur", onCloseTrigger);
+        win.removeEventListener("blur", onBlur);
       };
     },
   };

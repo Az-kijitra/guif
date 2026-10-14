@@ -1,0 +1,28 @@
+[probe] config override folder: C:\Users\toshi\AppData\Local\Temp\rf-e2e-cfg-hmvpvq
+(node:5380) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[probe] verified: the app reports the override folder C:\Users\toshi\AppData\Local\Temp\rf-e2e-cfg-hmvpvq
+[probe] verified: the backend limits file operations to \\?\C:\Users\toshi\AppData\Local\Temp\rf-e2e-S7ETKq
+
+アプリのウィンドウ(タイトル ReflexFiles)のタイトルバーを1回クリックして、その後は触らないでください。
+(最大 120 秒待ちます。前面になるまでキーは1つも送りません)
+[probe] アプリのウィンドウが前面になりました。2 秒待ってから開始します(その間も触らないでください)。
+
+step | sent | bar active | open menu | lit item | status | row focus | activeElement | OS menu mode | OS sysmenu | rect
+start | - | no | - | - | フォーカス: 一覧 | a.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(a1) F10 | F10 | yes(0) | - | - | フォーカス: メニュー | a.txt | BUTTON.heading s-uPqysdycpsGk current keyfocus[menuitem] | false | false | 208,208,1224,947
+(a2) Right, Down | ArrowRight ArrowDown | yes(1) | 1 | 切り取り | フォーカス: メニュー | a.txt | BUTTON.heading s-uPqysdycpsGk current[menuitem] | false | false | 208,208,1224,947
+(a3) Esc | Escape | no | - | - | フォーカス: 一覧 | a.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(b1) Alt+F | Alt+F | yes(0) | 0 | 開く (first enabled: 開く) | フォーカス: メニュー | a.txt | BUTTON.heading s-uPqysdycpsGk current[menuitem] | false | false | 208,208,1224,947
+(b2) Esc | Escape | no | - | - | フォーカス: 一覧 | a.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(c1) Alt alone | AltTap | no | - | - | フォーカス: 一覧 | a.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(c2) Down after Alt | ArrowDown | no | - | - | フォーカス: 一覧 | b.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 226,207,1242,946
+(c) row focus before/after the Down | - |  |  |  |  | a.txt -> b.txt |  |  |  | 
+(c3) Esc, Esc | Escape Escape | no | - | - | フォーカス: 一覧 | b.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(d) Alt+Space (+ the Escape that follows) | Alt+Space Escape | no | - | - | フォーカス: 一覧 | b.txt | DIV.file-list s--aKBFWnKqnvo[listbox] | false | false | 208,208,1224,947
+(d) state 400 ms after Alt+Space | - | no |  |  |  |  |  | false | false | 208,208,1224,947
+(e) modifiers still pressed (GetAsyncKeyState) | - |  |  |  | none |  |  |  |  | 
+
+stuck modifiers: none
+real settings folder (R-08): unchanged
+result: finished
