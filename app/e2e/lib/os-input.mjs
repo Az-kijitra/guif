@@ -6,7 +6,8 @@
 // wrong state ends in "nothing sent", never in "keys went somewhere else":
 //   * only the names in ALLOWED_KEYS can be sent (checked before the first send; there is no way to name another key);
 //   * the app is found by PROCESS: a descendant of the test-launched process whose executable is exactly
-//     <app>\src-tauri\target\<profile>\reflexfiles-successor.exe (never by window title, never the user's ReflexFiles.exe);
+//     <app>\src-tauri\target\<profile>\<exe> (debug: reflexfiles-successor.exe, release: <mainBinaryName>.exe; never by window title,
+//     never the user's installed ReflexFiles.exe: the full path under this checkout is compared);
 //   * before EVERY entry the foreground window is read; if it is not the target window nothing more is sent (a FAIL for the
 //     caller, never a SKIP), and the real implementation checks it once more inside the same PowerShell call that sends;
 //   * the helper never brings a window to the front or moves the focus (the app has to get the foreground by itself);
@@ -18,6 +19,7 @@
 // Read-only probe of the Win32 side:      node e2e/lib/os-input.mjs --probe   (prints the foreground window and held modifiers)
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,9 +96,17 @@ export function selectAppPid(processes, rootPid, expectedExePath) {
   return found[0].pid;
 }
 
+// SPEC-0200-0001 §3.15.5 (spike S-2, Case 2): `tauri build` renames the cargo output to `mainBinaryName`, so the release
+// (and `tauri build --debug`) executable is <mainBinaryName>.exe, while `tauri dev` (what the E2E uses, profile "debug") keeps the
+// cargo package name. The full path under <app>\src-tauri\target\ is still compared, so the user's installed ReflexFiles.exe is
+// never selected even though the release file name is the same.
+// Read lazily, so that a debug-only use never depends on tauri.conf.json being readable.
+const releaseExeName = () =>
+  `${JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf-8")).mainBinaryName}.exe`;
+
 export function expectedExePath({ appDir, profile }) {
   if (profile !== "debug" && profile !== "release") throw new Error(`os-input: unknown build profile ${String(profile)}`);
-  return path.join(appDir, "src-tauri", "target", profile, "reflexfiles-successor.exe");
+  return path.join(appDir, "src-tauri", "target", profile, profile === "release" ? releaseExeName() : "reflexfiles-successor.exe");
 }
 
 // ------------------------------------------------------------------------------------------------ sendKeys

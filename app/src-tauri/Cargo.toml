@@ -1,6 +1,6 @@
 [package]
 name = "reflexfiles-successor"
-version = "0.0.0"
+version = "0.3.0"
 edition = "2021"
 description = "MVP Phase 1 (file list / tree view, keyboard navigation) — vertical slice wiring the tested logic modules into a launchable Tauri app. See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md."
 

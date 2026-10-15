@@ -1,7 +1,7 @@
 {
   "name": "reflexfiles-successor",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "MVP Phase 1 (file list / tree view, keyboard navigation). See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md.",
   "scripts": {
@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "node e2e/run.mjs",
-    "e2e:attach": "node e2e/run.mjs --attach"
+    "e2e:attach": "node e2e/run.mjs --attach",
+    "release:check": "node scripts/release/versions.mjs",
+    "release:build": "node scripts/release/build.mjs",
+    "release:audit": "node scripts/release/audit-state.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
