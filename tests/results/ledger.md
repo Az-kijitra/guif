@@ -48,6 +48,26 @@
 | 2026-10-14 | 未採番(release ビルドでの起動・表示。PRF-01 / AC-527 の計測、ISS-0216) | PASS(起動〜ファイル一覧 0.72 秒。1,000,000 文字の a.ts を開く: 書いた直後に読み込み中を経て約 6.2 秒以内に本文と色分け。2回目は約 2.1 秒以内) | 証跡ファイルなし(オーケストレーターの実行出力はセッション内。計測スクリプトは `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\release-check.mjs` / `release-check2.mjs` / `release-check3.mjs`〈未保存の出力〉) | オーケストレーター(実行・確認) |
 | 2026-10-14 | 未採番(release ビルドでの小さなファイル・250,000 文字) | 250,000 文字: 本文 4.8 秒、色付き 5.6 秒。小さい .rs: 本文 0.5 秒、色付き 0.7 秒(hljs-keyword / title function_ / number / comment の色付きを確認) | 同上(証跡ファイルなし) | オーケストレーター |
 | 2026-10-14 | 未採番(release ビルドのテスト中の設定フォルダの扱い) | 確認: 本物の設定フォルダ %APPDATA%\dev.reflexfiles.successor の 3 ファイル(navigation.toml / ui-state.toml / viewer-window.toml)は、確認後に退避した内容で上書きし、sha256 が 3 件とも一致(更新日時のみ変化)。viewer-window.toml.tmp が残っていたので削除 | `C:\Users\toshi\AppData\Local\Temp\claude\c--Users-toshi-git-project\c0cc5542-e889-4852-8057-9725a10ee58e\scratchpad\cfg-backup.sha256`(退避時の sha256。20:12) | 発注者の承認のもとオーケストレーター。次回起動時の .tmp の扱いは未確認(ISS-0216 に記録) |
+| 2026-10-15 | AC-1470(SPEC-0600-0001 第1版。作業用アカウント〈発注者の普段の Windows アカウント〉で インストール → 起動 → アンインストール → 元の状態への復元) | PASS(手順 1〜6 の記録どおり。事前と事後の照合は `ac1470-audit-before.json` と `ac1470-audit-after.json` で一致。アンインストール後に `HKCU\Software\reflexfiles\ReflexFiles` が残ったが、事前に無かったため確認者が削除〈AC-1470 (iii) の追補どおり〉) | `tests/results/evidence/2026-10-15/ac1470-normal-account.txt`(手順ログ)、`ac1470-audit-before.json`、`ac1470-audit-installed.json`、`ac1470-audit-after.json` | オーケストレーター(発注者の同意のもとコマンドで実施)。対象: `ReflexFiles_0.3.0_x64-setup.exe` 2,718,282 bytes、sha256 `488d37ba96c6a8d00dbc5d14d6e970a99e83a74db3f45d3d585c9b13773b2351`(`.sha256` 照合 OK) |
+| 2026-10-15 | AC-1470 の内訳: サイレント インストール(`setup.exe /S`。ユーザーごと・管理者権限なしで %LOCALAPPDATA%\ReflexFiles へ) | PASS(exit 0。`ReflexFiles.exe` と `uninstall.exe` が作られた) | `ac1470-normal-account.txt`(手順 3) | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1470 の内訳: アンインストール情報の値(HKCU の Uninstall\ReflexFiles: DisplayName `ReflexFiles`、DisplayVersion `0.3.0`、Publisher `reflexfiles`、BundleIdentifier `dev.reflexfiles.successor`、MainBinaryName `ReflexFiles.exe`) | PASS | `ac1470-normal-account.txt`(手順 3)、`ac1470-audit-installed.json` | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1470 の内訳: ショートカット(スタートメニュー・デスクトップの `ReflexFiles.lnk` の作成と、アンインストール後の削除) | PASS | `ac1470-normal-account.txt`(手順 3・5)、`ac1470-audit-installed.json`、`ac1470-audit-after.json` | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1470 の内訳: 起動(ウィンドウのタイトル `ReflexFiles` で起動し、終了) | PASS | `ac1470-normal-account.txt`(手順 4) | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1470 の内訳: アンインストール(`uninstall.exe /S` exit 0。データ削除のチェックはオフのまま〈既定〉。設定フォルダは残る) | PASS(インストール先・Uninstall キー・両ショートカットが削除。設定フォルダは退避から戻し、sha256 3/3 OK) | `ac1470-normal-account.txt`(手順 5・6)、`ac1470-audit-after.json` | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1470 の内訳: 旧製品のデータが変わらない(`%APPDATA%\ReflexFIles` 427 ファイル、`%LOCALAPPDATA%\ReflexViewer` 1 ファイルを sha256 で照合) | PASS(427/427、1/1 で変更なし) | `ac1470-normal-account.txt`(手順 2・6) | オーケストレーター(発注者の同意のもとコマンドで実施) |
+| 2026-10-15 | AC-1410(標準ユーザーで実行(UAC が出ないこと)) | NOT_RUN | なし | 未実施(確認用の環境(標準ユーザー)が必要。SPEC-0600-0001 R-1496) |
+| 2026-10-15 | AC-1411(スタートメニューからの起動と表示(目視)) | NOT_RUN | なし | 未実施(本記録の対象外(発注者の指示に含まれず)。R-1496 の 2 では作業用アカウントで行える) |
+| 2026-10-15 | AC-1420(旧製品 0.2.0(NSIS)がある状態での新製品のインストール(/S・/P、終了コード 2)) | NOT_RUN | なし | 未実施(確認用の環境(旧製品あり)が必要。SPEC-0600-0001 R-1496) |
+| 2026-10-15 | AC-1421(旧製品(MSI)がある状態での新製品のインストール) | NOT_RUN | なし | 未実施(確認用の環境(旧製品あり)が必要。旧製品の MSI の入手可否も未確認(ISS-0220 (b))) |
+| 2026-10-15 | AC-1422(旧製品がある状態での /S・/P の中止(終了コード 2、状態が変わらないこと)) | NOT_RUN | なし | 未実施(確認用の環境(旧製品あり)が必要) |
+| 2026-10-15 | AC-1423(旧製品の設定フォルダの扱い(旧製品のアンインストール後の状態)) | NOT_RUN | なし | 未実施(確認用の環境(旧製品あり)が必要) |
+| 2026-10-15 | AC-1424(判定の網羅(テスト用のアンインストール情報を1件ずつ作る各ケース)) | NOT_RUN | なし | 未実施(確認用の環境が必要) |
+| 2026-10-15 | AC-1430(同じ版の再インストール・上書き(表示状態の保持)) | NOT_RUN | なし | 未実施(本記録の対象外(発注者の指示に含まれず)。R-1496 の 2 では作業用アカウントで行える) |
+| 2026-10-15 | AC-1440(「設定」の「アプリ」からのアンインストール(データを削除しない)) | NOT_RUN | なし | 未実施(本記録の対象外(本記録の確認は uninstall.exe /S)。R-1496 の 2 では作業用アカウントで行える) |
+| 2026-10-15 | AC-1441(データを削除するチェックをオンにしたアンインストール) | NOT_RUN | なし | 未実施(確認用の環境(旧製品の設定フォルダがある状態)が必要) |
+| 2026-10-15 | AC-1450(ダウンロードの印〈Zone.Identifier〉が付いたインストーラーの実行(SmartScreen)) | NOT_RUN | なし | 未実施(本記録の対象外。発注者の指示では確認用の環境〈別アカウント・サンドボックス・VM〉で行う) |
+| 2026-10-15 | AC-1451(インストール後の大きなファイルの表示時間の計測(記録のみ)) | NOT_RUN | なし | 未実施(本記録の対象外(発注者の指示に含まれず)。R-1496 の 2 では作業用アカウントで行える) |
+| 2026-10-15 | AC-1480(WebView2 が無い環境での導入(管理者権限なし・インターネット接続)) | NOT_RUN | なし | 未実施(確認用の環境(WebView2 無し・標準ユーザー)が必要) |
 
 ## 2026-10-14 release ビルドでの確認(PRF-01 / AC-527 の計測、ISS-0216)
 

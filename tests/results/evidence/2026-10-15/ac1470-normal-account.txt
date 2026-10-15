@@ -1,0 +1,19 @@
+AC-1470 普段のアカウントでの確認(2026-10-15)
+インストーラー: ReflexFiles_0.3.0_x64-setup.exe 2,718,282 bytes
+sha256 488d37ba96c6a8d00dbc5d14d6e970a99e83a74db3f45d3d585c9b13773b2351 (.sha256 照合 OK)
+
+1. 事前確認 (ac1470-audit-before.json): Uninstall に ReflexFIles/ReflexFiles なし、ショートカットなし、
+   HKCU\Software\reflexfiles なし、%LOCALAPPDATA%\ReflexFiles なし
+2. 退避: %APPDATA%\dev.reflexfiles.successor の 3 ファイルと sha256、
+   %APPDATA%\ReflexFIles (427 ファイル) と %LOCALAPPDATA%\ReflexViewer (1 ファイル) の sha256
+3. setup.exe /S → exit 0。%LOCALAPPDATA%\ReflexFiles に ReflexFiles.exe / uninstall.exe。
+   HKCU Uninstall\ReflexFiles: DisplayName ReflexFiles, DisplayVersion 0.3.0, Publisher reflexfiles,
+   BundleIdentifier dev.reflexfiles.successor, MainBinaryName ReflexFiles.exe。
+   スタートメニュー・デスクトップに ReflexFiles.lnk (ac1470-audit-installed.json)
+4. 起動: ウィンドウタイトル ReflexFiles で起動し、終了
+5. uninstall.exe /S → exit 0。インストール先・Uninstall キー・両ショートカットが削除。
+   設定フォルダーは残る(既定どおり)。HKCU\Software\reflexfiles\ReflexFiles が残存 → 確認者が削除(仕様の追補どおり)
+6. 照合: 設定フォルダーを退避から戻し sha256 3/3 OK。旧製品 %APPDATA%\ReflexFIles 427/427 OK、
+   %LOCALAPPDATA%\ReflexViewer 1/1 OK(変更なし)。
+   事後 (ac1470-audit-after.json) は事前と一致(Uninstall・レジストリ・スタートメニュー・デスクトップ・LOCALAPPDATA 直下)
+判定: PASS

@@ -1834,6 +1834,7 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 - 必要アクション: 配布の計画時に確認・人間判断。非ブロッカー(開発・Phase 9 の実装には影響しない)。
 - **【2026-10-14 追記(spec-writer)】** (b) 旧製品との併存か置換かは、発注者決定 2026-10-14(ISS-0218)で**置換**(旧製品が入っていたら案内して中止、自動で削除しない、設定は引き継がない)に決まった。(a) 配布形式は NSIS のみ・ユーザーごと。条文は **SPEC-0600-0001 第1版(DRAFT)**。(c) 衝突の実機確認は SPEC-0600-0001 §15.3(AC-1420〜AC-1423)と §15.4(AC-1430)で行う。状態は OPEN のまま(SPEC-0600-0001 の承認と実機確認の後に、人間が解消を判断する)。
 - **【2026-10-14 承認記録】** 発注者(toshihide.asada@gmail.com)が AskUserQuestion で SPEC-0600-0001 第1版を承認した(オーケストレーター経由で伝達、オーケストレーターが確認)。仕様は承認済み。本 ISS の解消は、同 §15.3(AC-1420〜AC-1424)と §15.4(AC-1430)の実機確認の後に人間が判断する。状態は OPEN のまま。
+  - **【2026-10-15 進捗(実施記録)】** 作業用アカウント(発注者の普段の Windows アカウント)での AC-1470(インストール → 起動 → アンインストールで元の状態に戻る)を実施し、PASS。証跡は `tests/results/evidence/2026-10-15/ac1470-normal-account.txt` と `ac1470-audit-{before,installed,after}.json`(台帳 2026-10-15 の行)。**状態は OPEN のまま**(解消は人間が判断)。残りの確認(未実施。確認用の環境〈別アカウント・Windows サンドボックス・VM〉が要るもの): AC-1420〜AC-1424(旧製品あり)、AC-1441(データ削除)、AC-1410(標準ユーザー)、AC-1480(WebView2 / UAC)、AC-1450(SmartScreen)。
 
 
 ### ISS-0184 検索バー Apply 後のフォーカス位置表示の文言の食い違い
@@ -2432,3 +2433,4 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
     - 残り: (b)(d)(e)(f)(g) と、(h) の一覧の印付けの残り。状態は OPEN のまま。
   - **【2026-10-15 追記・(b) の一部(オーケストレーターが旧 `main` `a62954e` で確認)】** 旧製品の設定は `%APPDATA%\ReflexFIles\`(`config.toml`、`history.toml`、`jump_list.toml`、旧形式の `config.json`。`main:app/src-tauri/src/config_io.rs:10-30`)、ログは `%LOCALAPPDATA%\ReflexViewer\logs\app.log`(`main:app/src-tauri/src/config_defaults.rs:159-163`)。`identifier` `com.toshi.reflexfiles` の名前のフォルダは旧製品のコードでは使っていない(Tauri の WebView2 のデータ等が作る可能性は実機で確かめる。(b) の残り)。新製品のインストール先 `%LOCALAPPDATA%\ReflexFiles`・設定 `%APPDATA%\dev.reflexfiles.successor` のどちらとも衝突しない。SPEC-0600-0001 §0.1 #1-2・§1・R-1490 の 3 に承認後の追補(要求は不変)で記録した。起票時の SPEC-0600-0001 §1 の「旧製品の設定フォルダ = `identifier` に対応するフォルダ」は spec-writer の推測で誤りだったため、取り消し線で訂正した。
   - (f) の追記: AC-1403 は `target/debug` と `target/release` の両方の出力名を記録し、変わった場合は単体テストと debug ビルドでの E2E で確かめる(release は設定の上書きを読まないため E2E を行わない。SPEC-0400-0001 R-06 を緩めない)。
+  - **【2026-10-15 追記(AC-1470 の実施)】** 作業用アカウントでの AC-1470 を実施し PASS(台帳 2026-10-15、`tests/results/evidence/2026-10-15/ac1470-normal-account.txt`)。この確認では (h) の一覧のキー `HKCU\Software\reflexfiles\ReflexFiles` も調べ、事後に残ったものを確認者が削除した(AC-1470 (iii) の追補どおり)。**(h) の印付けの残りと (b)(d)(e)(f)(g) は未了。状態は OPEN のまま。**
