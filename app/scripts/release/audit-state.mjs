@@ -123,7 +123,7 @@ function main() {
   const report = {
     generatedAt: new Date().toISOString(),
     note: "read-only record; nothing was written, deleted or changed",
-    // R-1444-1: the same information in the three places the installer looks at
+    // AC-1470 (i): uninstall information in the three places (HKCU, HKLM 64-bit, HKLM 32-bit)
     uninstall: {
       HKCU: uninstallEntries("HKCU", []),
       HKLM_64: uninstallEntries("HKLM", ["/reg:64"]),

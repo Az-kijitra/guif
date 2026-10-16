@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// [静的] Spec: SPEC-0600-0001 AC-1400 (bundle settings), AC-1401 (icons), R-1411 / T-09 (versions agree), R-1471.
+// [静的] Spec: SPEC-0600-0001 第2版 AC-1400 (bundle settings), AC-1401 (icons), AC-1404 (no detection), R-1411 / T-09 (versions agree), R-1471.
 // Design: SPEC-0200-0001 §3.15.5, §3.15.8, §3.15.13 (H-4 decided: package-lock.json top-level version is in scope).
 //
 // Contract assumed (reported to the implementer): no script is imported here, only files are read.
@@ -75,11 +75,10 @@ describe("AC-1400 / R-1400 / R-1403 / T-02 / T-03: tauri.conf.json distribution 
   it("bundle.icon lists exactly the four icons in order", () => {
     expect(conf.bundle.icon).toEqual(["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]);
   });
-  it("nsis: installMode currentUser, languages [Japanese], installerHooks installer-hooks.nsh", () => {
+  it("nsis: installMode currentUser, languages [Japanese]", () => {
     const nsis = conf.bundle?.windows?.nsis;
     expect(nsis?.installMode).toBe("currentUser");
     expect(nsis?.languages).toEqual(["Japanese"]);
-    expect(nsis?.installerHooks).toBe("installer-hooks.nsh");
   });
   it("nsis: displayLanguageSelector is not true", () => {
     expect(conf.bundle?.windows?.nsis?.displayLanguageSelector).not.toBe(true);
@@ -92,10 +91,34 @@ describe("AC-1400 / R-1400 / R-1403 / T-02 / T-03: tauri.conf.json distribution 
     expect(conf.bundle?.windows?.wix).toBeUndefined();
     expect(existsSync(join(TAURI, "resources"))).toBe(false);
   });
-  it("the hook file named by installerHooks exists next to tauri.conf.json", () => {
-    const hooks = conf.bundle?.windows?.nsis?.installerHooks;
-    expect(typeof hooks).toBe("string");
-    expect(existsSync(join(TAURI, hooks))).toBe(true);
+});
+
+// Every file under app/src-tauri except the build output (target/).
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return dir === TAURI && e.name === "target" ? [] : sourceFiles(p);
+    return [p];
+  });
+}
+
+describe("AC-1404 / R-1448: the installer has no old-product detection of its own", () => {
+  it("(i) bundle.windows.nsis has no installerHooks and no template", () => {
+    const nsis = conf.bundle?.windows?.nsis;
+    expect(nsis).toBeDefined();
+    expect(nsis.installerHooks).toBeUndefined();
+    expect(nsis.template).toBeUndefined();
+  });
+  it("(ii) no installer-hooks.nsh and no other .nsh / .nsi file under app/src-tauri", () => {
+    expect(existsSync(join(TAURI, "installer-hooks.nsh"))).toBe(false);
+    expect(sourceFiles(TAURI).filter((p) => /\.(nsh|nsi)$/i.test(p))).toEqual([]);
+  });
+  it("(iii) no file under app/src-tauri contains `ReflexFIles` (case-sensitive) or `BundleIdentifier`", () => {
+    const hits = sourceFiles(TAURI).filter((p) => {
+      const text = readFileSync(p).toString("latin1");
+      return text.includes("ReflexFIles") || text.includes("BundleIdentifier");
+    });
+    expect(hits).toEqual([]);
   });
 });
 

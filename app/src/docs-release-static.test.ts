@@ -3,19 +3,16 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// [静的] Spec: SPEC-0600-0001 AC-1460, R-1447, R-1486, R-1490, R-1491, T-04, T-12, S-6 (Japanese only); SPEC-0500-0001 R-03 (links exist).
+// [静的] Spec: SPEC-0600-0001 第2版 AC-1460, R-1449, R-1486, R-1490, R-1491, T-04, S-6 (Japanese only); SPEC-0500-0001 R-03 (links exist).
 // Design: SPEC-0200-0001 §3.15.7, §3.15.8.
 //
-// Contract assumed (reported to the implementer):
-//   <repo>/README.md, <repo>/CHANGELOG.md, <repo>/docs/user_manual.md exist, are written in Japanese (contain hiragana/katakana), and contain:
-//     README + manual : SmartScreen with the way past it (「詳細情報」 then 「実行」), 旧製品 ReflexFIles uninstall guidance (アンインストール),
-//                       the warning not to run the OLD product's installer after the new one (旧製品のインストーラー ... 実行しない),
-//                       the settings folder handling (設定 ... 引き継がれません / 残る)
-//     README          : the "アプリのデータを削除する" default (R-1461), links to docs/user_manual.md and CHANGELOG.md
-//     CHANGELOG       : a `## 0.3.0` heading, ReflexFIles / 0.2.0 / not carried over
-//     manual          : %APPDATA%\dev.reflexfiles.successor, the old product's settings folder stays and may be deleted by the user (削除してよい)
-//   No placeholders (TODO / TBD / xx-xx) remain; no other-language variants; no docs/CHANGELOG.md; no app/src-tauri/resources/.
-// Status at TDD time: RED (none of the three documents exists yet).
+// Contract: <repo>/README.md, <repo>/CHANGELOG.md, <repo>/docs/user_manual.md exist, are written in Japanese, and contain:
+//   README + manual : SmartScreen with the way past it (「詳細情報」 then 「実行」)
+//   README          : the "アプリのデータを削除する" default (R-1461), links to docs/user_manual.md and CHANGELOG.md
+//   CHANGELOG       : a `## 0.3.0` heading
+//   manual          : %APPDATA%\dev.reflexfiles.successor and that it stays by default
+//   None of the three mentions the old product (R-1449). No placeholders; no other-language variants; no docs/CHANGELOG.md;
+//   no app/src-tauri/resources/.
 
 const REPO = resolve(__dirname, "..", "..");
 const README = join(REPO, "README.md");
@@ -27,7 +24,6 @@ const doc = (p: string): string => {
   return readFileSync(p, "utf-8").replace(/^﻿/, "");
 };
 const JA = /[぀-ヿ]/;
-const OLD_INSTALLER_WARNING = /旧製品[^。\n]*インストーラー[^。\n]*実行しない|旧製品のインストーラー[^。\n]*実行(し)?ないで/;
 
 describe("existence (AC-1460, R-1490)", () => {
   it.each([
@@ -62,7 +58,7 @@ describe("Japanese only (S-6, R-1490)", () => {
   });
 });
 
-describe("required content (R-1486, R-1447, R-1442, R-1461, T-04, T-12)", () => {
+describe("required content (R-1486, R-1461, T-04)", () => {
   it("README: SmartScreen warning and how to proceed (詳細情報 -> 実行)", () => {
     const t = doc(README);
     expect(t).toContain("SmartScreen");
@@ -74,17 +70,6 @@ describe("required content (R-1486, R-1447, R-1442, R-1461, T-04, T-12)", () => 
     expect(t).toContain("SmartScreen");
     expect(t).toContain("詳細情報");
   });
-  it("README: replacing the old product ReflexFIles = uninstall it first; settings are not carried over", () => {
-    const t = doc(README);
-    expect(t).toContain("ReflexFIles");
-    expect(t).toContain("旧製品");
-    expect(t).toContain("アンインストール");
-    expect(t).toMatch(/設定[^。\n]*引き継がれません/);
-  });
-  it("README and manual: do NOT run the old product's installer after installing the new product (R-1447)", () => {
-    expect(doc(README)).toMatch(OLD_INSTALLER_WARNING);
-    expect(doc(MANUAL)).toMatch(OLD_INSTALLER_WARNING);
-  });
   it("README: uninstall keeps the settings by default (「アプリのデータを削除する」, R-1461)", () => {
     expect(doc(README)).toContain("アプリのデータを削除する");
   });
@@ -93,7 +78,7 @@ describe("required content (R-1486, R-1447, R-1442, R-1461, T-04, T-12)", () => 
     expect(t).toMatch(/Windows 10/);
     expect(t).toMatch(/Windows 11/);
   });
-  it("manual: install / uninstall, the new settings folder %APPDATA%\\dev.reflexfiles.successor and that it stays by default", () => {
+  it("manual: install / uninstall, the settings folder %APPDATA%\\dev.reflexfiles.successor and that it stays by default", () => {
     const t = doc(MANUAL);
     expect(t).toContain("インストール");
     expect(t).toContain("アンインストール");
@@ -101,26 +86,25 @@ describe("required content (R-1486, R-1447, R-1442, R-1461, T-04, T-12)", () => 
     expect(t).toMatch(/残(る|り)/);
     expect(t).toContain("アプリのデータを削除する");
   });
-  it("manual: the OLD product's settings folder remains and the user may delete it if not needed (T-12)", () => {
-    const t = doc(MANUAL);
-    expect(t).toContain("ReflexFIles");
-    expect(t).toMatch(/旧製品の設定/);
-    expect(t).toMatch(/削除してよい|削除しても(よい|構いません|かまいません)/);
+  it("CHANGELOG: has a `## 0.3.0` entry", () => {
+    expect(doc(CHANGELOG)).toMatch(/^##\s+0\.3\.0\b/m);
   });
-  it("manual: mentions the old product (旧製品) and SmartScreen and the old-installer warning (R-1490 3)", () => {
-    const t = doc(MANUAL);
-    expect(t).toContain("旧製品");
-  });
-  it("CHANGELOG: has a `## 0.3.0` entry naming ReflexFIles 0.2.0 as the predecessor; settings and history are not carried over", () => {
-    const t = doc(CHANGELOG);
-    expect(t).toMatch(/^##\s+0\.3\.0\b/m);
-    expect(t).toContain("ReflexFIles");
-    expect(t).toContain("0.2.0");
-    expect(t).toMatch(/引き継/);
-  });
-  it("the three documents agree with the product: the version is 0.3.0 (CHANGELOG) and the product is ReflexFiles", () => {
+  it("the product is ReflexFiles in README and manual", () => {
     expect(doc(README)).toContain("ReflexFiles");
     expect(doc(MANUAL)).toContain("ReflexFiles");
+  });
+});
+
+// 第2版 R-1449: the old product is not mentioned at all (name, removal steps, its settings / log folders, succession).
+describe("AC-1460 第2版 / R-1449: no mention of the old product", () => {
+  const OLD = [/ReflexFIles/, /%APPDATA%\\?ReflexFIles/, /%LOCALAPPDATA%\\?ReflexViewer/, /旧製品/, /旧アプリ/];
+  it.each([
+    ["README.md", README],
+    ["CHANGELOG.md", CHANGELOG],
+    ["docs/user_manual.md", MANUAL],
+  ])("%s does not mention the old product", (_n, p) => {
+    const t = doc(p);
+    expect(OLD.filter((re) => re.test(t)).map(String)).toEqual([]);
   });
 });
 

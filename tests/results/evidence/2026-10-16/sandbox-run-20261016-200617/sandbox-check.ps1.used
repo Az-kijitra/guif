@@ -1,0 +1,393 @@
+﻿# SPEC-0600-0001 の確認用の環境(Windows サンドボックス)での確認。サンドボックスの中でだけ実行する。
+# 作業用アカウントでは実行しない(R-1496 の 1)。C:\kit(読み取り専用)と C:\out(書き込み)の割り当てが前提。
+# Windows PowerShell 5.1 で動く書き方にする(サンドボックスに PowerShell 7 は無い)。
+param([string]$Only = "")
+
+$ErrorActionPreference = "Stop"
+$Kit = "C:\kit"
+$Out = "C:\out"
+$Work = "C:\Users\Public\rfcheck"
+$StdUser = "rfstd"
+
+if ($env:USERNAME -ne "WDAGUtilityAccount") { throw "サンドボックスの中(WDAGUtilityAccount)でだけ実行する。現在のユーザー: $env:USERNAME" }
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) { throw "管理者として実行する(サンドボックスの既定のアカウントは管理者)" }
+
+$Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$RunDir = Join-Path $Out "run-$Stamp"
+New-Item -ItemType Directory -Force $RunDir | Out-Null
+New-Item -ItemType Directory -Force $Work | Out-Null
+Start-Transcript -Path (Join-Path $RunDir "transcript.txt") | Out-Null
+$Results = New-Object System.Collections.ArrayList
+
+function Note([string]$id, [string]$result, [string]$detail) {
+  [void]$Results.Add([pscustomobject]@{ id = $id; result = $result; detail = $detail })
+  Write-Host ("[{0}] {1}: {2}" -f $result, $id, $detail) -ForegroundColor $(if ($result -eq "PASS") { "Green" } elseif ($result -eq "FAIL") { "Red" } else { "Yellow" })
+}
+function Ask([string]$q) {
+  Write-Host ""
+  Write-Host $q -ForegroundColor Cyan
+  $a = Read-Host "y = はい / n = いいえ(続けてメモを書けます。例: n 画面が英語)"
+  return $a
+}
+function Section([string]$t) { Write-Host ""; Write-Host "==== $t ====" -ForegroundColor White }
+
+# ---- 配布物の確認 ----
+$manifest = Get-Content (Join-Path $Kit "manifest.json") -Raw | ConvertFrom-Json
+foreach ($f in $manifest.files) {
+  $h = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $Kit $f.name)).Hash.ToLower()
+  if ($h -ne $f.sha256) { throw "sha256 が一致しない: $($f.name)" }
+}
+Copy-Item -Path (Join-Path $Kit "*") -Destination $Work -Recurse -Force
+$NewSetup = Join-Path $Work $manifest.newSetup
+$OldSetup = Join-Path $Work $manifest.oldSetup
+$OldMsi = Join-Path $Work $manifest.oldMsi
+Note "kit" "INFO" "sha256 OK: $(($manifest.files | ForEach-Object { $_.name + '=' + $_.sha256 }) -join ', ')"
+
+# ---- 標準ユーザー ----
+$plain = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 20 | ForEach-Object { [char]$_ }) + "!a1"
+if (-not (Get-LocalUser -Name $StdUser -ErrorAction SilentlyContinue)) {
+  New-LocalUser -Name $StdUser -Password (ConvertTo-SecureString $plain -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+} else {
+  Set-LocalUser -Name $StdUser -Password (ConvertTo-SecureString $plain -AsPlainText -Force)
+}
+Add-LocalGroupMember -Group (Get-LocalGroup -SID "S-1-5-32-545").Name -Member $StdUser -ErrorAction SilentlyContinue
+$adminGroup = (Get-LocalGroup -SID "S-1-5-32-544").Name
+$inAdmins = @(& net localgroup $adminGroup | Where-Object { $_.Trim() -eq $StdUser }).Count -gt 0
+if ($inAdmins) { throw "$StdUser が管理者のグループに属している" }
+$Cred = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$StdUser", (ConvertTo-SecureString $plain -AsPlainText -Force))
+& icacls $Work /grant "${StdUser}:(OI)(CI)M" /T /Q | Out-Null
+Note "std-user" "INFO" "標準ユーザー $StdUser を作成(管理者のグループに属さない)"
+
+# 標準ユーザーで PowerShell のコードを実行し、出力(文字列)を返す。
+function Invoke-AsStd([string]$Code, [switch]$Visible) {
+  $id = [guid]::NewGuid().ToString("N")
+  $ps1 = Join-Path $Work "$id.ps1"
+  $outF = Join-Path $Work "$id.out"
+  $body = "`$ErrorActionPreference = 'Continue'`r`n& {`r`n$Code`r`n} *>&1 | Out-String -Width 4096 | Set-Content -LiteralPath '$outF' -Encoding UTF8"
+  Set-Content -LiteralPath $ps1 -Value $body -Encoding UTF8
+  $style = if ($Visible) { "Normal" } else { "Hidden" }
+  Start-Process powershell.exe -Credential $Cred -LoadUserProfile -WorkingDirectory $Work -WindowStyle $style `
+    -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ps1 -Wait | Out-Null
+  if (Test-Path -LiteralPath $outF) { return (Get-Content -LiteralPath $outF -Raw -Encoding UTF8) } else { return "" }
+}
+
+# 調べる対象(AC-1470 の一覧と同じ考え方)。実行したユーザーの HKCU・プロファイルで調べる。
+$AuditCode = @'
+function DirHashes($p) {
+  if (-not (Test-Path -LiteralPath $p)) { return "(なし)" }
+  $root = (Resolve-Path -LiteralPath $p).Path
+  $items = @(Get-ChildItem -LiteralPath $root -Recurse -Force -File -ErrorAction SilentlyContinue | Sort-Object FullName | ForEach-Object {
+    $_.FullName.Substring($root.Length) + " " + (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.Substring(0, 16) })
+  if ($items.Count -eq 0) { return "(空のフォルダ)" } else { return ($items -join "; ") }
+}
+function KeyDump($base, $path, $filter) {
+  $k = $base.OpenSubKey($path)
+  if (-not $k) { return @() }
+  $list = @()
+  foreach ($n in ($k.GetSubKeyNames() | Sort-Object)) {
+    $s = $k.OpenSubKey($n)
+    $dn = [string]$s.GetValue("DisplayName")
+    if (& $filter $n $dn) {
+      $vals = @($s.GetValueNames() | Sort-Object | ForEach-Object { $_ + "=" + [string]$s.GetValue($_) })
+      $list += ($path + "\" + $n + " {" + ($vals -join "; ") + "}")
+    }
+  }
+  return $list
+}
+$isTarget = { param($n, $dn) $n -match "reflex" -or $dn -match "reflex" -or $n -like "{00000000-0000-0000-0000-00000000000*}" }
+$any = { param($n, $dn) $n -match "reflex|toshi" }
+$U = "Software\Microsoft\Windows\CurrentVersion\Uninstall"
+$hkcu = [Microsoft.Win32.RegistryKey]::OpenBaseKey("CurrentUser", "Default")
+$hklm64 = [Microsoft.Win32.RegistryKey]::OpenBaseKey("LocalMachine", "Registry64")
+$hklm32 = [Microsoft.Win32.RegistryKey]::OpenBaseKey("LocalMachine", "Registry32")
+function SubTree($base, $path) {
+  $k = $base.OpenSubKey($path)
+  if (-not $k) { return @() }
+  $r = @($path + " {" + ((@($k.GetValueNames() | Sort-Object | ForEach-Object { $_ + "=" + [string]$k.GetValue($_) })) -join "; ") + "}")
+  foreach ($n in ($k.GetSubKeyNames() | Sort-Object)) { $r += SubTree $base ($path + "\" + $n) }
+  return $r
+}
+$swKeys = @()
+foreach ($line in (KeyDump $hkcu "Software" $any)) { $name = ($line -split " \{")[0]; $swKeys += SubTree $hkcu $name }
+$lnk = @()
+foreach ($d in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", [Environment]::GetFolderPath("Desktop"), "$env:PUBLIC\Desktop")) {
+  if (Test-Path -LiteralPath $d) { $lnk += @(Get-ChildItem -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "reflex" } | ForEach-Object { $_.FullName }) }
+}
+$r = [ordered]@{
+  "user" = $env:USERNAME
+  "uninstall.HKCU" = @(KeyDump $hkcu $U $isTarget)
+  "uninstall.HKLM64" = @(KeyDump $hklm64 $U $isTarget)
+  "uninstall.HKLM32" = @(KeyDump $hklm32 $U $isTarget)
+  "HKCU.Software" = @($swKeys)
+  "shortcuts" = @($lnk | Sort-Object)
+  "LOCALAPPDATA\ReflexFiles(install)" = DirHashes "$env:LOCALAPPDATA\ReflexFiles"
+  "ProgramFiles\ReflexFIles" = DirHashes "$env:ProgramFiles\ReflexFIles"
+  "APPDATA\ReflexFIles(old settings)" = DirHashes "$env:APPDATA\ReflexFIles"
+  "LOCALAPPDATA\ReflexViewer(old log)" = DirHashes "$env:LOCALAPPDATA\ReflexViewer"
+  "APPDATA\dev.reflexfiles.successor(new settings)" = DirHashes "$env:APPDATA\dev.reflexfiles.successor"
+  "LOCALAPPDATA\dev.reflexfiles.successor(new WebView2) exists" = Test-Path -LiteralPath "$env:LOCALAPPDATA\dev.reflexfiles.successor"
+  "LOCALAPPDATA\com.toshi.reflexfiles(old WebView2) exists" = Test-Path -LiteralPath "$env:LOCALAPPDATA\com.toshi.reflexfiles"
+}
+$r | ConvertTo-Json -Depth 4 -Compress | Set-Content -LiteralPath '__OUT__' -Encoding UTF8
+'@
+
+function Audit([string]$label) {
+  $safe = $label -replace '[^\w\-()]', '_'
+  $tmp = Join-Path $Work ("audit-" + [guid]::NewGuid().ToString("N") + ".json")
+  $raw = Invoke-AsStd ($AuditCode.Replace("__OUT__", $tmp))
+  if (-not (Test-Path -LiteralPath $tmp)) { throw "調査の結果を読めない: $raw" }
+  $json = Get-Content -LiteralPath $tmp -Raw -Encoding UTF8
+  Remove-Item -LiteralPath $tmp -Force
+  Set-Content -LiteralPath (Join-Path $RunDir "audit-$safe.json") -Value $json -Encoding UTF8
+  return ($json | ConvertFrom-Json)
+}
+function Cnt($x) { if ($null -eq $x) { return 0 } else { return @($x).Count } }
+function Present($a) { return @(Flat $a | Where-Object { $_ -notmatch ":: \(なし\)$" -and $_ -notmatch ":: $" -and $_ -notmatch "^user ::" -and $_ -notmatch ":: False$" }) }
+function Flat($a) {
+  $lines = @()
+  foreach ($p in $a.PSObject.Properties) {
+    if ($p.Value -is [array]) { foreach ($v in $p.Value) { $lines += ($p.Name + " :: " + $v) } ; if ($p.Value.Count -eq 0) { $lines += ($p.Name + " :: (なし)") } }
+    else { $lines += ($p.Name + " :: " + [string]$p.Value) }
+  }
+  return $lines
+}
+function Diff($a, $b) {
+  $d = @(Compare-Object (Flat $a) (Flat $b) | ForEach-Object { $_.SideIndicator + " " + $_.InputObject })
+  return $d
+}
+function StopApps() {
+  Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and ($_.Path -like "C:\Users\$StdUser\*" -or $_.Path -like "$env:ProgramFiles\ReflexFIles\*") } | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 1
+}
+# 標準ユーザーでインストーラー等を実行し、Start-Process -Wait -PassThru の .ExitCode を返す。
+function RunAsStd([string]$exe, [string]$argLine, [switch]$Visible) {
+  $argPart = if ($argLine) { "-ArgumentList '$argLine'" } else { "" }
+  $raw = Invoke-AsStd -Visible:$Visible "`$p = Start-Process -FilePath '$exe' $argPart -Wait -PassThru; 'EXIT=' + `$p.ExitCode"
+  $m = [regex]::Match($raw, "EXIT=(-?\d+)")
+  if ($m.Success) { return [int]$m.Groups[1].Value }
+  Write-Host $raw
+  return $null
+}
+function NewInstalledExe() { return "C:\Users\$StdUser\AppData\Local\ReflexFiles\ReflexFiles.exe" }
+function NewUninstaller() { return "C:\Users\$StdUser\AppData\Local\ReflexFiles\uninstall.exe" }
+function UninstallNewSilent([string]$why) {
+  StopApps
+  $u = NewUninstaller
+  if (Test-Path -LiteralPath $u) { $c = RunAsStd $u "/S"; Start-Sleep -Seconds 2; Note "cleanup" "INFO" "新製品を /S でアンインストール($why)exit=$c" }
+}
+function ExpectAbort([string]$id, [string]$argLine, $before, [switch]$Visible) {
+  $code = RunAsStd $NewSetup $argLine -Visible:$Visible
+  Start-Sleep -Seconds 1
+  $after = Audit "$id-after"
+  $d = Diff $before $after
+  if ($code -eq 2 -and $d.Count -eq 0) { Note $id "PASS" "exit=$code、状態の変化なし" }
+  else { Note $id "FAIL" ("exit=$code、変化: " + ($d -join " | ")) }
+}
+function Want([string]$s) { return ($Only -eq "" -or ($Only -split ",") -contains $s) }
+
+# ---- WebView2(AC-1480)----
+Section "AC-1480 WebView2"
+$wv = @(
+  "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+  "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+) | Where-Object { Test-Path $_ } | ForEach-Object { (Get-ItemProperty $_).pv }
+if ($wv) { Note "AC-1480" "SKIP" "WebView2 ランタイムが入っている(版 $($wv -join ', '))。サンドボックスでは外せないため記録のみ" }
+else { Note "AC-1480" "INFO" "WebView2 ランタイムが無い。AC-1410 の手順で導入されるかを確かめる" }
+
+$base0 = Audit "baseline"
+if ((Present $base0).Count -ne 0) {
+  throw "開始時の状態に対象のものがある。中止する(audit-baseline.json を見る)"
+}
+
+# ---- AC-1410 / AC-1411 / AC-1430(i) / AC-1440(標準ユーザー、旧製品なし)----
+if (Want "1410") {
+  Section "AC-1410 標準ユーザーでのインストール(画面あり)"
+  Write-Host "これからインストーラーの画面が出ます。UAC の確認が出ないこと、画面が日本語で言語の選択が無いことを見て、既定のままインストールを最後まで進めてください。完了の画面に「起動」のチェックがあればオフにして閉じてください(オンのままだと、アプリを閉じるまで次へ進みません)。"
+  $code = RunAsStd $NewSetup "" -Visible
+  $a = Audit "1410-installed"
+  $ok = ($code -eq 0) -and (Test-Path -LiteralPath (NewInstalledExe)) -and (@($a."uninstall.HKCU" | Where-Object { $_ -match "\\ReflexFiles \{" -and $_ -match "DisplayName=ReflexFiles;" -and $_ -match "DisplayVersion=0\.3\.0;" }).Count -eq 1) -and (@($a.shortcuts | Where-Object { $_ -match "Start Menu\\Programs\\ReflexFiles\.lnk$" }).Count -eq 1)
+  $ans = Ask "UAC の確認は出ず、画面は日本語で、言語の選択はありませんでしたか?"
+  Note "AC-1410" $(if ($ok -and $ans -like "y*") { "PASS" } else { "FAIL" }) "exit=$code、インストール先 $(NewInstalledExe)、アンインストール情報とスタートメニューのショートカットを確認。目視: $ans。「設定」の「アプリ」は標準ユーザーでサインインできないため、同じ情報源の HKCU の Uninstall の値で代替"
+
+  Section "AC-1411 起動"
+  Write-Host "新製品を標準ユーザーで起動します。タイトル・タイトルバー・タスクバーのアイコンを見て、表示状態(例: ツリーの表示)を1つ変えてから閉じてください。"
+  [void](RunAsStd (NewInstalledExe) "" -Visible)
+  $a2 = Audit "1411-after-launch"
+  $settingsOk = ($a2."APPDATA\dev.reflexfiles.successor(new settings)" -notmatch "^\(なし\)") -and ($a2."APPDATA\ReflexFIles(old settings)" -eq "(なし)")
+  $ans = Ask "タイトルは ReflexFiles で、アイコンは旧製品のアイコンでしたか?"
+  Note "AC-1411" $(if ($settingsOk -and $ans -like "y*") { "PASS" } else { "FAIL" }) "新製品の設定フォルダが作られ、旧製品の設定フォルダは無い: $settingsOk。目視: $ans。起動はスタートメニューでなく実行ファイルから(同じ実行ファイル)"
+
+  Section "AC-1430(i) 同じ版の上書きインストール"
+  $before = Audit "1430-before"
+  $code = RunAsStd $NewSetup "/S"
+  Write-Host "もう一度起動します。さきほど変えた表示状態が戻っているかを見て、閉じてください。"
+  [void](RunAsStd (NewInstalledExe) "" -Visible)
+  $ans = Ask "変えた表示状態が復元されていましたか?"
+  Note "AC-1430(i)" $(if ($code -eq 0 -and $ans -like "y*") { "PASS" } else { "FAIL" }) "exit=$code(中止しない)。目視: $ans。(ii) 0.3.1 は別途"
+  Note "AC-1424(f)" $(if ($code -eq 0) { "PASS" } else { "FAIL" }) "新製品自身の情報(印あり)だけの状態で /S は exit=$code(中止しない)"
+
+  Section "AC-1440 アンインストール(データを残す)"
+  StopApps
+  Write-Host "アンインストーラーの画面が出ます。「アプリのデータを削除する」はオフのままで進めてください。"
+  $code = RunAsStd (NewUninstaller) "" -Visible
+  Start-Sleep -Seconds 2
+  $a3 = Audit "1440-after"
+  $ok = ($a3."LOCALAPPDATA\ReflexFiles(install)" -eq "(なし)") -and ((Cnt $a3."uninstall.HKCU") -eq 0) -and ((Cnt $a3.shortcuts) -eq 0) -and ($a3."APPDATA\dev.reflexfiles.successor(new settings)" -notmatch "^\(なし\)")
+  $ans = Ask "管理者権限(UAC)を求められずに終わりましたか?"
+  Note "AC-1440" $(if ($ok -and $ans -like "y*") { "PASS" } else { "FAIL" }) "exit=$code。インストール先・アンインストール情報・ショートカットが消え、設定フォルダが残る: $ok。目視: $ans。「設定」の「アプリ」からでなく同じアンインストーラーを直接実行"
+  Note "AC-1470(h)" "INFO" ("事後の HKCU\Software: " + ((@($a3."HKCU.Software")) -join " | "))
+}
+
+# ---- AC-1424 判定の網羅(テスト用のアンインストール情報)----
+if (Want "1424") {
+  Section "AC-1424 判定の網羅"
+  $guid = "{00000000-0000-0000-0000-000000000001}"
+  $U = "Software\Microsoft\Windows\CurrentVersion\Uninstall"
+  $cases = @(
+    @{ id = "AC-1424(a)"; hive = "HKCU"; key = "REFLEXFILES"; vals = @(); abort = $true },
+    @{ id = "AC-1424(b)"; hive = "HKLM64"; key = $guid; vals = @(@("DisplayName", "reflexfiles")); abort = $true },
+    @{ id = "AC-1424(c)"; hive = "HKLM32"; key = $guid; vals = @(@("DisplayName", "reflexfiles")); abort = $true },
+    @{ id = "AC-1424(d)"; hive = "HKCU"; key = "ReflexFiles"; vals = @(@("BundleIdentifier", "com.toshi.reflexfiles")); abort = $true },
+    @{ id = "AC-1424(e)"; hive = "HKCU"; key = $guid; vals = @(@("DisplayName", "ReflexFiles Viewer")); abort = $false }
+  )
+  foreach ($c in $cases) {
+    $full = "$U\$($c.key)"
+    $cmds = @()
+    if ($c.vals.Count -eq 0) { $cmds += "reg add `"HKCU\$full`" /f" }
+    foreach ($v in $c.vals) {
+      $root = if ($c.hive -eq "HKCU") { "HKCU" } else { "HKLM" }
+      $view = if ($c.hive -eq "HKLM32") { "/reg:32" } elseif ($c.hive -eq "HKLM64") { "/reg:64" } else { "" }
+      $cmds += "reg add `"$root\$full`" /v $($v[0]) /t REG_SZ /d `"$($v[1])`" /f $view"
+    }
+    foreach ($cmd in $cmds) { if ($c.hive -eq "HKCU") { [void](Invoke-AsStd $cmd) } else { cmd /c $cmd | Out-Null } }
+    Note "$($c.id)-setup" "INFO" ("作った情報: " + ($cmds -join " && "))
+    $before = Audit "$($c.id)-before"
+    if ($c.abort) { ExpectAbort $c.id "/S" $before }
+    else {
+      $code = RunAsStd $NewSetup "/S"
+      Note $c.id $(if ($code -eq 0 -and (Test-Path -LiteralPath (NewInstalledExe))) { "PASS" } else { "FAIL" }) "exit=$code(中止しない)"
+      UninstallNewSilent "$($c.id) の後"
+    }
+    $root = if ($c.hive -eq "HKCU") { "HKCU" } else { "HKLM" }
+    $view = if ($c.hive -eq "HKLM32") { "/reg:32" } elseif ($c.hive -eq "HKLM64") { "/reg:64" } else { "" }
+    $del = "reg delete `"$root\$full`" /f $view"
+    if ($c.hive -eq "HKCU") { [void](Invoke-AsStd $del) } else { cmd /c $del | Out-Null }
+    Note "$($c.id)-cleanup" "INFO" "削除: $del"
+  }
+}
+
+# ---- AC-1420 / AC-1422 / AC-1423 / AC-1441(旧製品 0.2.0 の NSIS)----
+if (Want "1420") {
+  Section "旧製品 0.2.0(NSIS)を標準ユーザーで入れる"
+  $code = RunAsStd $OldSetup "/S"
+  $oldDir = @("C:\Users\$StdUser\AppData\Local\ReflexFIles", "C:\Users\$StdUser\AppData\Local\Programs\ReflexFIles") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $oldDir) { throw "旧製品のインストール先が見つからない(audit を見る)" }
+  $oldExe = @(Get-ChildItem -LiteralPath $oldDir -Filter *.exe | Where-Object { $_.Name -notmatch "^uninstall" })[0].FullName
+  Note "old-install" "INFO" "旧製品 /S exit=$code、実行ファイル $oldExe"
+  Write-Host "旧製品を起動します。設定を1つ変えて(例: 隠しファイルの表示)閉じてください。"
+  [void](RunAsStd $oldExe "" -Visible)
+  StopApps
+  $old0 = Audit "1420-before"
+  Note "AC-1420-record" "INFO" "事前の記録は audit-1420-before.json"
+
+  Section "AC-1420 画面ありで実行"
+  Write-Host "新製品のインストーラーの画面が出ます。旧製品の案内が1つだけ出ることを見て「OK」を押してください。"
+  ExpectAbort "AC-1420" "" $old0 -Visible
+  $ans = Ask "ファイルのコピーより前に、旧製品の案内が1つだけ出て、OK で終わりましたか?"
+  Note "AC-1420-visual" $(if ($ans -like "y*") { "PASS" } else { "FAIL" }) "目視: $ans"
+
+  Section "AC-1422 /S と /P"
+  ExpectAbort "AC-1422(i) /S" "/S" $old0
+  ExpectAbort "AC-1422(ii) /P" "/P" $old0
+  ExpectAbort "AC-1422(iii) /P /UPDATE" "/P /UPDATE" $old0
+  Write-Host "旧製品を起動します。従来どおり起動できることを見て閉じてください。"
+  [void](RunAsStd $oldExe "" -Visible)
+  StopApps
+  $ans = Ask "旧製品は従来どおり起動しましたか?"
+  Note "AC-1420-old-runs" $(if ($ans -like "y*") { "PASS" } else { "FAIL" }) "目視: $ans"
+
+  if (Want "1423") {
+    Section "AC-1423 旧製品をアンインストールした後"
+    $copy = Join-Path $Work "oldcopy"
+    New-Item -ItemType Directory -Force $copy | Out-Null
+    Copy-Item -Path (Join-Path $oldDir "*") -Destination $copy -Recurse -Force
+    $list = @(Get-ChildItem -LiteralPath $copy -Recurse -File | ForEach-Object { $_.FullName.Substring($copy.Length) })
+    Note "AC-1423-record" "INFO" ("旧製品のインストール先 $oldDir の一覧: " + ($list -join ", "))
+    $oldUn = Join-Path $oldDir "uninstall.exe"
+    $code = RunAsStd $oldUn "/S"
+    Start-Sleep -Seconds 3
+    $afterOldUn = Audit "1423-after-old-uninstall"
+    New-Item -ItemType Directory -Force $oldDir | Out-Null
+    $exeName = Split-Path $oldExe -Leaf
+    $prepared = @($exeName) + @($list | Where-Object { $_ -ne "\$exeName" -and $_ -ne "\uninstall.exe" } | Select-Object -First 1 | ForEach-Object { $_.TrimStart("\") })
+    foreach ($p in $prepared) { Copy-Item -LiteralPath (Join-Path $copy $p) -Destination (Join-Path $oldDir $p) -Force }
+    & icacls $oldDir /grant "${StdUser}:(OI)(CI)F" /T /Q | Out-Null
+    $prep = @($prepared | ForEach-Object { $_ + " " + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $oldDir $_)).Hash.Substring(0, 16) })
+    Note "AC-1423-prepared" "INFO" ("旧製品の uninstall /S exit=$code。用意したファイル: " + ($prep -join ", "))
+    $code = RunAsStd $NewSetup "/S"
+    $state = @($prepared | ForEach-Object {
+      $p = Join-Path $oldDir $_
+      if (-not (Test-Path -LiteralPath $p)) { "$_=消えた" }
+      elseif ((Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.Substring(0, 16) -ne ((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $copy $_)).Hash.Substring(0, 16))) { "$_=上書きされた" }
+      else { "$_=残った" } })
+    Write-Host "新製品を起動します。既定の状態で起動すること(旧製品で変えた設定が反映されていないこと)を見て閉じてください。"
+    [void](RunAsStd (NewInstalledExe) "" -Visible)
+    StopApps
+    $ans = Ask "旧製品の案内は出ずにインストールが終わり、新製品は既定の状態で起動しましたか?"
+    $a = Audit "1423-after-new-install"
+    $oldSettingsSame = $a."APPDATA\ReflexFIles(old settings)" -eq $afterOldUn."APPDATA\ReflexFIles(old settings)"
+    Note "AC-1423" $(if ($code -eq 0 -and $ans -like "y*" -and $oldSettingsSame) { "PASS" } else { "FAIL" }) "exit=$code。用意した旧製品のファイル: $($state -join ', ')(いずれも許容)。旧製品の設定フォルダは変わらない: $oldSettingsSame。目視: $ans。旧製品のアンインストールは「設定」の「アプリ」からでなく uninstall.exe /S"
+    UninstallNewSilent "AC-1423 (4)"
+    $left = @($prepared | ForEach-Object { if (Test-Path -LiteralPath (Join-Path $oldDir $_)) { "$_=残った" } else { "$_=消えた" } })
+    $a = Audit "1423-after-new-uninstall"
+    Note "AC-1423(4)" "INFO" ("新製品のアンインストール後の旧製品のファイル: " + ($left -join ", ") + "。旧製品の設定フォルダは変わらない: " + ($a."APPDATA\ReflexFIles(old settings)" -eq $afterOldUn."APPDATA\ReflexFIles(old settings)"))
+    if (Test-Path -LiteralPath $oldDir) { Remove-Item -LiteralPath $oldDir -Recurse -Force }
+  }
+
+  if (Want "1441") {
+    Section "AC-1441 データも削除するアンインストール"
+    $code = RunAsStd $NewSetup "/S"
+    Write-Host "新製品を起動します。そのまま閉じてください(設定フォルダと WebView2 のデータを作るため)。"
+    [void](RunAsStd (NewInstalledExe) "" -Visible)
+    StopApps
+    $b = Audit "1441-before"
+    Write-Host "アンインストーラーの画面が出ます。「アプリのデータを削除する」をオンにして進めてください。"
+    $code = RunAsStd (NewUninstaller) "" -Visible
+    Start-Sleep -Seconds 3
+    $a = Audit "1441-after"
+    $ok = ($a."APPDATA\dev.reflexfiles.successor(new settings)" -eq "(なし)") -and (-not $a."LOCALAPPDATA\dev.reflexfiles.successor(new WebView2) exists") -and ($a."APPDATA\ReflexFIles(old settings)" -eq $b."APPDATA\ReflexFIles(old settings)") -and ($b."APPDATA\ReflexFIles(old settings)" -notmatch "^\(なし\)")
+    Note "AC-1441" $(if ($ok) { "PASS" } else { "FAIL" }) "exit=$code。新製品の設定フォルダと WebView2 のデータが消え、旧製品の設定フォルダ(事前にあり)は変わらない: $ok"
+  }
+}
+
+# ---- AC-1421(旧製品 0.2.0 の MSI。マシン全体)----
+if (Want "1421") {
+  Section "AC-1421 旧製品の MSI"
+  $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$OldMsi`"", "/qn", "/norestart" -Wait -PassThru
+  Note "old-msi-install" "INFO" "msiexec /i exit=$($p.ExitCode)"
+  $before = Audit "1421-before"
+  ExpectAbort "AC-1421 /S" "/S" $before
+  ExpectAbort "AC-1421 /P" "/P" $before
+  $p = Start-Process msiexec.exe -ArgumentList "/x", "`"$OldMsi`"", "/qn", "/norestart" -Wait -PassThru
+  Note "old-msi-cleanup" "INFO" "msiexec /x exit=$($p.ExitCode)"
+}
+
+# ---- AC-1450 SmartScreen(このアカウントで実行)----
+if (Want "1450") {
+  Section "AC-1450 ダウンロードの印を付けたコピー"
+  $dl = Join-Path ([Environment]::GetFolderPath("Desktop")) "ReflexFiles_0.3.0_x64-setup.exe"
+  Copy-Item -LiteralPath $NewSetup -Destination $dl -Force
+  Set-Content -LiteralPath $dl -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=https://example.invalid/ReflexFiles_0.3.0_x64-setup.exe"
+  Write-Host "デスクトップの ReflexFiles_0.3.0_x64-setup.exe をダブルクリックしてください。SmartScreen の警告が出たら、画面の文言を控え、「詳細情報」→「実行」で進めるかを確かめ、インストーラーの最初の画面で「キャンセル」してください。"
+  $ans = Ask "警告は出ましたか?出た場合「詳細情報」→「実行」で進められましたか?(メモに画面の文言)"
+  Note "AC-1450" "INFO" "目視: $ans(サンドボックスでの結果。配布の経路が決まった後に作業用アカウントでも確かめる)"
+}
+
+$end = Audit "end"
+Note "end-state" "INFO" ("終了時の対象: " + ((Present $end) -join " | "))
+
+$Results | Format-Table -AutoSize -Wrap | Out-String -Width 4096 | Write-Host
+$Results | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $RunDir "results.json") -Encoding UTF8
+Stop-Transcript | Out-Null
+Write-Host "結果: $RunDir(ホストの out フォルダ)。サンドボックスは閉じると中身が消えます。" -ForegroundColor White

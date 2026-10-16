@@ -1,0 +1,101 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261016200618
+Username: C4A6D5FF-A47F-4\WDAGUtilityAccount
+RunAs User: C4A6D5FF-A47F-4\WDAGUtilityAccount
+Configuration Name: 
+Machine: C4A6D5FF-A47F-4 (Microsoft Windows NT 10.0.26100.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -ExecutionPolicy Bypass -File C:\kit\sandbox-check.ps1
+Process ID: 4504
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[INFO] kit: sha256 OK: new-ReflexFiles_0.3.0_x64-setup.exe=488d37ba96c6a8d00dbc5d14d6e970a99e83a74db3f45d3d585c9b13773b2351, old-ReflexFIles_0.2.0_x64-setup.exe=97d23f57b86c2558b44d0ea57b24e86d51541eef2e551b6c79684f9744a21d4a, old-ReflexFIles_0.2.0_x64_ja-JP.msi=cdbfdd07eb8f97faf33fd75fcc08db8138ff9fa83fd8cbeaf62b6a2bfc7f75fd, sandbox-check.ps1=30f0b1245cb90e8b48d9c53d261e5136aa0fd95b2103fb9c43d90c41bee94ef2
+[INFO] std-user: 標準ユーザー rfstd を作成(管理者のグループに属さない)
+
+==== AC-1480 WebView2 ====
+[SKIP] AC-1480: WebView2 ランタイムが入っている(版 155.0.4283.45)。サンドボックスでは外せないため記録のみ
+
+==== AC-1410 標準ユーザーでのインストール(画面あり) ====
+これからインストーラーの画面が出ます。UAC の確認が出ないこと、画面が日本語で言語の選択が無いことを見て、既定のままインストールを最後まで進めてください。完了の画面に「起動」のチェックがあればオフにして閉じてください(オンのままだと、アプリを閉じるまで次へ進みません)。
+
+UAC の確認は出ず、画面は日本語で、言語の選択はありませんでしたか?
+[PASS] AC-1410: exit=0、インストール先 C:\Users\rfstd\AppData\Local\ReflexFiles\ReflexFiles.exe、アンインストール情報とスタートメニューのショートカットを確認。目視: y。「設定」の「アプリ」は標準ユーザーでサインインできないため、同じ情報源の HKCU の Uninstall の値で代替
+
+==== AC-1411 起動 ====
+新製品を標準ユーザーで起動します。タイトル・タイトルバー・タスクバーのアイコンを見て、表示状態(例: ツリーの表示)を1つ変えてから閉じてください。
+
+タイトルは ReflexFiles で、アイコンは旧製品のアイコンでしたか?
+[PASS] AC-1411: 新製品の設定フォルダが作られ、旧製品の設定フォルダは無い: True。目視: y。起動はスタートメニューでなく実行ファイルから(同じ実行ファイル)
+
+==== AC-1430(i) 同じ版の上書きインストール ====
+もう一度起動します。さきほど変えた表示状態が戻っているかを見て、閉じてください。
+
+変えた表示状態が復元されていましたか?
+[PASS] AC-1430(i): exit=0(中止しない)。目視: y。(ii) 0.3.1 は別途
+[PASS] AC-1424(f): 新製品自身の情報(印あり)だけの状態で /S は exit=0(中止しない)
+
+==== AC-1440 アンインストール(データを残す) ====
+アンインストーラーの画面が出ます。「アプリのデータを削除する」はオフのままで進めてください。
+
+管理者権限(UAC)を求められずに終わりましたか?
+[PASS] AC-1440: exit=0。インストール先・アンインストール情報・ショートカットが消え、設定フォルダが残る: True。目視: y。「設定」の「アプリ」からでなく同じアンインストーラーを直接実行
+[INFO] AC-1470(h): 事後の HKCU\Software: Software\reflexfiles {} | Software\reflexfiles\ReflexFiles {=C:\Users\rfstd\AppData\Local\ReflexFiles; Installer Language=1041}
+
+==== AC-1424 判定の網羅 ====
+[INFO] AC-1424(a)-setup: 作った情報: reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\REFLEXFILES" /f
+[PASS] AC-1424(a): exit=2、状態の変化なし
+[INFO] AC-1424(a)-cleanup: 削除: reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\REFLEXFILES" /f
+[INFO] AC-1424(b)-setup: 作った情報: reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v D /t REG_SZ /d "i" /f /reg:64 && reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v r /t REG_SZ /d "e" /f /reg:64
+[FAIL] AC-1424(b): exit=0、変化:
+[INFO] AC-1424(b)-cleanup: 削除: reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /f /reg:64
+[INFO] AC-1424(c)-setup: 作った情報: reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v D /t REG_SZ /d "i" /f /reg:32 && reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v r /t REG_SZ /d "e" /f /reg:32
+[FAIL] AC-1424(c): exit=0、変化:
+[INFO] AC-1424(c)-cleanup: 削除: reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /f /reg:32
+[INFO] AC-1424(d)-setup: 作った情報: reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReflexFiles" /v B /t REG_SZ /d "u" /f  && reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReflexFiles" /v c /t REG_SZ /d "o" /f
+[FAIL] AC-1424(d): exit=0、変化:
+[INFO] AC-1424(d)-cleanup: 削除: reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ReflexFiles" /f
+[INFO] AC-1424(e)-setup: 作った情報: reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v D /t REG_SZ /d "i" /f  && reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /v R /t REG_SZ /d "e" /f
+[PASS] AC-1424(e): exit=0(中止しない)
+[INFO] cleanup: 新製品を /S でアンインストール(AC-1424(e) の後)exit=0
+[INFO] AC-1424(e)-cleanup: 削除: reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{00000000-0000-0000-0000-000000000001}" /f
+
+==== 旧製品 0.2.0(NSIS)を標準ユーザーで入れる ====
+[INFO] old-install: 旧製品 /S exit=0、実行ファイル C:\Users\rfstd\AppData\Local\ReflexFIles\ReflexFiles.exe
+旧製品を起動します。設定を1つ変えて(例: 隠しファイルの表示)閉じてください。
+[INFO] AC-1420-record: 事前の記録は audit-1420-before.json
+
+==== AC-1420 画面ありで実行 ====
+新製品のインストーラーの画面が出ます。旧製品の案内が1つだけ出ることを見て「OK」を押してください。
+[PASS] AC-1420: exit=2、状態の変化なし
+
+ファイルのコピーより前に、旧製品の案内が1つだけ出て、OK で終わりましたか?
+[PASS] AC-1420-visual: 目視: y
+
+==== AC-1422 /S と /P ====
+[PASS] AC-1422(i) /S: exit=2、状態の変化なし
+[PASS] AC-1422(ii) /P: exit=2、状態の変化なし
+[PASS] AC-1422(iii) /P /UPDATE: exit=2、状態の変化なし
+旧製品を起動します。従来どおり起動できることを見て閉じてください。
+
+旧製品は従来どおり起動しましたか?
+[FAIL] AC-1420-old-runs: 目視: 22y
+
+==== AC-1423 旧製品をアンインストールした後 ====
+[INFO] AC-1423-record: 旧製品のインストール先 C:\Users\rfstd\AppData\Local\ReflexFIles の一覧: \ReflexFiles.exe, \uninstall.exe, \resources\ReflexFiles.png, \resources\user_manual.en.html, \resources\user_manual.en.md, \resources\user_manual.html, \resources\user_manual.ja.html, \resources\user_manual.ja.md, \resources\user_manual.md, \resources\docs\screenshot\jump_list.png, \resources\docs\screenshot\list_dark.png, \resources\docs\screenshot\list_light.png, \resources\docs\screenshot\markdown_preview.png, \resources\docs\screenshot\path.png, \resources\docs\screenshot\source_code.png
+PS>TerminatingError(Copy-Item): "Could not find a part of the path 'C:\Users\rfstd\AppData\Local\ReflexFIles\resources\ReflexFiles.png'."
+>> TerminatingError(Copy-Item): "Could not find a part of the path 'C:\Users\rfstd\AppData\Local\ReflexFIles\resources\ReflexFiles.png'."
+Could not find a part of the path 'C:\Users\rfstd\AppData\Local\ReflexFIles\resources\ReflexFiles.png'.
+Copy-Item : Could not find a part of the path 'C:\Users\rfstd\AppData\Local\ReflexFIles\resources\ReflexFiles.png'.
+At C:\kit\sandbox-check.ps1:324 char:33
++ ... prepared) { Copy-Item -LiteralPath (Join-Path $copy $p) -Destination  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Copy-Item], DirectoryNotFoundException
+    + FullyQualifiedErrorId : System.IO.DirectoryNotFoundException,Microsoft.PowerShell.Commands.CopyItemCommand
+

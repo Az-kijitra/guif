@@ -1,0 +1,27 @@
+﻿{
+    "newSetup":  "new-ReflexFiles_0.3.0_x64-setup.exe",
+    "oldSetup":  "old-ReflexFIles_0.2.0_x64-setup.exe",
+    "oldMsi":  "old-ReflexFIles_0.2.0_x64_ja-JP.msi",
+    "files":  [
+                  {
+                      "name":  "new-ReflexFiles_0.3.0_x64-setup.exe",
+                      "source":  "C:\\Users\\toshi\\git\\project\\app\\src-tauri\\target\\release\\bundle\\nsis\\ReflexFiles_0.3.0_x64-setup.exe",
+                      "sha256":  "488d37ba96c6a8d00dbc5d14d6e970a99e83a74db3f45d3d585c9b13773b2351"
+                  },
+                  {
+                      "name":  "old-ReflexFIles_0.2.0_x64-setup.exe",
+                      "source":  "C:\\Users\\toshi\\git\\ReflexFiles\\app\\src-tauri\\target\\release\\bundle\\nsis\\ReflexFIles_0.2.0_x64-setup.exe",
+                      "sha256":  "97d23f57b86c2558b44d0ea57b24e86d51541eef2e551b6c79684f9744a21d4a"
+                  },
+                  {
+                      "name":  "old-ReflexFIles_0.2.0_x64_ja-JP.msi",
+                      "source":  "C:\\Users\\toshi\\git\\ReflexFiles\\app\\src-tauri\\target\\release\\bundle\\msi\\ReflexFIles_0.2.0_x64_ja-JP.msi",
+                      "sha256":  "cdbfdd07eb8f97faf33fd75fcc08db8138ff9fa83fd8cbeaf62b6a2bfc7f75fd"
+                  },
+                  {
+                      "name":  "sandbox-check.ps1",
+                      "source":  "C:\\Users\\toshi\\git\\project\\tests\\manual\\release-sandbox\\sandbox-check.ps1",
+                      "sha256":  "30f0b1245cb90e8b48d9c53d261e5136aa0fd95b2103fb9c43d90c41bee94ef2"
+                  }
+              ]
+}

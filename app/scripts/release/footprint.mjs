@@ -10,7 +10,7 @@
 export const FOOTPRINT = [
   {
     id: "R1",
-    label: "アンインストール情報(BundleIdentifier の印を含む)",
+    label: "アンインストール情報",
     location: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ReflexFiles",
     afterUninstall: "removed",
   },
@@ -28,9 +28,8 @@ export const FOOTPRINT = [
   },
   {
     id: "R4",
-    label: "旧製品の検出と WebView2 の有無の判定(読み取りのみ)",
-    location:
-      "HKCU / HKLM (64 and 32) ...\\CurrentVersion\\Uninstall, and ...\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+    label: "WebView2 の有無の判定(読み取りのみ)",
+    location: "...\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
     afterUninstall: "unchanged",
   },
   {
@@ -95,9 +94,8 @@ export const FOOTPRINT = [
   },
   {
     id: "M1",
-    label: "中断時の残り(印だけの Uninstall\\ReflexFiles と空のインストール先)",
-    location:
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ReflexFiles (BundleIdentifier only) and an empty %LOCALAPPDATA%\\ReflexFiles",
+    label: "中断時の残り(空のインストール先)",
+    location: "%LOCALAPPDATA%\\ReflexFiles (empty)",
     afterUninstall: "remains",
   },
 ];

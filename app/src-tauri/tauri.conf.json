@@ -47,8 +47,7 @@
         "languages": [
           "Japanese"
         ],
-        "displayLanguageSelector": false,
-        "installerHooks": "installer-hooks.nsh"
+        "displayLanguageSelector": false
       }
     }
   }
