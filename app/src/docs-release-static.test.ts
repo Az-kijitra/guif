@@ -3,14 +3,14 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// [静的] Spec: SPEC-0600-0001 第2版 AC-1460, R-1449, R-1486, R-1490, R-1491, T-04, S-6 (Japanese only); SPEC-0500-0001 R-03 (links exist).
+// [静的] Spec: SPEC-0600-0001 第3版 AC-1460, R-1449, R-1486, R-1490, R-1491, T-04, S-6 (Japanese only); SPEC-0500-0001 R-03 (links exist).
 // Design: SPEC-0200-0001 §3.15.7, §3.15.8.
 //
 // Contract: <repo>/README.md, <repo>/CHANGELOG.md, <repo>/docs/user_manual.md exist, are written in Japanese, and contain:
 //   README + manual : SmartScreen with the way past it (「詳細情報」 then 「実行」)
 //   README          : the "アプリのデータを削除する" default (R-1461), links to docs/user_manual.md and CHANGELOG.md
 //   CHANGELOG       : a `## 0.3.0` heading
-//   manual          : %APPDATA%\dev.reflexfiles.successor and that it stays by default
+//   manual          : %APPDATA%\dev.guif.app and that it stays by default
 //   None of the three mentions the old product (R-1449). No placeholders; no other-language variants; no docs/CHANGELOG.md;
 //   no app/src-tauri/resources/.
 
@@ -78,26 +78,39 @@ describe("required content (R-1486, R-1461, T-04)", () => {
     expect(t).toMatch(/Windows 10/);
     expect(t).toMatch(/Windows 11/);
   });
-  it("manual: install / uninstall, the settings folder %APPDATA%\\dev.reflexfiles.successor and that it stays by default", () => {
+  it("manual: install / uninstall, the settings folder %APPDATA%\\dev.guif.app and that it stays by default", () => {
     const t = doc(MANUAL);
     expect(t).toContain("インストール");
     expect(t).toContain("アンインストール");
-    expect(t).toContain("dev.reflexfiles.successor");
+    expect(t).toContain("%APPDATA%\\dev.guif.app");
     expect(t).toMatch(/残(る|り)/);
     expect(t).toContain("アプリのデータを削除する");
   });
   it("CHANGELOG: has a `## 0.3.0` entry", () => {
     expect(doc(CHANGELOG)).toMatch(/^##\s+0\.3\.0\b/m);
   });
-  it("the product is ReflexFiles in README and manual", () => {
-    expect(doc(README)).toContain("ReflexFiles");
-    expect(doc(MANUAL)).toContain("ReflexFiles");
+  it("the product name guif is in README, CHANGELOG and manual (AC-1460 第3版)", () => {
+    expect(doc(README)).toContain("guif");
+    expect(doc(CHANGELOG)).toContain("guif");
+    expect(doc(MANUAL)).toContain("guif");
+  });
+  it("README and manual: installer name guif_0.3.0_x64-setup.exe and install folder %LOCALAPPDATA%\\guif (R-1490 第3版 note)", () => {
+    for (const p of [README, MANUAL]) {
+      expect(doc(p)).toContain("guif_0.3.0_x64-setup.exe");
+      expect(doc(p)).toContain("%LOCALAPPDATA%\\guif");
+    }
+  });
+  it("CHANGELOG: installer name guif_0.3.0_x64-setup.exe", () => {
+    expect(doc(CHANGELOG)).toContain("guif_0.3.0_x64-setup.exe");
   });
 });
 
 // 第2版 R-1449: the old product is not mentioned at all (name, removal steps, its settings / log folders, succession).
-describe("AC-1460 第2版 / R-1449: no mention of the old product", () => {
-  const OLD = [/ReflexFIles/, /%APPDATA%\\?ReflexFIles/, /%LOCALAPPDATA%\\?ReflexViewer/, /旧製品/, /旧アプリ/];
+// 第3版 AC-1460: the former names (ReflexFiles, ReflexViewer, the former identifier) do not appear either.
+describe("AC-1460 第2版・第3版 / R-1449: no mention of the old product or of the former names", () => {
+  // The former identifier is built from parts so that this file does not contain it (SPEC-0300-0017 AC-946 (ii) scans app/src).
+  const FORMER_ID = ["dev", "reflexfiles", "successor"].join(".");
+  const OLD = [/ReflexFiles/, /ReflexViewer/, new RegExp(FORMER_ID.replaceAll(".", "\\.")), /ReflexFIles/, /%APPDATA%\\?ReflexFIles/, /%LOCALAPPDATA%\\?ReflexViewer/, /旧製品/, /旧アプリ/];
   it.each([
     ["README.md", README],
     ["CHANGELOG.md", CHANGELOG],

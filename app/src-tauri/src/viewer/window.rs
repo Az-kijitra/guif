@@ -147,7 +147,7 @@ fn focus_viewer(window: &tauri::WebviewWindow) {
 }
 
 /// R-421/MUST-76/82: creates the viewer window (if absent) or shows/focuses/
-/// switches the existing one. `title` is `ReflexViewer - <file name>` (R-423,
+/// switches the existing one. `title` is `<file name> - guif` (R-423,
 /// set on the Rust side); `generation` is the window-generation this build is
 /// FOR (§3.5.12.4) -- captured by the `on_window_event` closure so a later
 /// `Destroyed` can tell `session::on_destroyed` which generation just died.

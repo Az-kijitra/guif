@@ -287,10 +287,10 @@ describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
     { pid: 110, ppid: 100, exePath: "C:\\Windows\\System32\\cmd.exe" },
     { pid: 120, ppid: 110, exePath: EXPECTED }, // the app
     { pid: 130, ppid: 120, exePath: "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\msedgewebview2.exe" }, // owns the CDP port, NOT the app
-    { pid: 900, ppid: 1, exePath: "C:\\Users\\dev\\AppData\\Local\\ReflexFiles\\ReflexFiles.exe" }, // the user's own installed app
+    { pid: 900, ppid: 1, exePath: "C:\\Users\\dev\\AppData\\Local\\guif\\guif.exe" }, // the user's own installed app
   ];
 
-  it("the single descendant with the exact path is chosen (not the WebView2 process that owns the CDP port, not the user's installed ReflexFiles.exe)", async () => {
+  it("the single descendant with the exact path is chosen (not the WebView2 process that owns the CDP port, not the user's installed guif.exe)", async () => {
     const h = await helper();
     expect(h.selectAppPid(base, 100, EXPECTED)).toBe(120);
   });
@@ -311,10 +311,10 @@ describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
     expect(() => h.selectAppPid(base.filter((p) => p.pid !== 120).concat([{ pid: 700, ppid: 1, exePath: EXPECTED }]), 100, EXPECTED)).toThrow();
   });
 
-  it("the match is on the full path, not the file name or a prefix/suffix: the user's ReflexFiles.exe, the same name in another folder, and a longer path are all rejected", async () => {
+  it("the match is on the full path, not the file name or a prefix/suffix: the user's guif.exe, the same name in another folder, and a longer path are all rejected", async () => {
     const h = await helper();
     const decoys = [
-      { pid: 201, ppid: 100, exePath: "C:\\Users\\dev\\AppData\\Local\\ReflexFiles\\ReflexFiles.exe" },
+      { pid: 201, ppid: 100, exePath: "C:\\Users\\dev\\AppData\\Local\\guif\\guif.exe" },
       { pid: 202, ppid: 100, exePath: "C:\\other\\target\\debug\\reflexfiles-successor.exe" },
       { pid: 203, ppid: 100, exePath: EXPECTED + ".bak" },
       { pid: 204, ppid: 100, exePath: "D:" + EXPECTED.slice(2) },
@@ -339,7 +339,7 @@ describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
     expect(h.selectAppPid(deep, 100, EXPECTED)).toBe(104);
   });
 
-  it("the expected path is built from the build settings: debug is <app>\\src-tauri\\target\\debug\\reflexfiles-successor.exe -- never the user's ReflexFiles.exe", async () => {
+  it("the expected path is built from the build settings: debug is <app>\\src-tauri\\target\\debug\\reflexfiles-successor.exe -- never the user's guif.exe", async () => {
     const h = await helper();
     const dbg: string = h.expectedExePath({ appDir: "C:\\r\\app", profile: "debug" });
     expect(dbg.toLowerCase().replace(/\//g, "\\")).toBe("c:\\r\\app\\src-tauri\\target\\debug\\reflexfiles-successor.exe");

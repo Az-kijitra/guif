@@ -11,19 +11,19 @@ export const FOOTPRINT = [
   {
     id: "R1",
     label: "アンインストール情報",
-    location: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ReflexFiles",
+    location: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\guif",
     afterUninstall: "removed",
   },
   {
     id: "R2",
     label: "前回のインストール先(既定値)と親キー",
-    location: "HKCU\\Software\\reflexfiles\\ReflexFiles (and the parent HKCU\\Software\\reflexfiles)",
+    location: "HKCU\\Software\\guif\\guif (and the parent HKCU\\Software\\guif)",
     afterUninstall: "remains",
   },
   {
     id: "R3",
     label: "インストール言語の値(対話と /P のとき書かれる)",
-    location: "HKCU\\Software\\reflexfiles\\ReflexFiles value `Installer Language`",
+    location: "HKCU\\Software\\guif\\guif value `Installer Language`",
     afterUninstall: "remains",
   },
   {
@@ -35,43 +35,43 @@ export const FOOTPRINT = [
   {
     id: "R5",
     label: "自動起動の値(インストーラーは書かず、アンインストールが消す)",
-    location: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run value `ReflexFiles`",
+    location: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run value `guif`",
     afterUninstall: "removed",
   },
   {
     id: "F1",
     label: "実行ファイル",
-    location: "%LOCALAPPDATA%\\ReflexFiles\\ReflexFiles.exe",
+    location: "%LOCALAPPDATA%\\guif\\guif.exe",
     afterUninstall: "removed",
   },
   {
     id: "F2",
     label: "アンインストーラー",
-    location: "%LOCALAPPDATA%\\ReflexFiles\\uninstall.exe",
+    location: "%LOCALAPPDATA%\\guif\\uninstall.exe",
     afterUninstall: "removed",
   },
   {
     id: "F3",
     label: "インストール先のフォルダー(空のとき消える)",
-    location: "%LOCALAPPDATA%\\ReflexFiles",
+    location: "%LOCALAPPDATA%\\guif",
     afterUninstall: "removed",
   },
   {
     id: "S1",
     label: "スタートメニューのショートカット(サブフォルダーは作らない)",
-    location: "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\ReflexFiles.lnk",
+    location: "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\guif.lnk",
     afterUninstall: "removed",
   },
   {
     id: "S2",
     label: "デスクトップのショートカット(/S と /P では常に作る)",
-    location: "[Environment]::GetFolderPath('Desktop')\\ReflexFiles.lnk",
+    location: "[Environment]::GetFolderPath('Desktop')\\guif.lnk",
     afterUninstall: "removed",
   },
   {
     id: "S3",
-    label: "ジャンプリスト等の最近使った項目(AppUserModelId dev.reflexfiles.successor)",
-    location: "AppUserModelId dev.reflexfiles.successor (Windows が管理)",
+    label: "ジャンプリスト等の最近使った項目(AppUserModelId dev.guif.app)",
+    location: "AppUserModelId dev.guif.app (Windows が管理)",
     afterUninstall: "removed",
   },
   {
@@ -89,13 +89,13 @@ export const FOOTPRINT = [
   {
     id: "D1",
     label: "アプリが作る設定と WebView2 のデータ(インストーラーは書かない)",
-    location: "%APPDATA%\\dev.reflexfiles.successor and %LOCALAPPDATA%\\dev.reflexfiles.successor",
+    location: "%APPDATA%\\dev.guif.app and %LOCALAPPDATA%\\dev.guif.app",
     afterUninstall: "remains",
   },
   {
     id: "M1",
     label: "中断時の残り(空のインストール先)",
-    location: "%LOCALAPPDATA%\\ReflexFiles (empty)",
+    location: "%LOCALAPPDATA%\\guif (empty)",
     afterUninstall: "remains",
   },
 ];

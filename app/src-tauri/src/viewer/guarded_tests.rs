@@ -138,7 +138,7 @@ fn ac514_open_with_an_absolute_file_applies_the_request_and_returns_the_title() 
     fs::write(&txt, "hello").unwrap();
     let rt = ViewerRuntime::default();
     let title = open_viewer_guarded(&rt, &s(&txt), key(1, 1)).expect("absolute path").expect("fresh request is applied");
-    assert_eq!(title, "ReflexViewer - a.txt");
+    assert_eq!(title, "a.txt - guif");
     let state = rt.session.lock().unwrap();
     assert_eq!(state.request_key, Some(key(1, 1)));
     assert!(state.session.is_some());

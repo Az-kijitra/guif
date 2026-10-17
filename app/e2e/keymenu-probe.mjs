@@ -64,7 +64,7 @@ try {
 
   // --- 2. wait for the person (no key is sent, nothing is brought to the front by the test)
   console.log("");
-  console.log("アプリのウィンドウ(タイトル ReflexFiles)のタイトルバーを1回クリックして、その後は触らないでください。");
+  console.log("アプリのウィンドウ(タイトル guif)のタイトルバーを1回クリックして、その後は触らないでください。");
   console.log("(最大 120 秒待ちます。前面になるまでキーは1つも送りません)");
   const waitUntil = Date.now() + 120000;
   while (!(await inFront())) {

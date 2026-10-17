@@ -1,4 +1,4 @@
-// Read-only record of the machine state around ReflexFiles (SPEC-0600-0001 R-1496 / AC-1470, design SPEC-0200-0001 3.15.6).
+// Read-only record of the machine state around guif (SPEC-0600-0001 R-1496 / AC-1470, design SPEC-0200-0001 3.15.6).
 // Prints one JSON document to standard output. It never writes, deletes, or changes anything: the registry is only
 // queried, the file system is only listed. Run it with `npm run release:audit`, before and after an install/uninstall.
 // Node built-ins and footprint.mjs only.
@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { FOOTPRINT } from "./footprint.mjs";
 
 const UNINSTALL = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
-const NAME = /reflexfiles/i;
+const NAME = /guif/i;
 
 /** Decode the console output of reg.exe (the OEM code page; Shift_JIS on a Japanese Windows). */
 function decode(buffer) {
@@ -52,7 +52,7 @@ function parseBlocks(text) {
   return blocks;
 }
 
-/** Uninstall entries (one view) whose key name or DisplayName contains "reflexfiles", ignoring case. */
+/** Uninstall entries (one view) whose key name or DisplayName contains "guif", ignoring case. */
 function uninstallEntries(hive, flags) {
   const root = `${hive}\\${UNINSTALL}`;
   const r = regQuery(root, ["/s", ...flags]);
@@ -65,7 +65,7 @@ function uninstallEntries(hive, flags) {
   return { root, queryOk: r.exists, entries };
 }
 
-/** Files and folders under a directory whose names contain "reflexfiles"; the ReflexFiles folder is listed in full. */
+/** Files and folders under a directory whose names contain "guif"; the guif folder is listed in full. */
 function listMatching(dir, depth) {
   if (!existsSync(dir)) return { dir, exists: false, items: [] };
   const items = [];
@@ -92,7 +92,7 @@ function listAll(dir, depth) {
   return out;
 }
 
-/** The Programs folder of the Start menu, to the sub-folders: every .lnk and every sub-folder that mentions reflexfiles. */
+/** The Programs folder of the Start menu, to the sub-folders: every .lnk and every sub-folder that mentions guif. */
 function startMenu(programs) {
   if (!existsSync(programs)) return { dir: programs, exists: false, items: [] };
   const items = [];
@@ -131,8 +131,8 @@ function main() {
     },
     // R2 / R3 / R5 of footprint.mjs
     registry: {
-      "HKCU\\Software\\reflexfiles": regQuery("HKCU\\Software\\reflexfiles", ["/s"]),
-      "HKCU\\...\\CurrentVersion\\Run ReflexFiles": regQuery("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", ["/v", "ReflexFiles"]),
+      "HKCU\\Software\\guif": regQuery("HKCU\\Software\\guif", ["/s"]),
+      "HKCU\\...\\CurrentVersion\\Run guif": regQuery("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", ["/v", "guif"]),
     },
     startMenu: {
       user: startMenu(join(appData, "Microsoft", "Windows", "Start Menu", "Programs")),

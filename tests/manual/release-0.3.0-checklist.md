@@ -19,14 +19,14 @@
 
 | 項目ID | 対応AC / 条項 | 確認手順 | 期待結果 | 結果 | 確認者 / 日付 | 備考 |
 |---|---|---|---|---|---|---|
-| REL-01 | AC-1402 | `npm run release:build` | NSIS のインストーラーが1つだけ作られ、MSI は作られない。sha256 が記録される | OK | 2026-10-16 オーケストレーター | 2,716,975 bytes、sha256 `8ea83eb8…3906`。生成された installer.nsi に検出の処理は無い。第1版は 2026-10-14 に OK |
-| REL-02 | AC-1403 | release と debug の出力の実行ファイル名を見る。AC-1470 の実施でインストールした実行ファイル名を見る | インストールされるのは `ReflexFiles.exe`。debug は `reflexfiles-successor.exe` のまま | OK | 2026-10-16 オーケストレーター | release `ReflexFiles.exe`、tauri dev `reflexfiles-successor.exe`、インストールされたのは `ReflexFiles.exe`。第1版は 2026-10-14 に OK |
-| REL-03 | AC-1470 | 作業用アカウントで、事前の確認 → 設定フォルダの退避 → `/S` でインストール → 起動 → `/S` でアンインストール → 事後の照合 → 復元 | 事前と事後の状態が一致し、設定フォルダの sha256 が退避時と一致する。`HKCU\Software\reflexfiles\ReflexFiles` は残ってよく、事前に無かった場合は確認者が削除する | OK | 2026-10-16 オーケストレーター(発注者の同意のもと) | `tests/results/evidence/2026-10-16/ac1470-v2-normal-account.txt`。第1版は 2026-10-15 に OK(`tests/results/evidence/2026-10-15/ac1470-normal-account.txt`) |
-| REL-10 | AC-1410 [目視] | 標準ユーザーでインストーラーを画面ありで実行 | UAC の確認が出ない。画面は日本語で言語の選択が無い。`%LOCALAPPDATA%\ReflexFiles` に入る | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 第1版のインストーラー、Windows サンドボックス。証跡 `tests/results/evidence/2026-10-16/sandbox-run-20261016-200617/` |
-| REL-11 | AC-1411 [目視] | インストールした新製品を起動 | タイトル `ReflexFiles`、アイコンは R-1470 のもの。新製品の設定フォルダが作られる | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 同上 |
+| REL-01 | AC-1402 | `npm run release:build` | NSIS のインストーラー `guif_0.3.0_x64-setup.exe` が1つだけ作られ、MSI は作られない。sha256 が記録される | OK | 2026-10-18 オーケストレーター | 第3版(guif): 2,746,468 bytes、sha256 `88d4154e…c5b0`。installer.nsi は PRODUCTNAME / MANUFACTURER `guif`、BUNDLEID `dev.guif.app`。`.app` の識別子は警告のみ(拒否されない)。旧名の記録: 第2版 2026-10-16(`8ea83eb8…3906`)、第1版 2026-10-14 |
+| REL-02 | AC-1403 | release と debug の出力の実行ファイル名を見る。AC-1470 の実施でインストールした実行ファイル名を見る | インストールされるのは `guif.exe`。debug は `reflexfiles-successor.exe` のまま | | | 第3版でやり直す(release の出力は `guif.exe` を 2026-10-18 に確認済み)。旧名の記録: 第2版 2026-10-16 は `ReflexFiles.exe` で OK |
+| REL-03 | AC-1470 | 作業用アカウントで、事前の確認 → 設定フォルダの退避 → `/S` でインストール → 起動 → `/S` でアンインストール → 事後の照合 → 復元 | 事前と事後の状態が一致し、設定フォルダの sha256 が退避時と一致する。`HKCU\Software\guif\guif` は残ってよく、事前に無かった場合は確認者が削除する。旧設定フォルダ `%APPDATA%\dev.reflexfiles.successor` は変わらない(AC-1470 (vii)) | | | 第3版(guif)でやり直す。旧名の記録: 第2版 2026-10-16 OK `tests/results/evidence/2026-10-16/ac1470-v2-normal-account.txt`。第1版は 2026-10-15 に OK(`tests/results/evidence/2026-10-15/ac1470-normal-account.txt`) |
+| REL-10 | AC-1410 [目視] | 標準ユーザーでインストーラーを画面ありで実行 | UAC の確認が出ない。画面は日本語で言語の選択が無い。`%LOCALAPPDATA%\guif` に入る | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 第1版のインストーラー(旧名のため、名前・パスは旧名で確かめた記録)、Windows サンドボックス。証跡 `tests/results/evidence/2026-10-16/sandbox-run-20261016-200617/` |
+| REL-11 | AC-1411 [目視] | インストールした新製品を起動 | タイトル `guif`、アイコンは R-1470 のもの。新製品の設定フォルダが作られる | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 同上 |
 | REL-12 | AC-1430 (i) | 表示状態を変えて閉じ、同じ 0.3.0 を `/S` で入れ直して起動 | 中止されない。変えた表示状態が復元される | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 同上。(ii) 0.3.1 は未実施 |
 | REL-13 | AC-1440 | 「アプリのデータを削除する」をオフでアンインストール | インストール先・ショートカット・アンインストール情報が消え、設定フォルダは残る。UAC の確認が出ない | 記録 | 2026-10-16 発注者(目視)・オーケストレーター | 同上 |
-| REL-14 | AC-1441 | 「アプリのデータを削除する」をオンでアンインストール | `%APPDATA%\dev.reflexfiles.successor` と `%LOCALAPPDATA%\dev.reflexfiles.successor` が消える | 未実施 | | R-1496 の 6 (d) |
+| REL-14 | AC-1441 | 「アプリのデータを削除する」をオンでアンインストール | `%APPDATA%\dev.guif.app` と `%LOCALAPPDATA%\dev.guif.app` が消える | 未実施 | | R-1496 の 6 (d) |
 | REL-15 | AC-1480 | WebView2 ランタイムの無い環境でインストール | 導入されて起動する | 未実施 | | サンドボックスには WebView2 155.0.4283.45 が入っていて外せない(2026-10-16)。R-1496 の 6 (d) |
 | REL-16 | AC-1450 [目視] | ダウンロードの印(Zone.Identifier)を付けたコピーを実行 | SmartScreen の警告の有無と画面、「詳細情報」→「実行」で進めることを記録 | 未実施 | | R-1496 の 6 (e) |
 | REL-17 | AC-1451 | インストールした新製品で ISS-0216 の手順を計測 | 結果を記録する(判定に使わない) | 未実施 | | R-1496 の 6 (e) |

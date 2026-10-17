@@ -1,15 +1,16 @@
 /// <reference types="node" />
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// [静的] Spec: SPEC-0600-0001 第2版 AC-1400 (bundle settings), AC-1401 (icons), AC-1404 (no detection), R-1411 / T-09 (versions agree), R-1471.
+// [静的] Spec: SPEC-0600-0001 第3版 AC-1400 (bundle settings), AC-1401 (icons, 第3版: made from icons-source/android-chrome-512x512.png), AC-1404 (no detection), R-1411 / T-09 (versions agree), R-1471.
 // Design: SPEC-0200-0001 §3.15.5, §3.15.8, §3.15.13 (H-4 decided: package-lock.json top-level version is in scope).
 //
 // Contract assumed (reported to the implementer): no script is imported here, only files are read.
 //   - app/src-tauri/tauri.conf.json carries the keys of §3.15.5 (version 0.3.0, top-level mainBinaryName, bundle.targets ["nsis"], ...).
-//   - app/src-tauri/icons/ holds exactly 32x32.png, 128x128.png, 128x128@2x.png, icon.ico (byte-identical to old main a62954e).
+//   - app/src-tauri/icons/ holds exactly 32x32.png, 128x128.png, 128x128@2x.png, icon.ico, made from icons-source/android-chrome-512x512.png (R-1470).
 //   - Cargo.toml `[package] version`, Cargo.lock `reflexfiles-successor` version, package.json and package-lock.json
 //     (top level and packages[""]) are all 0.3.0.
 // Status at TDD time: RED (the repo is still at 0.0.0 / targets "all" / icon []).
@@ -19,13 +20,11 @@ const TAURI = join(APP, "src-tauri");
 const ICONS = join(TAURI, "icons");
 const EXPECTED_VERSION = "0.3.0";
 
-// `git -C C:\Users\toshi\git\ReflexFiles rev-parse a62954e:app/src-tauri/icons/<file>` (blob hashes of the old main).
-const ICON_BLOBS: Record<string, string> = {
-  "32x32.png": "08300b558e30f35dc5cbba70bcfb8826f2a10622",
-  "128x128.png": "bf4c554941e975e3e6fe84787d0500f6b3ad1fca",
-  "128x128@2x.png": "234c2b6a37aa2994985a420eb0d2dbc3cfa76e15",
-  "icon.ico": "a50a93352923152e3d7397c30abd915ce9701923",
-};
+// R-1470 / AC-1401 (iv): the source image of the icons (recorded sha256; `favicon_io/android-chrome-512x512.png`).
+const ICON_FILES = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.ico"];
+const ICON_PNG_SIZES: Record<string, number> = { "32x32.png": 32, "128x128.png": 128, "128x128@2x.png": 256 };
+const ICON_SOURCE = join(TAURI, "icons-source", "android-chrome-512x512.png");
+const ICON_SOURCE_SHA256 = "3bf2fb728bdbd0806c5db433c337ddd984f8ef53794ed3b304510fab33c1ca46";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const conf: any = JSON.parse(readFileSync(join(TAURI, "tauri.conf.json"), "utf-8"));
@@ -55,21 +54,29 @@ describe("R-1411 / T-09 / H-4: the versions agree on 0.3.0", () => {
   it("Cargo.toml [package] version is 0.3.0", () => {
     expect(cargoTomlVersion(read(join(TAURI, "Cargo.toml")))).toBe(EXPECTED_VERSION);
   });
-  it("Cargo.lock: the reflexfiles-successor package is 0.3.0", () => {
+  it("Cargo.lock: the reflexfiles-successor package is 0.3.0 (the Cargo package name is not renamed: 【確定 #6-5】)", () => {
     expect(cargoLockVersion(read(join(TAURI, "Cargo.lock")))).toBe(EXPECTED_VERSION);
   });
 });
 
 describe("AC-1400 / R-1400 / R-1403 / T-02 / T-03: tauri.conf.json distribution settings", () => {
-  it("product name and identifier are unchanged", () => {
-    expect(conf.productName).toBe("ReflexFiles");
-    expect(conf.identifier).toBe("dev.reflexfiles.successor");
+  it("product name is guif and identifier is dev.guif.app (R-1401, 【確定 #6】【確定 #6-1】)", () => {
+    expect(conf.productName).toBe("guif");
+    expect(conf.identifier).toBe("dev.guif.app");
+  });
+  it("the main window title is guif; the publisher, when set, is guif (R-1473)", () => {
+    const main = (conf.app?.windows ?? []).find((w: { label?: string }) => w.label === "main") ?? conf.app?.windows?.[0];
+    expect(main?.title).toBe("guif");
+    if (conf.bundle?.publisher !== undefined) expect(conf.bundle.publisher).toBe("guif");
+  });
+  it("the Cargo package name is unchanged (reflexfiles-successor)", () => {
+    expect(/^\[package\][\s\S]*?^name\s*=\s*"reflexfiles-successor"/m.test(read(join(TAURI, "Cargo.toml")))).toBe(true);
   });
   it("bundle.targets is exactly [\"nsis\"] (no MSI)", () => {
     expect(conf.bundle.targets).toEqual(["nsis"]);
   });
-  it("mainBinaryName is ReflexFiles and equals productName (T-02, top-level key)", () => {
-    expect(conf.mainBinaryName).toBe("ReflexFiles");
+  it("mainBinaryName is guif and equals productName (T-02, top-level key)", () => {
+    expect(conf.mainBinaryName).toBe("guif");
     expect(conf.mainBinaryName).toBe(conf.productName);
   });
   it("bundle.icon lists exactly the four icons in order", () => {
@@ -122,14 +129,52 @@ describe("AC-1404 / R-1448: the installer has no old-product detection of its ow
   });
 });
 
-describe("AC-1401 / T-01: icons are byte-identical to the old main (git blob sha1)", () => {
-  it("icons/ holds exactly the four files (nothing else)", () => {
-    expect(existsSync(ICONS)).toBe(true);
-    expect(readdirSync(ICONS).sort()).toEqual(Object.keys(ICON_BLOBS).sort());
+// Width / height of a PNG from its IHDR (bytes 16..24, big-endian).
+function pngSize(buf: Buffer): { w: number; h: number } {
+  expect(buf.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
+// Sizes of the entries of an ICO (a width / height byte of 0 means 256).
+function icoSizes(buf: Buffer): { w: number; h: number }[] {
+  expect(buf.readUInt16LE(0)).toBe(0);
+  expect(buf.readUInt16LE(2)).toBe(1);
+  const count = buf.readUInt16LE(4);
+  return Array.from({ length: count }, (_, i) => {
+    const o = 6 + i * 16;
+    return { w: buf[o] || 256, h: buf[o + 1] || 256 };
   });
-  it.each(Object.entries(ICON_BLOBS))("%s has blob hash %s", (file, expected) => {
-    const buf = readFileSync(join(ICONS, file));
-    const blob = createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex");
-    expect(blob).toBe(expected);
+}
+
+describe("AC-1401 / T-01 / R-1470: icons made from the source image", () => {
+  it("(i) icons/ holds exactly the four files (nothing else: no icns, android, ios, Store, 64x64)", () => {
+    expect(existsSync(ICONS)).toBe(true);
+    expect(readdirSync(ICONS).sort()).toEqual([...ICON_FILES].sort());
+  });
+  it.each(Object.entries(ICON_PNG_SIZES))("(ii) %s is %i x %i px", (file, n) => {
+    expect(pngSize(readFileSync(join(ICONS, file)))).toEqual({ w: n, h: n });
+  });
+  it("(iii) icon.ico contains a 256 x 256 entry", () => {
+    expect(icoSizes(readFileSync(join(ICONS, "icon.ico")))).toContainEqual({ w: 256, h: 256 });
+  });
+  it("(iv) the source image exists, is 512 x 512 and has the recorded sha256", () => {
+    expect(existsSync(ICON_SOURCE)).toBe(true);
+    const buf = readFileSync(ICON_SOURCE);
+    expect(pngSize(buf)).toEqual({ w: 512, h: 512 });
+    expect(createHash("sha256").update(buf).digest("hex")).toBe(ICON_SOURCE_SHA256);
+  });
+  it("(v) nothing under favicon_io/ is tracked by git", () => {
+    const out = execFileSync("git", ["-C", resolve(APP, ".."), "ls-files", "--", "favicon_io"], { encoding: "utf-8" });
+    expect(out.trim()).toBe("");
+  });
+});
+
+// SPEC-0300-0017 AC-946 (ii) [静的]: no code reads or moves the settings folder of the name before the rename.
+describe("AC-946 (ii) / R-1472: the former identifier does not appear in app/src and app/src-tauri/src", () => {
+  const FORMER = ["dev", "reflexfiles", "successor"].join("."); // built here so that this file itself does not contain it
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
+  it("no file contains the former identifier", () => {
+    const hits = [...walk(join(APP, "src")), ...walk(join(TAURI, "src"))].filter((p) => readFileSync(p).toString("latin1").includes(FORMER));
+    expect(hits).toEqual([]);
   });
 });

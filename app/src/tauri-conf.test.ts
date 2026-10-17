@@ -4,9 +4,8 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // [静的] Spec: SPEC-0300-0017 R-991 (initial size 1000 x 700), R-991-1 (minimum inner
-// size 640 x 480, ISS-0181 / P-21 approved), R-992 (window title `ReflexFiles`),
-// R-993 / AC-946 (`productName` = `ReflexFiles`, `identifier` unchanged so the
-// settings folder stays the same), R-958-1 (Ctrl+wheel zoom stays disabled).
+// size 640 x 480, ISS-0181 / P-21 approved), R-992 (window title `guif`),
+// R-993 / AC-946 (`productName` = `guif`, `identifier` = `dev.guif.app`: SPEC-0300-0017 第9版, SPEC-0600-0001 R-1401), R-958-1 (Ctrl+wheel zoom stays disabled).
 // Design: SPEC-0200-0001 §3.8.10, §3.8.18 (minWidth/minHeight added, initial size kept).
 
 type WindowConf = Record<string, unknown>;
@@ -20,16 +19,16 @@ const conf = JSON.parse(readFileSync(join(resolve(__dirname), "..", "src-tauri",
 const main = (conf.app?.windows ?? []).find((w) => w.label === "main") ?? (conf.app?.windows ?? [])[0] ?? {};
 
 describe("tauri.conf.json: product and window (AC-946, R-991~R-993)", () => {
-  it("AC-946: productName is ReflexFiles", () => {
-    expect(conf.productName).toBe("ReflexFiles");
+  it("AC-946: productName is guif", () => {
+    expect(conf.productName).toBe("guif");
   });
 
-  it("AC-946: identifier is unchanged (dev.reflexfiles.successor) so the settings folder does not move", () => {
-    expect(conf.identifier).toBe("dev.reflexfiles.successor");
+  it("AC-946: identifier is dev.guif.app (the settings folder is %APPDATA%\dev.guif.app)", () => {
+    expect(conf.identifier).toBe("dev.guif.app");
   });
 
-  it("R-992: the main window title is ReflexFiles (same name as the product)", () => {
-    expect(main.title).toBe("ReflexFiles");
+  it("R-992: the main window title is guif (same name as the product)", () => {
+    expect(main.title).toBe("guif");
     expect(main.title).toBe(conf.productName);
   });
 
@@ -62,6 +61,6 @@ describe("tauri.conf.json: main window starts hidden (R-919-1, §3.11.5)", () =>
 
   it("R-991 / R-992 are untouched (size and title still set)", () => {
     expect(main.width).toBe(1000);
-    expect(main.title).toBe("ReflexFiles");
+    expect(main.title).toBe("guif");
   });
 });

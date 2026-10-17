@@ -9,7 +9,7 @@
 //  2b. REFLEXFILES_E2E_FS_SCOPE = the test folder is passed too (debug builds): the backend then
 //     refuses file operations outside it (SPEC-0400-0001 R-10); the notice `E2E fs scope active: ...`
 //     must be seen on stderr before any input is sent (SPEC-0200-0001 §3.10.17.6);
-//  3. after the run, the real settings folder (%APPDATA%\dev.reflexfiles.successor\)
+//  3. after the run, the real settings folder (%APPDATA%\dev.guif.app\)
 //     must be unchanged (modification times compared with a snapshot taken before).
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -20,7 +20,7 @@ import path from "node:path";
 import { listTargets, sleep } from "./cdp.mjs";
 
 export const VITE_PORT = 5173; // vite.config.ts: strictPort
-export const IDENTIFIER = "dev.reflexfiles.successor";
+export const IDENTIFIER = "dev.guif.app";
 export const REAL_CONFIG_DIR = path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), IDENTIFIER);
 const KEEP_FILE = path.join(os.tmpdir(), "rf-e2e-keep.json");
 const OVERRIDE_LINE = /^\[config\] override dir: (.*)$/;
@@ -71,7 +71,7 @@ export async function assertPortsFree(ports) {
   for (const port of ports) {
     if (await portInUse(port)) {
       throw new AbortRun(
-        `port ${port} is already in use: stop the running ReflexFiles / vite instance, or use --attach for an app started by this script with --keep`,
+        `port ${port} is already in use: stop the running guif / vite instance, or use --attach for an app started by this script with --keep`,
       );
     }
   }

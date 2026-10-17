@@ -15,7 +15,7 @@ export const tests = [
   },
   {
     id: "AC-942-title",
-    title: "window title is ReflexFiles (title bar is not reachable over CDP)",
+    title: "window title is guif (title bar is not reachable over CDP)",
     async run() {
       throw new Skip("check the title bar by eye; tauri.conf.json is verified by the static test (AC-946)", true);
     },
@@ -55,7 +55,7 @@ export const tests = [
     id: "AC-946-restore",
     title: "ui-state.toml saved by the previous version is restored after the productName change",
     async run() {
-      throw new Skip("[目視]: needs a settings folder written by the previous build; identifier is unchanged (static test)", true);
+      throw new Skip("[目視]: needs a settings folder written by the previous build; checked inside the AC-1470 procedure (SPEC-0300-0017 AC-946 (iii)); identifier dev.guif.app is checked by the static test", true);
     },
   },
 ];

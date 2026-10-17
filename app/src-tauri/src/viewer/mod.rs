@@ -1,4 +1,4 @@
-//! `viewer/` (SPEC-0300-0015: ReflexViewer統合 — Phase 6). Feature module of
+//! `viewer/` (SPEC-0300-0015: viewer 統合 — Phase 6). Feature module of
 //! the layout in `docs/architecture/proposals/SPEC-0200-0001.md` §3.5 (as
 //! amended by §3.5.12, which takes priority over §3.5.0~§3.5.11 where they
 //! conflict): depends only on `shared/` (never on `fs`, `fs_ops`, `config`,

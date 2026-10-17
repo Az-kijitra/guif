@@ -16,6 +16,7 @@ use super::window::ViewerRuntime;
 use super::{classify, image, os_open, siblings, text};
 use crate::shared::abs_path;
 use crate::shared::e2e_scope;
+use crate::shared::product::PRODUCT_NAME;
 
 pub(super) fn err(code: ViewerErrorCode, message: impl Into<String>) -> ViewerErrorDto {
     ViewerError { code, message: message.into() }.into()
@@ -129,7 +130,7 @@ pub fn open_viewer_guarded(
         siblings: session.siblings.iter().map(|p| to_display(p)).collect(),
         current_index: session.current_index,
     };
-    let title = format!("ReflexViewer - {}", file_name_of(&session.opened_path));
+    let title = format!("{} - {}", file_name_of(&session.opened_path), PRODUCT_NAME);
     {
         let mut state = runtime.session.lock().expect("viewer session mutex poisoned");
         if !is_newer(state.request_key, key) {

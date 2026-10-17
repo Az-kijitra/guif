@@ -50,7 +50,7 @@ let n = 0;
 function fixture(v: Vs): string {
   const dir = join(tmp, `app${n++}`);
   mkdirSync(join(dir, "src-tauri"), { recursive: true });
-  writeFileSync(join(dir, "src-tauri", "tauri.conf.json"), JSON.stringify({ productName: "ReflexFiles", version: v.conf }));
+  writeFileSync(join(dir, "src-tauri", "tauri.conf.json"), JSON.stringify({ productName: "guif", version: v.conf }));
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "reflexfiles-successor", version: v.pkg }));
   writeFileSync(
     join(dir, "package-lock.json"),
@@ -132,23 +132,23 @@ describe("sha256.mjs (R-1402)", () => {
   });
   it("formatChecksumLine is sha256sum compatible: `<hex> *<name>`", async () => {
     const m = await load("sha256.mjs");
-    expect(m.formatChecksumLine("ba78", "ReflexFiles_0.3.0_x64-setup.exe")).toBe("ba78 *ReflexFiles_0.3.0_x64-setup.exe");
+    expect(m.formatChecksumLine("ba78", "guif_0.3.0_x64-setup.exe")).toBe("ba78 *guif_0.3.0_x64-setup.exe");
   });
 });
 
 describe("installer-name.mjs (R-1401, T-08)", () => {
   it("expectedInstallerName builds <productName>_<version>_x64-setup.exe from the config", async () => {
     const m = await load("installer-name.mjs");
-    expect(m.expectedInstallerName({ productName: "ReflexFiles", version: "0.3.0" })).toBe("ReflexFiles_0.3.0_x64-setup.exe");
+    expect(m.expectedInstallerName({ productName: "guif", version: "0.3.0" })).toBe("guif_0.3.0_x64-setup.exe");
   });
   it("is derived from its input, not hard-coded", async () => {
     const m = await load("installer-name.mjs");
     expect(m.expectedInstallerName({ productName: "Foo", version: "1.2.3" })).toBe("Foo_1.2.3_x64-setup.exe");
   });
-  it("the real tauri.conf.json yields ReflexFiles_0.3.0_x64-setup.exe", async () => {
+  it("the real tauri.conf.json yields guif_0.3.0_x64-setup.exe", async () => {
     const m = await load("installer-name.mjs");
     const conf = JSON.parse(readFileSync(join(APP, "src-tauri", "tauri.conf.json"), "utf-8"));
-    expect(m.expectedInstallerName(conf)).toBe("ReflexFiles_0.3.0_x64-setup.exe");
+    expect(m.expectedInstallerName(conf)).toBe("guif_0.3.0_x64-setup.exe");
   });
 });
 
@@ -175,20 +175,20 @@ describe("footprint.mjs: the AC-1470 list as data (§3.15.4, §3.15.13 3)", () =
     for (const id of ["R2", "R3", "T1", "W1", "D1", "M1"]) expect(mark(id), id).toBe("remains");
     expect(mark("R4")).toBe("unchanged");
   });
-  it("key locations: Uninstall\\ReflexFiles, Software\\reflexfiles\\ReflexFiles, Run, ReflexFiles.exe, uninstall.exe, the settings folder, WebView2 setup", async () => {
+  it("key locations: Uninstall\\guif, Software\\guif\\guif, Run, guif.exe, uninstall.exe, the settings folder, WebView2 setup", async () => {
     const { FOOTPRINT } = await load("footprint.mjs");
     const loc = (id: string): string => FOOTPRINT.find((e: { id: string }) => e.id === id).location;
-    expect(loc("R1")).toMatch(/CurrentVersion\\Uninstall\\ReflexFiles/);
-    expect(loc("R2")).toMatch(/Software\\reflexfiles\\ReflexFiles/);
-    expect(loc("R3")).toMatch(/Software\\reflexfiles\\ReflexFiles/);
+    expect(loc("R1")).toMatch(/CurrentVersion\\Uninstall\\guif/);
+    expect(loc("R2")).toMatch(/Software\\guif\\guif/);
+    expect(loc("R3")).toMatch(/Software\\guif\\guif/);
     expect(loc("R5")).toMatch(/CurrentVersion\\Run/);
-    expect(loc("F1")).toContain("ReflexFiles.exe");
+    expect(loc("F1")).toContain("guif.exe");
     expect(loc("F2")).toContain("uninstall.exe");
-    expect(loc("F3")).toMatch(/LOCALAPPDATA%\\ReflexFiles/i);
-    expect(loc("S1")).toContain("ReflexFiles.lnk");
-    expect(loc("S2")).toContain("ReflexFiles.lnk");
+    expect(loc("F3")).toMatch(/LOCALAPPDATA%\\guif/i);
+    expect(loc("S1")).toContain("guif.lnk");
+    expect(loc("S2")).toContain("guif.lnk");
     expect(loc("T1")).toContain("MicrosoftEdgeWebview2Setup.exe");
-    expect(loc("D1")).toContain("dev.reflexfiles.successor");
+    expect(loc("D1")).toContain("dev.guif.app");
   });
   it("R3 is the `Installer Language` value; M1 is the aborted-install row (label contains 中断時)", async () => {
     const { FOOTPRINT } = await load("footprint.mjs");

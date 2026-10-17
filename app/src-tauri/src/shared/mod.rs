@@ -12,6 +12,7 @@
 pub mod cancel;
 pub mod e2e_scope;
 pub(crate) mod identity;
+pub mod product;
 pub mod schema;
 pub mod window_theme;
 
@@ -37,3 +38,7 @@ mod abs_path_tests;
 // SPEC-0300-0021 R-1584 (TDD, unit-test-writer, 2026-10-17): `check_launch` of the E2E scope.
 #[cfg(test)]
 mod e2e_scope_launch_tests;
+
+// Product name shared by the main window and the viewer title (SPEC-0300-0015 R-423).
+#[cfg(test)]
+mod product_tests;

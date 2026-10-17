@@ -225,6 +225,8 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 | ISS-0227 | 矛盾(不具合: 承認済みの前提・旧製品との意図しない違い) | **SPEC-0300-0009 第18版**(承認後の追補 R-71-1 / AC-653), SPEC-0300-0021 R-1536(承認後の追補), ISS-0226 | ファイル一覧の `fs_list_dir`(`app/src-tauri/src/fs/query.rs`、Windows でリンクをたどらない `DirEntry::metadata`)が、フォルダーへのジャンクション・シンボリックリンクを `File` として出していた。旧製品の `main`(`a62954e`、`fs_query.rs` `entry_from_path` の `fs::metadata`)はフォルダーとして出しており、意図しない後退。SPEC-0300-0021 R-1536(リンクをたどって種別を確かめる)とも食い違っていた。発注者決定「不具合として直す」: 種別はリンクをたどって決め、たどれないリンクは今と同じく `File` | **RESOLVED(仕様)**(2026-10-17 発注者決定。承認後の追補で条文化。実装の修正は実装工程) | 発注者(2026-10-17、AskUserQuestion、オーケストレーター経由で伝達) |
 | ISS-0225 | 未決定(実機・調査で確かめる事実。起票時は「不足〈検証・確認〉」、レビュー MINOR-2 で改めた) | SPEC-0300-0021 R-1510 / R-1534 / R-1540 / R-1544 / R-1587 | 実機・調査で確かめる事実: (a) Windows Terminal が引数の `;` を区切りとして扱うか、(b) エクスプローラーの `/select,<パス>` が標準の引用の規則で届くか、(c) GitHub Desktop に渡す引数とリポジトリでないフォルダーでの振る舞い、(d) `wt.exe`(アプリ実行エイリアス)の存在の確かめ方、(e) 既存調査の未検証の項目、(f) ZIP の中を一覧に表示する機能が無いこと。**2026-10-16: (f) は発注者決定(ZIP は普通のファイル)で解消。(d) は存在を確認したが、レビュー M-2 により判定方法と起動が未確認として OPEN に戻した。(b) に `,` の確認を追加。2026-10-17: (g) 末尾 `\` と空白を含むパスの届き方を追加(再レビュー MINOR-3)。2026-10-17 のスパイクで (b)〈空白・`,`。既定を2要素に〉と (d) を解消** | OPEN(設計工程・実装工程。非ブロッカー。(a)(c)(e)(g) が残る) | (f): 発注者(2026-10-16) |
 | ISS-0228 | 未決定(記録) | SPEC-0300-0009 第18版 R-71-1、SPEC-0300-0011 第10版(R-37-1)、ISS-0227 | code-reviewer の指摘(2026-10-17): (a) リンクの `size` / `modified` はリンク先の値になった(旧製品の `fs::metadata` と同じ)、(b) コピー・移動の中の入れ子のジャンクションは、一覧ではフォルダーと表示されるが、ファイルとして扱われる(既存の振る舞い。循環を避けるため変えていない) | OPEN(人間の判断待ち。(a) は旧製品と同じため受容を推奨、(b) は別の機能改善として扱うかを判断) | オーケストレーター(2026-10-17) |
+| ISS-0229 | 未決定(記録と確かめる事実) | SPEC-0600-0001 第3版、SPEC-0300-0017 第9版、SPEC-0300-0015 第12版、SPEC-0300-0019 第4版、SPEC-0100-0003 第2版、SPEC-0100-0001 第2版 | 製品名を guif に変える発注者の要望と決定(2026-10-17)。(a) .app の識別子のビルドでの扱い、(d) 作り直したインストーラーの installer.nsi の確認 | OPEN(6本は 2026-10-17 に承認。(a)(d) は 2026-10-18 に確認済み、作業用アカウントでの AC-1470 の再確認が残る) | 発注者(2026-10-17) |
+| ISS-0230 | 未決定(記録) | SPEC-0400-0001 第6版 R-08-1、SPEC-0300-0021 R-1585 / R-1586、ISS-0229 | Windows Defender がテスト用の実行ファイル `rf_launch_probe`(std のみの cargo の example)を誤検知して隔離し(`Trojan:Win32/Bearfoos.A!ml` ほか。機械学習による推定)、外部アプリの E2E が失敗した(os error 225)。発注者決定(2026-10-18): 回避の細工(コピーごとにハッシュを変える)はやめ、発注者が Defender の除外を3か所に設定した | RESOLVED(記録。発注者 2026-10-18) | オーケストレーター(2026-10-18) |
 
 ---
 
@@ -246,6 +248,7 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 - 経緯: 要件ドラフト §1.3「ReflexFilesの後継として同一名を仮称として使用する(正式名称は後で決める)」。新リポジトリの名称・ホスティング先は原資料に記述なし。
 - 必要アクション: 発注者への確認。決定までは仮称「ReflexFiles」で進行(SPEC-0100-0003 R-01)。
 - **【発注者確認 2026-09-22・リポジトリ配置のみ解消】**: コード生成先は新規の兄弟ディレクトリではなく、`project`ディレクトリ自体(`app/`以下等、SPEC-0200-0001の設計で前提としているパス構成をそのまま使用)とする。`project`は仕様管理(specs/, intake/, docs/)と実装コードを同一リポジトリ内に同居させる。正式なプロダクト名称(仮称「ReflexFiles」からの変更有無)は引き続き未決定のまま残る。
+- **【2026-10-17 発注者決定・名前の部分を解消】** 判断者: 発注者(toshihide.asada@gmail.com、AskUserQuestion、オーケストレーター経由で伝達)。正式プロダクト名は **`guif`**(すべて小文字)とする(ISS-0229)。条文: SPEC-0100-0003 第2版 R-01 / R-03(DRAFT)。名前の部分は RESOLVED。ホスティング先(配布の経路)は未決定のまま残るため、本 ISS 全体の状態は PARTIALLY_RESOLVED のまま。
 
 ### ISS-0003(矛盾): 要件の基準ブランチと既存調査の調査対象ブランチの不一致
 - 関連Spec: SPEC-0100-0005(R-01, R-02), SPEC-0300-0001〜0008
@@ -2628,3 +2631,45 @@ spec-writer が仕様作成時に検出した事項も同様に本台帳へ起�
 - (b) `app/src-tauri/src/fs_ops/transfer.rs` は、コピー・移動の中で `entry.file_type()`(リンクをたどらない)を使う。選択した最上位のジャンクションは `Path::is_dir()` でたどるが、フォルダーの中に入れ子になったジャンクションはファイルとして `fs::copy` される。一覧ではフォルダーと表示されるため、表示と操作の扱いが食い違う。既存の振る舞いで、今回の修正による退行ではない。たどるように変えると循環するジャンクションへの再帰が起きうる(SPEC-0300-0011 R-37-1、圧縮の R-327-8 が避けているもの)。機能改善として別に扱うかを人間が決める。
 - 状態: OPEN
 - **【2026-10-17 発注者決定】** 発注者が AskUserQuestion で「(a) は受容、(b) は改善の候補にする」と決めた(オーケストレーター経由で伝達)。(a) リンクの `size` / `modified` はリンク先の値とする(旧製品と同じ)。(b) 入れ子のジャンクションのコピー・移動の扱いは、今後の機能改善の候補として扱う。状態: OPEN((b) の候補の扱いが残る)。
+
+### ISS-0229(未決定〈記録と確かめる事実〉・OPEN): 製品名を guif に変える発注者の要望と決定(2026-10-17)
+- 関連Spec: **SPEC-0600-0001 第3版(DRAFT)**、**SPEC-0300-0017 第9版(DRAFT)**、**SPEC-0300-0015 第12版(DRAFT)**、**SPEC-0300-0019 第4版(DRAFT)**、**SPEC-0100-0003 第2版(DRAFT)**、**SPEC-0100-0001 第2版(DRAFT)**。参照: ISS-0002(正式プロダクト名)、ISS-0183、ISS-0220、SPEC-0100-0004 R-02(移行機能なし)
+- 種別・状態の表記は前例(ISS-0218 / ISS-0221 / ISS-0222)に合わせた。決定そのものは発注者が行ったもので変更不可。
+- 要望(原文、2026-10-17): 「アプリの名前を変更します。アプリの名前はguifです。アイコンは"C:\Users\toshi\git\project\favicon_io"を使ってください。」
+- 判断者: 発注者(2026-10-17、AskUserQuestion、オーケストレーター経由で伝達)。
+  1. 表示名はすべて小文字の `guif`: ウィンドウのタイトル、スタートメニュー、実行ファイル `guif.exe`(`mainBinaryName`)、インストーラー `guif_0.3.0_x64-setup.exe`、インストール先 `%LOCALAPPDATA%\guif`、アンインストール情報の名前。
+  2. `identifier` を `dev.guif.app` に変える(発注者は例の `dev.guif.app` を受け入れた)。設定フォルダは `%APPDATA%\dev.guif.app`、WebView2 のデータは `%LOCALAPPDATA%\dev.guif.app`。今の設定(`%APPDATA%\dev.reflexfiles.successor`)は引き継がない(移行のコードを書かない)。発行者は `guif`(レジストリは `HKCU\Software\reflexfiles\ReflexFiles` ではなく `HKCU\Software\guif\guif`)。AppUserModelId は `identifier` に従う。Tauri が末尾 `.app` の `identifier` を macOS のバンドルの拡張子との衝突として警告しうることは伝えた(本製品は Windows 専用)。ビルドで確かめる事実として記録し、ビルドが拒否した場合は報告する(別の `identifier` を選ばない)。
+  3. ビューアのウィンドウタイトルは `<ファイル名> - guif`(第11版までは `ReflexViewer - <ファイル名>`)。
+  4. アイコンは `favicon_io/android-chrome-512x512.png` から、インストール済みの Tauri CLI の `tauri icon` で作る(新しい依存なし)。置くのはちょうど4つ(`32x32.png`、`128x128.png`、`128x128@2x.png`、256 までの大きさを含む `icon.ico`)。SPEC-0600-0001 R-1470 / AC-1401 の「旧製品のアイコン」(`a62954e` との blob のハッシュの一致)を、元の画像から作ること(元の画像の sha256 を記録)と、ファイルの組・大きさ・`icon.ico` が 256 を含むことの確認に置き換える。
+  5. 版は 0.3.0 のまま(まだ配布していない)。利用者に見えない内部の名前は変えない: Cargo のパッケージ名 `reflexfiles-successor`、E2E が使う開発用の実行ファイル `reflexfiles-successor.exe`、npm のパッケージ名、環境変数 `REFLEXFILES_CONFIG_DIR` / `REFLEXFILES_E2E_FS_SCOPE`。
+- 条文化(2026-10-17、spec-writer): SPEC-0600-0001 第3版(§0.1【確定 #6】〜【確定 #6-5】、§0.7.2、R-1401 / R-1461 / R-1470〜R-1473 / R-1490 / R-1496、AC-1400〜AC-1403 / AC-1410 / AC-1411 / AC-1441 / AC-1460 / AC-1470)、SPEC-0300-0017 第9版(R-992 / R-993、AC-942 / AC-946)、SPEC-0300-0015 第12版(R-423、AC-430)、SPEC-0300-0019 第4版(R-1203 の 4)、SPEC-0100-0003 第2版(R-01 / R-03 改訂、R-04 新設、§3)、SPEC-0100-0001 第2版(子Spec一覧の題名、§4 の注記)。いずれも DRAFT。承認済みの版は人間が承認するまでベースラインのまま。
+- 改訂しなかった仕様(spec-writer の判断。異論があれば人間が判断): SPEC-0400-0001 第6版・SPEC-0300-0021 第1版(環境変数 `REFLEXFILES_*` は決定 5 で変えない。設定フォルダの具体的な場所を本文に書いていない)、SPEC-0300-0009 / 0010 / 0011 / 0013 / 0020、SPEC-0300-0001 / 0008、SPEC-0100-0004 / 0005、SPEC-0900-0001(「ReflexFiles」は旧製品の記録・参照、「ReflexViewer」は仕様書の中の機能名〈SPEC-0300-0019 §0 の考え方〉で、画面に出る名前ではない)。旧製品 ReflexFIles の記述は記録としてだけ残す(SPEC-0600-0001 第2版【確定 #5-1】)。
+- spec-writer の【導出】(人間の確認を推奨): (i) 名前を変える前の本製品(`ReflexFiles` の名前の 0.3.0。配布していない)も考えない。第3版のインストーラーは名前が違うため、それを上書きもアンインストールもしない(SPEC-0600-0001 §0.7.2)。(ii) README・CHANGELOG・マニュアルには `guif` だけを書き、名前を変えたことや前の設定を引き継がないことは書かない(同 R-1490 の第3版の注記)。(iii) ビューアのタイトルの `guif` の部分は製品名と同じ1か所の定義から取る(SPEC-0300-0015 R-423、SPEC-0100-0003 R-02)。(iv) SPEC-0100-0003 R-02(名称の一元管理)は名前が決まった後も維持する。
+- 確かめる事実・残り:
+  - (a) 末尾 `.app` の `identifier` を Tauri のビルドが警告するか拒否するか(SPEC-0600-0001 R-1473 / AC-1402)。実装工程。拒否なら人間に報告する。
+  - (b) **【要判断】元の画像(`favicon_io/`。2026-10-17 時点でリポジトリに追跡されていない)をリポジトリに置き続けるか。** 置く場合は AC-1401 (iv) で sha256 を照合できる。置かない場合は記録した sha256 だけが手がかりになる。推奨: `favicon_io/android-chrome-512x512.png` をリポジトリに入れる(作り直しと照合ができる)。人間が判断する。
+  - (c) 元の画像の sha256: spec-writer の環境では計算できなかった。承認の前にオーケストレーターが計算し、SPEC-0600-0001 R-1470 と本 ISS に記入する。
+  - (d) 第3版の設定で作り直したインストーラーの `installer.nsi` での名前・キー(`Uninstall\guif`、`HKCU\Software\guif\guif`、`%LOCALAPPDATA%\guif`、削除の範囲 `dev.guif.app`)の確認(SPEC-0600-0001 §0.4.1 の第3版の注記、R-1461、AC-1470)。実装工程。
+  - (e) ISS-0002(正式プロダクト名)の名前の部分を、本決定で解消とするか。人間が判断する。
+- 必要アクション: spec-reviewer のレビューと、人間による6本の新版の承認。(b)(e) の判断。(a)(c)(d) は実装工程。
+- 状態: OPEN
+- **【2026-10-17 発注者決定(AskUserQuestion、オーケストレーター経由で伝達)】** 判断者: 発注者(toshihide.asada@gmail.com)。
+  - (b) 「512px の PNG だけ入れる」: 元の画像は `app/src-tauri/icons-source/android-chrome-512x512.png` としてリポジトリに入れる。ルートの `favicon_io/` フォルダは入れない。→ SPEC-0600-0001 第3版【確定 #6-6】、R-1470、AC-1401 (iv)(v)。**RESOLVED。**
+  - (c) sha256(オーケストレーターが `favicon_io/android-chrome-512x512.png` で計算): `3bf2fb728bdbd0806c5db433c337ddd984f8ef53794ed3b304510fab33c1ca46`。R-1470 と AC-1401 (iv) に記入した。**RESOLVED。**
+  - 【導出】(i)〜(iii) と (e): 「すべてこの扱いでよい」。(i) 名前を変える前の `ReflexFiles` の名前の 0.3.0(配布していない)は考えない。(ii) 作業用アカウントの `%APPDATA%\dev.reflexfiles.successor` は新製品が使わず、オーケストレーターも消さない。(iii) README・CHANGELOG・マニュアルは `guif` だけを書き、名前を変えたことを書かない。(e) ISS-0002 の名前の部分は `guif` で解消。→ SPEC-0600-0001 第3版【確定 #6-7】、SPEC-0100-0003 第2版 R-03、SPEC-0100-0001 第2版 §4、ISS-0002 の追記。(iv) の R-02 の維持は異論なしとして記録。
+  - 残り: (a)(d)(実装工程)と、6本の新版の承認。新版はいずれも DRAFT のまま。状態: OPEN。
+- **【2026-10-17 spec-reviewer のレビュー】** 判定: 承認可(SHOULD 2、MINOR 6)。すべて推奨の直し方で反映した(版番号据え置き・DRAFT のまま。SPEC-0600-0001 第3版 §0.7.2 の「レビューの反映」の項、SPEC-0300-0017 第9版の変更の表)。S-1: SPEC-0300-0017 AC-946 を (ii)[静的]〈`app/src`・`app/src-tauri/src` に `dev.reflexfiles.successor` と旧フォルダを読む・移す処理が無い〉と (iii)[手動]〈SPEC-0600-0001 R-1496 の 2 / AC-1470 の中で AC-1411 と一緒に、`%APPDATA%\dev.guif.app` が無い状態から〉に分けた。S-2: SPEC-0600-0001 §14 の古い2行に注記。MINOR-1〜6: 同 §0.7.2、AC-1470 (i)(ii)(vii)、AC-1460、AC-1401 の注記と §13、SPEC-0300-0017 P-01 / §18.2 の注記、R-1471 の注記。
+- **承認記録(2026-10-17)**: 発注者(toshihide.asada@gmail.com)が AskUserQuestion で6本の新版(SPEC-0600-0001 第3版、SPEC-0300-0017 第9版、SPEC-0300-0015 第12版、SPEC-0300-0019 第4版、SPEC-0100-0003 第2版、SPEC-0100-0001 第2版)を承認した(オーケストレーター経由で伝達、オーケストレーターが確認)。各仕様を APPROVED とした。**状態は OPEN のまま**: (a) 末尾 `.app` の `identifier` のビルドでの扱い(拒否なら人間に報告し、別の `identifier` を選ばない)と、(d) 作り直したインストーラーの `installer.nsi` での名前・キー・削除の範囲の確認を、実装工程で行う。
+- **【2026-10-18 実装工程の確認(オーケストレーター)】** (a) Tauri のビルドは識別子 `dev.guif.app` を拒否せず、警告だけを出した(「The bundle identifier "dev.guif.app" ... ends with .app. This is not recommended because it conflicts with the application bundle extension on macOS.」)。製品は Windows のみのため影響しない。(d) 作り直したインストーラー `guif_0.3.0_x64-setup.exe`(sha256 `88d4154e…c5b0`)の installer.nsi: PRODUCTNAME / MANUFACTURER `guif`、BUNDLEID `dev.guif.app`、インストール先 `$LOCALAPPDATA\${PRODUCTNAME}`、UNINSTKEY `...\Uninstall\${PRODUCTNAME}`、レジストリ `Software\${MANUFACTURER}\${PRODUCTNAME}`、データの削除は `$APPDATA\${BUNDLEID}` と `$LOCALAPPDATA\${BUNDLEID}` だけ(台帳 2026-10-18)。残り: 作業用アカウントでの AC-1470 の再確認(第3版のインストーラー)。状態は OPEN のまま。
+
+
+### ISS-0230(未決定〈記録〉・RESOLVED): テスト用の実行ファイルの Defender の誤検知
+
+- 起票: 2026-10-18、オーケストレーター
+- 関連: SPEC-0400-0001 第6版 R-08-1、SPEC-0300-0021 R-1585 / R-1586(テスト用の実行ファイル)、ISS-0229
+- 事実: 2026-10-18 0:30〜0:33、Windows Defender が `app\src-tauri\target\debug\examples\rf_launch_probe.exe` と、E2E が作るコピー(`%TEMP%\rf-e2e-*\probe-bin\*.exe`)を検知して隔離した(`Get-MpThreatDetection`。脅威名 `Trojan:Win32/Bearfoos.A!ml`。test-debugger の調べでは `PUA:Win32/RDPWrap` の判定もあった)。`!ml` は機械学習による推定で、内容(受け取った引数と作業フォルダーを自分の隣のファイルに追記するだけ)から誤検知と判断した。アプリの表示は `「引数テスト」を起動できませんでした。 詳細: ファイルにウイルスまたは望ましくない可能性のあるソフトウェアが含まれているため、操作は正常に完了しませんでした。 (os error 225)` で、外部アプリの E2E 11 件が「the probe recorded exactly one launch: expected 1, got 0」で失敗した。製品名の変更とは関係が無い。
+- test-debugger はコピーごとにランダムなバイトを足してハッシュを変える細工を入れたが、オーケストレーターが「ウイルス対策の判定を回避する手法と同じで、本当の検知も隠しうる」と判断して発注者に諮った。
+- 発注者決定(2026-10-18、AskUserQuestion、オーケストレーター経由で伝達): 「回避の細工をやめ、除外をあなたが設定する」。細工は元に戻した(`app/e2e/lib/probe.mjs` はコミット済みの版のまま)。発注者が管理者の PowerShell で次の3か所を Defender の除外に加えた: `C:\Users\toshi\git\project\app\src-tauri\target\debug\examples`、`C:\Users\toshi\AppData\Local\Temp\rf-e2e-*\probe-bin`、`C:\Users\toshi\AppData\Local\Temp\rf-probe-outside-*`。E2E のテスト用データとアプリ本体は除外していない。
+- 結果: 除外の後の E2E 全体は 205 PASS / 0 FAIL / 30 SKIP(台帳 2026-10-18)。その後1時間の新しい検知は0件。
+- 今後: 別の PC で E2E を行う場合は、同じ除外が要る(または誤検知の報告 https://www.microsoft.com/wdsi/filesubmission)。外部アプリの E2E が「expected 1, got 0」で失敗したときは、状態メッセージの `os error 225` と `Get-MpThreatDetection` を確かめる。
+- 状態: RESOLVED(記録)
