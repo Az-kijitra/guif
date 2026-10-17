@@ -1,0 +1,145 @@
+{
+  "generatedAt": "2026-10-17T22:21:31.092Z",
+  "note": "read-only record; nothing was written, deleted or changed",
+  "uninstall": {
+    "HKCU": {
+      "root": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "queryOk": true,
+      "entries": []
+    },
+    "HKLM_64": {
+      "root": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "queryOk": true,
+      "entries": []
+    },
+    "HKLM_32_WOW6432Node": {
+      "root": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "queryOk": true,
+      "entries": []
+    }
+  },
+  "registry": {
+    "HKCU\\Software\\guif": {
+      "exists": false,
+      "text": ""
+    },
+    "HKCU\\...\\CurrentVersion\\Run guif": {
+      "exists": false,
+      "text": "\r\n\r\n"
+    }
+  },
+  "startMenu": {
+    "user": {
+      "dir": "C:\\Users\\toshi\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs",
+      "exists": true,
+      "items": []
+    },
+    "allUsers": {
+      "dir": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+      "exists": true,
+      "items": []
+    }
+  },
+  "desktop": {
+    "folder": "C:\\Users\\toshi\\OneDrive\\Desktop",
+    "shortcuts": {
+      "dir": "C:\\Users\\toshi\\OneDrive\\Desktop",
+      "exists": true,
+      "items": []
+    },
+    "commonFolder": "C:\\Users\\Public\\Desktop",
+    "commonShortcuts": {
+      "dir": "C:\\Users\\Public\\Desktop",
+      "exists": true,
+      "items": []
+    }
+  },
+  "localAppData": {
+    "dir": "C:\\Users\\toshi\\AppData\\Local",
+    "exists": true,
+    "items": [
+      {
+        "name": "dev.guif.app",
+        "type": "dir",
+        "children": []
+      }
+    ]
+  },
+  "footprint": [
+    {
+      "id": "R1",
+      "location": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\guif",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "R2",
+      "location": "HKCU\\Software\\guif\\guif (and the parent HKCU\\Software\\guif)",
+      "afterUninstall": "remains"
+    },
+    {
+      "id": "R3",
+      "location": "HKCU\\Software\\guif\\guif value `Installer Language`",
+      "afterUninstall": "remains"
+    },
+    {
+      "id": "R4",
+      "location": "...\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+      "afterUninstall": "unchanged"
+    },
+    {
+      "id": "R5",
+      "location": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run value `guif`",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "F1",
+      "location": "%LOCALAPPDATA%\\guif\\guif.exe",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "F2",
+      "location": "%LOCALAPPDATA%\\guif\\uninstall.exe",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "F3",
+      "location": "%LOCALAPPDATA%\\guif",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "S1",
+      "location": "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\guif.lnk",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "S2",
+      "location": "[Environment]::GetFolderPath('Desktop')\\guif.lnk",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "S3",
+      "location": "AppUserModelId dev.guif.app (Windows が管理)",
+      "afterUninstall": "removed"
+    },
+    {
+      "id": "T1",
+      "location": "%TEMP%\\MicrosoftEdgeWebview2Setup.exe",
+      "afterUninstall": "remains"
+    },
+    {
+      "id": "W1",
+      "location": "WebView2 Runtime (EdgeUpdate Clients {F3017226-FE2A-4295-8BDF-00C3A9A7E4C5})",
+      "afterUninstall": "remains"
+    },
+    {
+      "id": "D1",
+      "location": "%APPDATA%\\dev.guif.app and %LOCALAPPDATA%\\dev.guif.app",
+      "afterUninstall": "remains"
+    },
+    {
+      "id": "M1",
+      "location": "%LOCALAPPDATA%\\guif (empty)",
+      "afterUninstall": "remains"
+    }
+  ]
+}

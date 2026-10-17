@@ -1,0 +1,22 @@
+AC-1470 普段のアカウントでの確認(SPEC-0600-0001 第3版〈製品名 guif〉、2026-10-18)
+インストーラー: guif_0.3.0_x64-setup.exe 2,746,468 bytes
+sha256 88d4154eb620777852a0b737ceb559eeb133fd8477218105ed2da0b28101c5b0
+
+1. 事前の確認 (ac1470-v3-audit-before.json): Uninstall の3か所に guif の情報なし、HKCU\Software\guif なし、
+   スタートメニュー・デスクトップのショートカットなし、%LOCALAPPDATA%\guif なし、%APPDATA%\dev.guif.app なし。
+   %LOCALAPPDATA%\dev.guif.app(WebView2 のデータ。2026-10-18 0:03 の開発の実行で作られた)はある(AC-1470 の対象外)。
+   実行中の guif.exe なし
+2. 退避の代わりの記録(AC-1470 (vii)): 旧設定フォルダ %APPDATA%\dev.reflexfiles.successor の sha256 と更新日時
+   (navigation.toml 860e6d75…、ui-state.toml 3f8238e8…、viewer-window.toml aafb3996…)。
+   注: navigation.toml は 2026-10-16 の復元時(dc6d287b…)から変わっていた(製品名の変更の前の開発の実行によるものと推定)。今回の記録を基準とした
+3. setup.exe /S → exit 0。%LOCALAPPDATA%\guif に guif.exe (11,807,744 bytes) / uninstall.exe。
+   HKCU Uninstall\guif: DisplayName guif, DisplayVersion 0.3.0, Publisher guif, InstallLocation "%LOCALAPPDATA%\guif",
+   DisplayIcon guif.exe。HKCU\Software\guif\guif あり。スタートメニュー・デスクトップに guif.lnk (ac1470-v3-audit-installed.json)
+4. 起動: %LOCALAPPDATA%\guif\guif.exe、ウィンドウタイトル guif。新しい設定フォルダ %APPDATA%\dev.guif.app が作られ navigation.toml がある。
+   CloseMainWindow で終了 (exit 0)。AC-1403 (i): インストールされた実行ファイル名は guif.exe
+5. uninstall.exe /S → exit 0。インストール先・Uninstall キー・両ショートカットが削除。設定フォルダ %APPDATA%\dev.guif.app は残る(既定どおり)。
+   HKCU\Software\guif\guif(既定値 = インストール先)が残存。事前に無かったため確認者が削除し、空になった HKCU\Software\guif も削除
+6. 照合: 旧設定フォルダ dev.reflexfiles.successor の sha256 3/3 と更新日時が記録と一致(読まれず変わらない。AC-1470 (vii)、SPEC-0300-0017 AC-946 (iii))。
+   事後 (ac1470-v3-audit-after.json) は事前と一致(Uninstall・レジストリ・スタートメニュー・デスクトップ・LOCALAPPDATA 直下)。
+   新しい設定フォルダ %APPDATA%\dev.guif.app は発注者決定(2026-10-18「作られた設定フォルダーは残す」)により残した
+判定: PASS
