@@ -4,7 +4,7 @@
   // closes the menu without reaching the row / tree node / path bar underneath (R-1087).
   import { REGION_NAMES } from "$lib/shared/messages";
   import { computeMenuPosition } from "./menu-position";
-  import type { MenuEntry, MenuItemId } from "./menu-model";
+  import type { MenuEntry, MenuEntryId } from "./menu-model";
 
   let {
     entries,
@@ -16,10 +16,10 @@
     onOutsideAuxClick,
   }: {
     entries: readonly MenuEntry[];
-    highlightedId: MenuItemId | null;
+    highlightedId: MenuEntryId | null;
     cursor: { x: number; y: number };
-    onRun: (id: MenuItemId) => void;
-    onHighlight: (id: MenuItemId) => void;
+    onRun: (id: MenuEntryId) => void;
+    onHighlight: (id: MenuEntryId) => void;
     onOutsideClose: (e: { x: number; y: number }) => void;
     onOutsideAuxClick: (e: { button: number; x: number; y: number }) => void;
   } = $props();

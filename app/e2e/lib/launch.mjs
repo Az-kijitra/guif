@@ -152,17 +152,40 @@ function removeDir(dir) {
 // R-995-1 / SPEC-0200-0001 §3.11.9: the default test config pins the light theme so the existing
 // assertions hold on a PC whose OS is dark. `configToml: null` writes no config.toml at all; a string is
 // written as is (callers that add `input_keymap_custom` keep the `ui_theme` line themselves).
-export const DEFAULT_CONFIG_TOML = 'ui_theme = "light"\n';
+// SPEC-0300-0021 R-1585 2: every config.toml the E2E writes declares `external_apps` (without it the default four are active and a key press
+// could start the USER's apps). `configToml: null` (no file) is not allowed.
+export const DEFAULT_CONFIG_TOML = 'ui_theme = "light"\nexternal_apps = []\n';
+
+// MUST-143 (a): there is a `[[external_apps]]` heading, or an `external_apps =` line BEFORE the first table header (a line after
+// `[input_keymap_custom]` belongs to that table). The same rule as src/e2e-external-apps-static.test.ts.
+function declaresExternalApps(toml) {
+  for (const raw of toml.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (/^\[\[\s*external_apps\s*\]\]/.test(line)) return true;
+    if (/^\[/.test(line)) return false;
+    if (/^external_apps\s*=/.test(line)) return true;
+  }
+  return false;
+}
+
+/** Throws AbortRun unless `configToml` (a string) declares external_apps; null / undefined / non-strings are refused too. */
+export function assertExternalAppsDeclared(configToml) {
+  if (typeof configToml === "string" && declaresExternalApps(configToml)) return;
+  throw new AbortRun("the test config.toml does not declare external_apps (before the first table header): the default four registrations would start the user's apps");
+}
 
 /**
  * Launches `tauri dev` and returns once the override line has been verified and the main
  * page is listed by the debug port. Throws AbortRun (after killing the app) otherwise.
  */
-export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML, navigationToml, fx }) {
+export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML, navigationToml, fx, allowUndeclaredExternalApps = false }) {
   // R-10: the backend refuses file operations outside this folder (the test folder, realpath form).
   if (typeof fsScope !== "string" || !path.isAbsolute(fsScope) || !fs.statSync(fsScope).isDirectory()) {
     throw new AbortRun(`unusable E2E file scope folder: ${fsScope}`);
   }
+  // R-1585 2: refuse before anything is created. The ONE explicit opt-out is a deliberately broken config (theme.mjs S8).
+  const configText = typeof configToml === "function" ? configToml(fx) : configToml;
+  if (!allowUndeclaredExternalApps) assertExternalAppsDeclared(configText);
   const scopeRoot = fs.realpathSync.native(fsScope);
   await assertPortsFree([VITE_PORT, cdpPort]);
 
@@ -174,9 +197,9 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
   }
 
   // Written by the test harness, before the app starts (the app never writes config.toml, R-917-6).
-  if (configToml !== null) {
+  if (configText !== null) {
     try {
-      fs.writeFileSync(path.join(cfgDir, "config.toml"), configToml, "utf8");
+      fs.writeFileSync(path.join(cfgDir, "config.toml"), configText, "utf8");
     } catch (e) {
       removeDir(cfgDir);
       removeDir(userData);
@@ -327,6 +350,16 @@ export async function attachApp({ cdpPort, allowRealConfig, log }) {
       throw new AbortRun("the --keep record does not match a running app of this script (override line / folder); refusing to attach");
     }
     if (listenersOn([port]).length === 0) throw new AbortRun("nothing listens on the recorded debug port; the kept app is gone");
+  }
+  if (kept !== undefined) {
+    // SHOULD-217 (c): the kept folder's config.toml follows the same rule, checked before anything is connected.
+    let keptConfig;
+    try {
+      keptConfig = fs.readFileSync(path.join(kept.cfgDir, "config.toml"), "utf8");
+    } catch {
+      keptConfig = undefined;
+    }
+    assertExternalAppsDeclared(keptConfig);
   }
   const targets = await listTargets(port);
   const target = targets.find((t) => t.type === "page" && !t.url.includes("/viewer") && t.url.startsWith("http"));

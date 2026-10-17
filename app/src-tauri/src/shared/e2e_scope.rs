@@ -181,6 +181,25 @@ impl Scope {
     pub fn check_external_launch(&self, path: &Path) -> Result<(), ScopeViolation> {
         Err(self.violation("launching other programs is refused during an E2E run", path))
     }
+
+    /// `external_app_launch` (SPEC-0300-0021 R-1584; SPEC-0200-0001 §3.16.5): while the scope is active BOTH the executable
+    /// (already resolved: it must exist) and the target must be inside it. The executable follows the `check_source` rule. The
+    /// target follows it too (parent canonicalised + the name, and the link-resolved real path), except that a target that no
+    /// longer exists is not a scope violation when its parent is inside (`target::verify` reports it, AC-1517).
+    /// `check_external_launch` (the OS-association launch) is a different rule and stays "always refused".
+    pub fn check_launch(&self, exe: &Path, target: &Path) -> Result<(), ScopeViolation> {
+        self.check_source(exe)?;
+        let resolved = self.entry_resolved(target, "launch target")?;
+        if !self.contains(&resolved, true) {
+            return Err(self.violation("outside the E2E scope (launch target)", target));
+        }
+        match std::fs::canonicalize(target) {
+            Ok(real) if self.contains(&real, true) => Ok(()),
+            Ok(_) => Err(self.violation("launch target resolves outside the E2E scope (link)", target)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(self.violation("launch target cannot be resolved", target)),
+        }
+    }
 }
 
 /// R-10-1: `None` = variable not set (scope off). Errors: empty / blank / non-Unicode /
@@ -241,6 +260,9 @@ pub fn check_source(path: &Path) -> Result<(), ScopeViolation> {
 }
 pub fn check_external_launch(path: &Path) -> Result<(), ScopeViolation> {
     with_scope(|s| s.check_external_launch(path))
+}
+pub fn check_launch(exe: &Path, target: &Path) -> Result<(), ScopeViolation> {
+    with_scope(|s| s.check_launch(exe, target))
 }
 
 /// SPEC-0200-0001 §3.12.9 AC-88 / MINOR-11 (unit-test-writer): a `#[cfg(test)]` thread-local scope

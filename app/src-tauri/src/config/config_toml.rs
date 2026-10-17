@@ -37,6 +37,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
 use crate::shared::schema::ui_theme::UiThemeRaw;
 
 /// One raw `input_keymap_custom` table entry, before any validation.
@@ -70,11 +71,13 @@ pub struct KeymapRawLoadResult {
 pub struct ConfigTomlLoadResult {
     pub keymap: KeymapRawLoadResult,
     pub ui_theme: UiThemeRaw,
+    /// SPEC-0300-0021 R-1500: the top-level `external_apps`, RAW (R-1503: judged by `external_apps/registry.rs`).
+    pub external_apps: ExternalAppsRaw,
 }
 
 impl Default for ConfigTomlLoadResult {
     fn default() -> Self {
-        Self { keymap: KeymapRawLoadResult::default(), ui_theme: UiThemeRaw::Missing }
+        Self { keymap: KeymapRawLoadResult::default(), ui_theme: UiThemeRaw::Missing, external_apps: ExternalAppsRaw::Missing }
     }
 }
 
@@ -86,6 +89,7 @@ fn whole_file_failure(message: String, line: Option<u32>) -> ConfigTomlLoadResul
             parse_error: Some(KeymapParseError { message, line, whole_file: true }),
         },
         ui_theme: UiThemeRaw::Missing,
+        external_apps: ExternalAppsRaw::Missing,
     }
 }
 
@@ -103,6 +107,51 @@ fn raw_ui_theme(table: &toml::value::Table) -> UiThemeRaw {
         None => UiThemeRaw::Missing,
         Some(toml::Value::String(s)) => UiThemeRaw::Str(s.clone()),
         Some(_) => UiThemeRaw::WrongType,
+    }
+}
+
+fn raw_string(table: &toml::value::Table, key: &str) -> RawValue<String> {
+    match table.get(key) {
+        None => RawValue::Missing,
+        Some(toml::Value::String(s)) => RawValue::Value(s.clone()),
+        Some(_) => RawValue::WrongType,
+    }
+}
+
+/// An array whose elements are ALL strings; anything else is a type error of the field (R-1503 3).
+fn raw_string_list(table: &toml::value::Table, key: &str) -> RawValue<Vec<String>> {
+    match table.get(key) {
+        None => RawValue::Missing,
+        Some(toml::Value::Array(items)) => {
+            let strings: Option<Vec<String>> = items.iter().map(|v| v.as_str().map(str::to_string)).collect();
+            strings.map_or(RawValue::WrongType, RawValue::Value)
+        }
+        Some(_) => RawValue::WrongType,
+    }
+}
+
+/// The top-level `external_apps` as it is (R-1500 / R-1503 / R-1504): absent -> `Missing`; an array of tables ->
+/// the elements verbatim, unvalidated (unknown fields dropped); anything else, including an array with a
+/// non-table element, -> `WrongType` as a whole (design question Q-1).
+fn raw_external_apps(table: &toml::value::Table) -> ExternalAppsRaw {
+    match table.get("external_apps") {
+        None => ExternalAppsRaw::Missing,
+        Some(toml::Value::Array(items)) => {
+            let apps: Option<Vec<RawExternalApp>> = items
+                .iter()
+                .map(|item| {
+                    item.as_table().map(|t| RawExternalApp {
+                        name: raw_string(t, "name"),
+                        program: raw_string(t, "program"),
+                        args: raw_string_list(t, "args"),
+                        args_for_file: raw_string_list(t, "args_for_file"),
+                        key: raw_string(t, "key"),
+                    })
+                })
+                .collect();
+            apps.map_or(ExternalAppsRaw::WrongType, ExternalAppsRaw::Array)
+        }
+        Some(_) => ExternalAppsRaw::WrongType,
     }
 }
 
@@ -150,7 +199,7 @@ pub fn load(path: &Path) -> ConfigTomlLoadResult {
             }),
         },
     };
-    ConfigTomlLoadResult { keymap, ui_theme }
+    ConfigTomlLoadResult { keymap, ui_theme, external_apps: raw_external_apps(table) }
 }
 
 #[cfg(test)]

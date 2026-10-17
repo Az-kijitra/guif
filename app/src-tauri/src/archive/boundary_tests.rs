@@ -183,7 +183,8 @@ fn crate_uses(code: &str) -> Vec<String> {
 // §3.4.10 / §4.2: `archive/` may use `shared/` only (and itself).
 #[test]
 fn archive_does_not_use_other_feature_modules() {
-    let forbidden = ["fs_ops", "fs", "config", "keymap"];
+    // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list.
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "external_apps"];
     let mut offenders = Vec::new();
     for path in all_rust_files_under("archive") {
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -203,7 +204,8 @@ fn archive_does_not_use_other_feature_modules() {
 #[test]
 fn shared_does_not_use_any_feature_module() {
     // SPEC-0200-0001 §3.12.8 (g) / MINOR-12: `viewer` joins the list (`shared/abs_path.rs` is also called from viewer/).
-    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "viewer"];
+    // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list (`shared/schema/external_apps.rs` is RAW DATA, it imports nothing).
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "viewer", "external_apps"];
     let mut offenders = Vec::new();
     for path in all_rust_files_under("shared") {
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -396,7 +398,7 @@ fn the_win32_binding_crate_is_used_only_by_the_three_isolation_files() {
 // 4. fs_ops/clipboard depends on shared/ (and itself / fs_ops siblings) only.
 #[test]
 fn fs_ops_clipboard_does_not_use_other_feature_modules() {
-    let forbidden = ["archive", "fs", "config", "viewer", "keymap"];
+    let forbidden = ["archive", "fs", "config", "viewer", "keymap", "external_apps"];
     let mut offenders = Vec::new();
     for path in all_rust_files_under("fs_ops/clipboard") {
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -449,10 +451,13 @@ fn is_test_source(path: &Path) -> bool {
 }
 
 // SHOULD-180 (a): `env::var` / `var_os` is called only by config/paths.rs and shared/e2e_scope.rs.
+// SPEC-0200-0001 §3.16.15 MUST-142 (a) (SPEC-0300-0021): and `lib.rs` (the bootstrap), which reads the start-up `PATH` and the environment
+// lookup it injects into `external_apps::registry::Registry::from_raw`. `external_apps/` itself reads nothing (it is NOT in this list);
+// that lib.rs reads ONLY inside that one call is pinned by `external_apps_structure_tests.rs`.
 #[test]
 fn env_var_is_read_only_by_config_paths_and_the_e2e_scope_module() {
     let needle = env_var_call();
-    let allowed = ["src/config/paths.rs", "src/shared/e2e_scope.rs"];
+    let allowed = ["src/config/paths.rs", "src/shared/e2e_scope.rs", "src/lib.rs"];
     let mut offenders = Vec::new();
     let mut files = Vec::new();
     rust_sources(&manifest_dir().join("src"), &mut files);
@@ -466,6 +471,9 @@ fn env_var_is_read_only_by_config_paths_and_the_e2e_scope_module() {
     }
     assert!(offenders.is_empty(), "`{needle}` outside {allowed:?}: {offenders:?}");
     assert!(manifest_dir().join(allowed[1]).is_file(), "{} must exist", allowed[1]);
+    // the allow-list entry must be used (no stale permission): lib.rs really reads the environment for the registry
+    let lib = code_only(&fs::read_to_string(manifest_dir().join(allowed[2])).unwrap());
+    assert!(lib.contains(needle.as_str()), "lib.rs is allowed to read the environment ONLY for Registry::from_raw (MUST-142); it must do so");
 }
 
 /// Lines (0-based, inclusive) of `#[cfg(debug_assertions)] mod imp { ... }` in rustfmt layout

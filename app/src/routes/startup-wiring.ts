@@ -14,7 +14,12 @@
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import { configLoadKeymap } from "$lib/shared/ipc/config";
 import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
-import { validateKeymapEntries } from "$lib/features/keyboard/keymap-validate";
+import { validateKeymapEntries, type ValidatedKeymap } from "$lib/features/keyboard/keymap-validate";
+import { keyRules } from "$lib/features/keyboard/key-rules";
+import { externalAppsLoad } from "$lib/shared/ipc/external-apps";
+import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
+import { buildRegistry } from "$lib/features/external-apps/registry";
+import { buildExternalAppsNotice } from "$lib/features/external-apps/notice";
 import { buildKeymapLoadNotice } from "$lib/features/keyboard/keymap-notice";
 import { buildThemeNotice } from "$lib/shared/theme-notice";
 
@@ -44,6 +49,20 @@ export async function runStartupHydrate(deps: StartupHydrateDeps): Promise<void>
   }
 }
 
+// SPEC-0300-0021 R-1501 / R-1574 (SPEC-0200-0001 §3.16.6): the external-app registrations are read ONCE here, judged against the EFFECTIVE keymap
+// (the keys the user's keymap took are not usable), written to the state (this is the ONLY writer), and the notice of the unusable ones is returned.
+// A failed load does not stop the start: zero registrations, no notice, one console line (MINOR-33).
+async function loadExternalAppsForStartup(validated: ValidatedKeymap): Promise<string | null> {
+  try {
+    const registry = buildRegistry(await externalAppsLoad(), keyRules(validated.effective));
+    externalAppsState.hydrate(registry);
+    return buildExternalAppsNotice(registry);
+  } catch (error) {
+    console.error("external apps: the registrations could not be loaded", error);
+    return null;
+  }
+}
+
 // Keymap load for `runStartupHydrate`'s `loadKeymap` (SPEC-0200-0001 §3.10.1 S1): applies the
 // validated effective keymap to the feature state, then returns only the notice text. The config.toml part
 // of the startup message is the keymap notice followed by the theme notice, as separate sentences joined
@@ -58,6 +77,7 @@ export async function loadKeymapForStartup(): Promise<{ notice: string | null }>
       alsoDefaultsTheme: raw.parseError?.wholeFile === true,
     }),
     buildThemeNotice(raw.uiThemeInvalid),
+    await loadExternalAppsForStartup(validated),
   ].filter((n): n is string => n !== null);
   return { notice: parts.length > 0 ? parts.join(" ") : null };
 }

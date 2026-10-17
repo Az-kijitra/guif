@@ -31,6 +31,7 @@ use crate::shared::schema::navigation::NavigationData;
 // truth for IoLock types).
 use super::config_toml::{self, ConfigTomlLoadResult, KeymapParseError, KeymapRawLoadResult};
 use super::ui_state::{self, UiStateLoadResult};
+use crate::shared::schema::external_apps::ExternalAppsRaw;
 use crate::shared::schema::ui_state::UiStateData;
 use crate::shared::schema::ui_theme::{interpret_ui_theme, ThemeResolution, ThemeSetting, UiThemeRaw};
 
@@ -148,6 +149,7 @@ impl StartupConfig {
                 parse_error: Some(KeymapParseError { message, line: None, whole_file: true }),
             },
             ui_theme: UiThemeRaw::Missing,
+            external_apps: ExternalAppsRaw::Missing,
         })
     }
 
@@ -402,7 +404,7 @@ mod tests {
             ],
             parse_error: None,
         };
-        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing }).to_dto();
+        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing, external_apps: ExternalAppsRaw::Missing }).to_dto();
         assert_eq!(dto.entries.len(), 2);
         assert_eq!(dto.entries[0], KeymapRawEntryDto { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) });
         assert_eq!(dto.entries[1], KeymapRawEntryDto { action_id: "sort_menu".into(), value: None });
@@ -412,7 +414,7 @@ mod tests {
     #[test]
     fn keymap_dto_carries_the_parse_error_with_its_line_number() {
         let r = KeymapRawLoadResult { entries: vec![], parse_error: Some(KeymapParseError { message: "bad toml".into(), line: Some(3), whole_file: true }) };
-        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing }).to_dto();
+        let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing, external_apps: ExternalAppsRaw::Missing }).to_dto();
         assert_eq!(dto.parse_error, Some(KeymapParseErrorDto { message: "bad toml".into(), line: Some(3), whole_file: true }));
     }
 

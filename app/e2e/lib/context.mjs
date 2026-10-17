@@ -17,7 +17,7 @@ import { copyMoveArgsAllowed, isInsideScope } from "./scope.mjs";
 // Commands that change files, open other programs, or write archives: always refused.
 const BLOCKED_COMMANDS = [
   "fs_ops_copy", "fs_ops_move", "fs_ops_delete_trash", "fs_ops_delete_permanently", "fs_ops_rename", "fs_ops_create",
-  "archive_create", "archive_extract", "viewer_os_open_path",
+  "archive_create", "archive_extract", "viewer_os_open_path", "external_app_launch",
 ];
 
 // `window.__TAURI_INTERNALS__.invoke` (and `.ipc` / `.postMessage`) are read-only in the page, so
@@ -180,6 +180,7 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     // A reload inside withScopedFileOps / withClipboardGuard keeps the scope (the page state is new).
     if (ctx.fileOpsRoot !== null) await applyScopedFileOps();
     if (ctx.clipboardScopeActive) await cdp.ev(`window.__e2e.clipboardScope = true; true`);
+    if (ctx.externalLaunchRoot !== null) await applyExternalLaunch();
     // Prove the interception works: a blocked command must be refused with our marker message.
     await ctx.verifyStubs();
     return ctx.stubStatus;
@@ -207,6 +208,42 @@ export function createContext({ cdp, fx, shotsDir, log }) {
       await cdp.ev(`window.__e2e.stubs[${JSON.stringify(cmd)}] = () => ({ error: { code: "other", message: "E2E: blocked command" } }); true`);
     }
   };
+
+  // SPEC-0200-0001 §3.16.10: external_app_launch is blocked (BLOCKED_COMMANDS) except inside withExternalAppLaunch, and then only
+  // when the target `path` is strictly inside the test folder (the same lexical rule). The backend judges the program AND the
+  // target again (R-1584: E2E scope), so a registration that points outside the scope is refused there (W-99, AC-1525).
+  ctx.externalLaunchRoot = null;
+  const applyExternalLaunch = async () => {
+    await cdp.ev(`(() => { ${SCOPE_SOURCE}
+      window.__e2e.stubs.external_app_launch = async (args, passThrough) =>
+        args !== null && typeof args === "object" && isInsideScope(${JSON.stringify(ctx.externalLaunchRoot)}, args.path)
+          ? passThrough()
+          : { error: { code: "other", message: "E2E: external app launch outside the test folder" } };
+      return true; })()`);
+  };
+  const blockExternalLaunch = async () => {
+    await cdp.ev(`window.__e2e.stubs.external_app_launch = () => ({ error: { code: "other", message: "E2E: blocked command" } }); true`);
+  };
+
+  /**
+   * Runs `fn` with external_app_launch passed to the backend for targets inside the test folder only. Afterwards the command is
+   * blocked again and the stubs are verified (MUST-118 (c)). Only the probe copies (e2e/lib/probe.mjs) may be registered.
+   */
+  ctx.withExternalAppLaunch = async (fn) => {
+    if (ctx.externalLaunchRoot !== null) throw new Error("withExternalAppLaunch cannot be nested");
+    ctx.externalLaunchRoot = fs.realpathSync.native(ctx.fx.root);
+    await applyExternalLaunch();
+    try {
+      return await fn();
+    } finally {
+      ctx.externalLaunchRoot = null;
+      await blockExternalLaunch();
+      await ctx.verifyStubs();
+    }
+  };
+
+  /** The startup snapshot of the external-app registrations as the page got it (read only, not blocked). */
+  ctx.externalAppsDto = () => cdp.ev(`window.__TAURI_INTERNALS__.invoke("external_apps_load")`);
 
   /**
    * Runs `fn` with fs_ops_copy / fs_ops_move allowed inside the test folder only. Afterwards the
@@ -335,6 +372,13 @@ export function createContext({ cdp, fx, shotsDir, log }) {
   ctx.key = async (key, modifiers = 0, code) => {
     await assertSafeToSend();
     await cdp.key(key, modifiers, code);
+  };
+  /** AC-1523: a key held down: one keyDown, `repeats` auto-repeat keyDowns (DOM `repeat === true`), then the keyUp. */
+  ctx.keyHold = async (key, modifiers = 0, code, repeats = 3) => {
+    await assertSafeToSend();
+    await cdp.keyDown(key, modifiers, code);
+    for (let i = 0; i < repeats; i++) await cdp.keyDown(key, modifiers, code, { autoRepeat: true });
+    await cdp.keyUp(key, modifiers, code);
   };
   ctx.type = async (text) => {
     await assertSafeToSend();

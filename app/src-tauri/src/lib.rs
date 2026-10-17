@@ -29,6 +29,7 @@
 pub mod archive;
 pub mod config;
 pub mod fs;
+pub mod external_apps;
 pub mod fs_ops;
 pub mod shared;
 // SPEC-0300-0015 (Phase 6, ReflexViewer): not implemented yet (TDD). See
@@ -45,6 +46,13 @@ mod acl_consistency;
 // AC-89 structure tests of the absolute-path check (SPEC-0200-0001 §3.12.8).
 #[cfg(test)]
 mod abs_path_structure_tests;
+
+// SPEC-0300-0021 (external-app launch): crate-wide structure tests of `external_apps/` (single process-creation site, dependency
+// direction, the environment is read in one place, defaults are data, capabilities). Source text scans: RED until the module exists.
+// TDD (unit-test-writer, 2026-10-17). code-generator: ALSO add `pub mod external_apps;` above, and wire the behaviour tests the
+// first test of this file lists (`external_apps/mod.rs`, `shared/mod.rs`, `config/mod.rs`, `shared/schema/mod.rs`).
+#[cfg(test)]
+mod external_apps_structure_tests;
 
 /// Builds and runs the Tauri application. This is the sole place in the
 /// backend that `use`s more than one feature module's public command
@@ -164,6 +172,8 @@ pub fn run() {
             fs_ops::clipboard::commands::clipboard_set_files,
             fs_ops::clipboard::commands::clipboard_get_files,
             fs_ops::clipboard::commands::clipboard_clear_if_unchanged,
+            external_apps::commands::external_apps_load,
+            external_apps::commands::external_app_launch,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -178,6 +188,15 @@ pub fn run() {
     if let Some(theme) = shared::window_theme::requested_theme(startup.theme.setting) {
         app.set_theme(Some(theme));
     }
+    // SPEC-0300-0021 / SPEC-0200-0001 §3.16.15 MUST-142: `lib.rs` is the ONE reader of the environment for the external apps.
+    // The raw `external_apps` of the start-up snapshot, the start-up `PATH` and the lookup of `%NAME%` variables are injected;
+    // `external_apps/` itself reads nothing (and `config/` and `external_apps/` never import each other).
+    let external_apps_registry = external_apps::registry::Registry::from_raw(
+        &startup.loaded.external_apps,
+        &|name| std::env::var_os(name),
+        std::env::var_os("PATH"),
+    );
     app.manage(startup);
+    app.manage(external_apps_registry);
     app.run(|_app, _event| {});
 }

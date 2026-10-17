@@ -381,8 +381,9 @@ enum Class {
 
 /// R-89-1 "検査する引数" (MINOR-7). `destination` is classified per command below.
 const CHECKED: [&str; 7] = ["path", "paths", "items", "destination", "parent", "base_dir", "zip_path"];
-const EXEMPT: [&str; 20] = [
-    "new_name", "name", "kind", "output_path", "item_resolutions", "resolutions", "operation_id", "resolution",
+// SPEC-0200-0001 §3.16.5 / §3.16.15 MUST-141 (a): `index` (external_app_launch: the registration number) joins the exempt names (20 -> 21).
+const EXEMPT: [&str; 21] = [
+    "index", "new_name", "name", "kind", "output_path", "item_resolutions", "resolutions", "operation_id", "resolution",
     "effect", "expected_sequence", "probe_only", "sequence", "direction", "request_epoch", "request_seq",
     "show_hidden", "sort_key", "sort_order", "overwrite", "data",
 ];
@@ -441,9 +442,10 @@ fn checked_args_by_command() -> BTreeMap<String, Vec<String>> {
 }
 
 #[test]
-fn a_every_argument_of_every_command_is_classified_and_there_are_thirty_commands() {
+fn a_every_argument_of_every_command_is_classified_and_there_are_thirty_two_commands() {
     let commands = handler_commands();
-    assert_eq!(commands.len(), 30, "generate_handler! has 30 commands (SPEC-0300-0011 R-89-1); update the tables if it changes");
+    // SPEC-0300-0021: +external_apps_load (no argument: no row, no exemption needed) +external_app_launch (index / path / kind).
+    assert_eq!(commands.len(), 32, "generate_handler! has 32 commands (SPEC-0300-0011 第10版 R-89-1); update the tables if it changes");
     let _ = checked_args_by_command(); // panics on an unclassified argument
 }
 
@@ -475,6 +477,9 @@ const CONTAINER: &str = "e2e_scope::check_container";
 const ENTRY: &str = "e2e_scope::check_entry";
 const SOURCE: &str = "e2e_scope::check_source";
 const LAUNCH: &str = "e2e_scope::check_external_launch";
+// SPEC-0300-0021 R-1584 / SPEC-0200-0001 §3.16.15 MUST-141 (c): the registered-app launch has its OWN scope check (executable AND target),
+// a different token from `LAUNCH` (the OS-association launch, always refused).
+const LAUNCH_PAIR: &str = "e2e_scope::check_launch";
 const RESOLVED: &str = "abs_path::is_absolute_path_buf(";
 const SEPARATORS: &str = "normalize_input_separators(";
 
@@ -568,6 +573,15 @@ const ROWS: &[Row] = &[
         chain: &[("viewer/commands.rs", "viewer_os_open_path"), ("viewer/guarded.rs", "os_open_guarded")],
         order: &[ABS, LAUNCH, "resolve_target(", "launch("],
         counts: &[],
+    },
+    // SPEC-0300-0021 R-1582 / AC-1524: ABS first, then the executable is resolved (read-only PATH lookup), THEN one scope check for
+    // (executable, target), then the target must still exist, then the process is created. Q-4: the resolution is a read; nothing
+    // is created or changed before both are judged.
+    Row {
+        command: "external_app_launch",
+        chain: &[("external_apps/commands.rs", "external_app_launch"), ("external_apps/guarded.rs", "launch_guarded")],
+        order: &[ABS, "resolve(", LAUNCH_PAIR, "verify(", "spawn("],
+        counts: &[(LAUNCH_PAIR, 1)],
     },
     Row {
         command: "viewer_read_text",
@@ -745,7 +759,7 @@ fn d_the_allow_list_has_no_stale_entries() {
 
 // =============================================================================================== (e) scope tokens per command (MUST-126)
 
-const REQUIRED_SCOPE_TOKENS: [(&str, &[&str]); 9] = [
+const REQUIRED_SCOPE_TOKENS: [(&str, &[&str]); 10] = [
     ("fs_ops_copy", &[CONTAINER, SOURCE]),
     ("fs_ops_move", &[CONTAINER, ENTRY, SOURCE]),
     ("fs_ops_delete_trash", &[ENTRY]),
@@ -755,6 +769,7 @@ const REQUIRED_SCOPE_TOKENS: [(&str, &[&str]); 9] = [
     ("archive_create", &[CONTAINER, SOURCE]),
     ("archive_extract", &[CONTAINER, SOURCE]),
     ("viewer_os_open_path", &[LAUNCH]),
+    ("external_app_launch", &[LAUNCH_PAIR]),
 ];
 
 fn row(command: &str) -> &'static Row {
@@ -763,17 +778,17 @@ fn row(command: &str) -> &'static Row {
 
 // (m1): the rows whose order has an `e2e_scope::check_` token are EXACTLY the nine commands (by name).
 #[test]
-fn e_m1_exactly_the_nine_specified_commands_have_scope_checks() {
+fn e_m1_exactly_the_ten_specified_commands_have_scope_checks() {
     let with_scope: BTreeSet<&str> = ROWS.iter().filter(|r| r.order.iter().any(|t| t.contains("e2e_scope::check_"))).map(|r| r.command).collect();
     let expected: BTreeSet<&str> = REQUIRED_SCOPE_TOKENS.iter().map(|(c, _)| *c).collect();
-    assert_eq!(with_scope, expected, "the E2E-scope rows must be the nine commands of SPEC-0400-0001 R-10");
-    assert_eq!(expected.len(), 9);
+    assert_eq!(with_scope, expected, "the E2E-scope rows must be the ten commands of SPEC-0400-0001 R-10 (第6版: + external_app_launch)");
+    assert_eq!(expected.len(), 10);
 }
 
 // Each of the nine keeps the individual token(s) the three old boundary tests used to fix (container-only or
 // entry-for-source substitutions fail here).
 #[test]
-fn e_each_of_the_nine_rows_contains_its_required_scope_tokens() {
+fn e_each_of_the_ten_rows_contains_its_required_scope_tokens() {
     for (command, tokens) in REQUIRED_SCOPE_TOKENS {
         let order = row(command).order;
         for token in tokens {
@@ -792,6 +807,20 @@ fn e_m2_should179_and_r10_6_tokens_are_in_the_right_rows() {
     }
     let os_open = body_of("viewer/guarded.rs", "os_open_guarded");
     assert!(!os_open.contains("e2e_scope::check_source") && !os_open.contains("e2e_scope::check_container"), "os_open uses only the launch check");
+}
+
+// (m3) SPEC-0200-0001 §3.16.15 MUST-141 (d): the two launch checks are never mixed up. The OS-association launch stays "always refused"
+// (SPEC-0400-0001 R-10-5); the registered-app launch uses the pair check, exactly ONCE, and never `check_external_launch`.
+#[test]
+fn e_m3_the_registered_app_launch_uses_check_launch_once_and_never_check_external_launch() {
+    assert!(row("external_app_launch").order.contains(&LAUNCH_PAIR));
+    assert!(!row("external_app_launch").order.contains(&LAUNCH), "external_app_launch must not use check_external_launch (that one always refuses)");
+    assert!(!row("viewer_os_open_path").order.contains(&LAUNCH_PAIR), "viewer_os_open_path stays on check_external_launch only");
+    let inner = body_of("external_apps/guarded.rs", "launch_guarded");
+    assert_eq!(count_token(&inner, LAUNCH_PAIR), 1, "ONE check_launch(exe, target) call, after the resolution (MUST-141 (c))");
+    assert!(!inner.contains("check_external_launch") && !inner.contains("e2e_scope::check_source") && !inner.contains("e2e_scope::check_container"));
+    let os_open = body_of("viewer/guarded.rs", "os_open_guarded");
+    assert!(os_open.contains(LAUNCH) && !os_open.contains(LAUNCH_PAIR), "os_open_guarded is unchanged");
 }
 
 // =============================================================================================== (f) how the check is written, SHOULD-187
@@ -820,6 +849,7 @@ fn f_commands_depend_on_guarded_one_way_only() {
         ("fs_ops/commands.rs", "fs_ops/guarded.rs"),
         ("archive/commands.rs", "archive/guarded.rs"),
         ("viewer/commands.rs", "viewer/guarded.rs"),
+        ("external_apps/commands.rs", "external_apps/guarded.rs"),
     ] {
         assert!(production(commands).contains("guarded"), "src/{commands} must call the inner layer in {guarded}");
         let inner = production(guarded);

@@ -261,10 +261,12 @@ describe("AC-1200 (static part): app.html", () => {
 
 describe("scan-size guards (SHOULD-194 (c): an empty scan must not pass)", () => {
   // PHASE 13 UPDATE (SPEC-0200-0001 §3.14.12-1 / MUST-129): features/menu-bar/messages.ts is added -> 12 (shared 1 + feature 10 + routes 1).
-  it("finds exactly 12 messages.ts (shared 1 + feature 10 + routes 1)", () => {
+  // EXTERNAL-APPS UPDATE (SPEC-0300-0021 / SPEC-0200-0001 §3.16.6, §3.16.14): features/external-apps/messages.ts is added -> 13 (shared 1 + feature 11 + routes 1).
+  it("finds exactly 13 messages.ts (shared 1 + feature 11 + routes 1)", () => {
     expect(PROD.filter((f) => f.isMessages).map((f) => f.rel).sort()).toEqual([
       "lib/features/archive/messages.ts",
       "lib/features/context-menu/messages.ts",
+      "lib/features/external-apps/messages.ts",
       "lib/features/file-list/messages.ts",
       "lib/features/file-ops/messages.ts",
       "lib/features/keyboard/messages.ts",

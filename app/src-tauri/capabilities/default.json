@@ -31,6 +31,8 @@
     "allow-clipboard-set-files",
     "allow-clipboard-get-files",
     "allow-clipboard-clear-if-unchanged",
+    "allow-external-apps-load",
+    "allow-external-app-launch",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

@@ -58,6 +58,8 @@ export interface MainKeydownWiringDeps {
     onKey: (action: string | null, event: KeydownLikeEvent) => boolean;
     onActivate: (kind: MenuBarActivationKind, event: KeydownLikeEvent) => boolean;
   };
+  // SPEC-0300-0021 R-1550 / SPEC-0200-0001 §3.16.7: a registered external app's key (optional). The logic is in external-apps-wiring.ts.
+  externalApps?: { onKey: (event: KeydownLikeEvent) => boolean };
 }
 
 // Builds the `(event: Event) => void` handler `attachGlobalKeydownListener`
@@ -73,6 +75,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       metaKey: ke.metaKey,
       isComposing: ke.isComposing,
       keyCode: ke.keyCode, // R-764: IME marker 229 (MUST-99(c))
+      repeat: ke.repeat, // R-1549: an auto-repeat keydown starts no external app
     };
 
     const flags = computeDispatchOverlayFlags({
@@ -118,6 +121,7 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       isPathBarEditing: flags.isPathBarEditing,
       onPathBarKey: deps.pathBar?.onKey,
       onPathBarOverlayAction: deps.pathBar?.onOverlayAction,
+      onExternalAppKey: deps.externalApps?.onKey,
     };
 
     const handled = dispatchKeydown(keydownLike, ctx);

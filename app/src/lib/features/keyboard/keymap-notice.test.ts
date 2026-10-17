@@ -15,7 +15,8 @@ import { describe, expect, it } from "vitest";
 import { buildKeymapLoadNotice } from "./keymap-notice";
 
 const W30_CLOSING = "既定のキー割り当てを使います。";
-const W31_CLOSING = "既定のキー割り当てとテーマ(OS の設定に従う)を使います。";
+// SPEC-0300-0019 第3版 W-31 (SPEC-0300-0021 R-1504 / D-13): when the whole file is unreadable the external apps fall back to the default four too.
+const W31_CLOSING = "既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。";
 const W30_2 = "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。";
 
 describe("buildKeymapLoadNotice: behaviour when `opts` is omitted (R-45-2 / R-45-5)", () => {

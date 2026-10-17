@@ -58,6 +58,20 @@ fn format_modified(modified: std::time::SystemTime) -> String {
     format!("{:020}", secs)
 }
 
+/// The metadata that decides an entry's type: a symlink / junction is judged by what it points at
+/// (the old product followed links; customer decision 2026-10-17, SPEC-0300-0009 / SPEC-0300-0021 D-05).
+/// `DirEntry::metadata` does not follow links, so a junction to a folder would be listed as a file.
+/// A link whose target cannot be reached (a broken link) keeps the no-follow metadata (listed as a file).
+fn metadata_following_links(dir_entry: &std::fs::DirEntry) -> io::Result<std::fs::Metadata> {
+    let own = dir_entry.metadata()?;
+    if own.file_type().is_symlink() {
+        if let Ok(followed) = std::fs::metadata(dir_entry.path()) {
+            return Ok(followed);
+        }
+    }
+    Ok(own)
+}
+
 /// R-70: the single directory-enumeration command
 /// `fs_list_dir(path, show_hidden, sort_key, sort_order) -> Vec<Entry>`.
 pub fn fs_list_dir(
@@ -78,7 +92,7 @@ pub fn fs_list_dir(
             continue;
         }
 
-        let metadata = dir_entry.metadata()?;
+        let metadata = metadata_following_links(&dir_entry)?;
         let is_dir = metadata.is_dir();
         let entry_type = if is_dir { EntryType::Dir } else { EntryType::File };
         // AC-13: directories never carry a numeric size.
@@ -283,5 +297,69 @@ mod tests {
         let entries = fs_list_dir(dir.path(), false, "name", "asc").expect("fs_list_dir");
         let entry = entries.into_iter().find(|e| e.name == "a.txt").expect("a.txt present");
         assert_eq!(entry.ext, "txt");
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::fs;
+
+    fn junction(link: &Path, target: &Path) -> bool {
+        std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    // Customer decision 2026-10-17 ("fix it as a defect"): the old product followed links, so a junction to a
+    // folder is listed as a folder (and a folder in the tree); the entry is judged by what it points at.
+    #[test]
+    fn a_junction_to_a_folder_is_listed_as_a_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        // A junction needs no privilege (AC-653 allows SKIP only for the symlink case), so failing to make one is a failure.
+        assert!(junction(&link, &real), "cannot create a junction here (mklink /J failed)");
+        let entries = fs_list_dir(dir.path(), true, "name", "asc").expect("fs_list_dir");
+        let entry = entries.iter().find(|e| e.name == "link").expect("link listed");
+        assert!(matches!(entry.entry_type, EntryType::Dir), "{:?}", entry.entry_type);
+        assert_eq!(entry.size, 0);
+        assert_eq!(entry.ext, "");
+        let _ = fs::remove_dir(&link);
+    }
+
+    // A link whose target is gone cannot be followed: it stays what the no-follow metadata says (a file).
+    #[test]
+    fn a_broken_junction_is_listed_as_a_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        assert!(junction(&link, &real), "cannot create a junction here (mklink /J failed)");
+        fs::remove_dir(&real).unwrap();
+        let entries = fs_list_dir(dir.path(), true, "name", "asc").expect("fs_list_dir");
+        let entry = entries.iter().find(|e| e.name == "link").expect("link listed");
+        assert!(matches!(entry.entry_type, EntryType::File), "{:?}", entry.entry_type);
+        let _ = fs::remove_dir(&link);
+    }
+
+    #[test]
+    fn a_file_symlink_follows_to_a_file_and_a_plain_folder_stays_a_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("real.txt"), "x").unwrap();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        if std::os::windows::fs::symlink_file(dir.path().join("real.txt"), dir.path().join("l.txt")).is_err() {
+            eprintln!("SKIP: cannot create a file symlink here");
+            return;
+        }
+        let entries = fs_list_dir(dir.path(), true, "name", "asc").expect("fs_list_dir");
+        let kind = |n: &str| entries.iter().find(|e| e.name == n).expect("listed").entry_type;
+        assert!(matches!(kind("l.txt"), EntryType::File));
+        assert!(matches!(kind("sub"), EntryType::Dir));
     }
 }

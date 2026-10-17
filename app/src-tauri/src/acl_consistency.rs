@@ -65,6 +65,9 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "clipboard_set_files",
     "clipboard_get_files",
     "clipboard_clear_if_unchanged",
+    // SPEC-0300-0021 (external-app launch; SPEC-0200-0001 §3.16.2 / §3.16.5): main window only (R-1555).
+    "external_apps_load",
+    "external_app_launch",
 ];
 
 /// Removes `// ...` line comments (good enough for the three files here).
@@ -362,7 +365,7 @@ fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
 // (rather than the test staying green today and breaking unexpectedly
 // later).
 #[test]
-fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives_plus_phase11_clipboard() {
+fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives_plus_phase11_clipboard_plus_external_apps() {
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
         "allow-fs-list-drives",
@@ -391,6 +394,9 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_ph
         "allow-clipboard-set-files",
         "allow-clipboard-get-files",
         "allow-clipboard-clear-if-unchanged",
+        // SPEC-0300-0021 (SPEC-0200-0001 §3.16.5): 26 -> 28. NO shell / execute permission is ever granted (AC-1526).
+        "allow-external-apps-load",
+        "allow-external-app-launch",
     ]
     .into_iter()
     .map(String::from)
@@ -546,6 +552,47 @@ fn phase11_the_three_clipboard_permissions_never_appear_in_viewer_json() {
     for p in ["allow-clipboard-set-files", "allow-clipboard-get-files", "allow-clipboard-clear-if-unchanged"] {
         assert!(!viewer_perms.contains(p), "{p} must be main-only (default.json), not in viewer.json");
         assert!(all_permissions(CAPABILITY_JSON).contains(p), "{p} must be granted by default.json");
+    }
+}
+
+// ---------------------------------------------------------------------
+// SPEC-0300-0021 (external-app launch; SPEC-0200-0001 §3.16.5, §3.16.15 SHOULD-214). TDD (unit-test-writer, 2026-10-17) -- RED until
+// code-generator adds `external_apps/commands.rs` and wires the two commands into the three places. Read at RUN time (not
+// `include_str!`) so that a missing file is a failing test, not a build error of the whole test crate.
+// ---------------------------------------------------------------------
+
+#[test]
+fn must64_every_tauri_command_defined_in_external_apps_commands_is_registered() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/external_apps/commands.rs");
+    let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let production_part = source.split("#[cfg(test)]").next().unwrap_or(&source);
+    let handler = handler_commands(LIB_RS);
+    let mut defined = BTreeSet::new();
+    let cleaned = strip_line_comments(production_part);
+    let mut parts = cleaned.split("#[tauri::command").map(str::to_string).collect::<Vec<_>>().into_iter();
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("").to_string();
+        if let Some(at) = after_attr.find("fn ") {
+            let name: String = after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if name.starts_with("external_app") {
+                defined.insert(name);
+            }
+        }
+    }
+    assert_eq!(defined, set(&["external_apps_load", "external_app_launch"]), "external_apps/commands.rs must define exactly the two commands");
+    let unregistered: Vec<&String> = defined.iter().filter(|name| !handler.contains(*name)).collect();
+    assert!(unregistered.is_empty(), "defined but not in generate_handler!: {unregistered:?}");
+}
+
+// R-1555: the viewer window has no entrance to the external apps -- the two permissions are main-only, in both directions.
+#[test]
+fn sh214_the_two_external_app_permissions_are_main_only() {
+    let viewer_perms = all_permissions(VIEWER_CAPABILITY_JSON);
+    let default_perms = all_permissions(CAPABILITY_JSON);
+    for p in ["allow-external-apps-load", "allow-external-app-launch"] {
+        assert!(!viewer_perms.contains(p), "{p} must be main-only (default.json), not in viewer.json");
+        assert!(default_perms.contains(p), "{p} must be granted by default.json");
     }
 }
 

@@ -113,6 +113,9 @@ export interface DispatchContext {
   isPathBarEditing?: boolean;
   onPathBarKey?: (key: PathBarFixedKey, event: KeydownLikeEvent) => void;
   onPathBarOverlayAction?: (action: PathBarOverlayAction) => void;
+  // SPEC-0300-0021 R-1550 / SPEC-0200-0001 §3.16.7: a registered external app's key. Asked LAST: after every keymap action failed to match and the
+  // file-list handler had its chance, before the Tab fallback. Only a result of `true` handles the key. Injected (no import of the feature).
+  onExternalAppKey?: (event: KeydownLikeEvent) => boolean;
 }
 
 // R-761: the path bar's own fixed keys (keymap-independent, §3.1 (a)).
@@ -291,6 +294,10 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
 
   const listHandled = !!ctx.onListAction(action, event);
   if (listHandled) return true;
+
+  // SPEC-0300-0021 R-1550 3 (SPEC-0300-0010 §3.1 #15): a registered external app's key is asked only when no keymap action matched,
+  // and before the Tab fallback (Tab is a fixed key, never a registration key). Only `true` handles the key.
+  if (action === null && ctx.onExternalAppKey?.(event) === true) return true;
 
   // MUST-85: the Tab fallback condition is keymap-match FAILURE
   // (`action === null`), never "onListAction returned false" -- a

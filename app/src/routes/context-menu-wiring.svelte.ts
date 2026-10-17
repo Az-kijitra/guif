@@ -5,7 +5,7 @@
 // touches the DOM (and is not unit-tested; the E2E covers it).
 
 import { createContextMenuState } from "$lib/features/context-menu/menu-state.svelte";
-import { buildMenu, planExecution, type MenuItemId, type MenuTarget } from "$lib/features/context-menu/menu-model";
+import { buildMenu, planExecution, type MenuEntryId, type MenuItemId, type MenuTarget } from "$lib/features/context-menu/menu-model";
 import { decideContextMenuEvent, decideMenuWheel } from "$lib/features/context-menu/menu-events";
 import { resolveContextMenuKey } from "$lib/features/context-menu/menu-keys";
 import { createContextMenuOriginTracker } from "$lib/features/context-menu/contextmenu-origin";
@@ -49,6 +49,8 @@ export interface ContextMenuWiringDeps {
   now: () => number;
   // Whether the event target lies inside the menu element.
   isInsideMenu: (target: ContextEventTarget) => boolean;
+  // SPEC-0300-0021 R-1553: the registered apps for the menus, and the launch with the target the menu was opened with.
+  externalApps?: { readonly entries: readonly { index: number; label: string }[]; launchOnTarget(index: number, target: { path: string; kind: "file" | "dir" }): void };
 }
 
 export interface ContextMenuKeyEvent {
@@ -92,11 +94,21 @@ export function createContextMenuWiring(deps: ContextMenuWiringDeps) {
   }
 
   // R-1055 / R-1056 / R-1056-1 / §3.9.7 + §3.9.17.2: plan, close, restore, then call.
-  function run(id: MenuItemId): void {
+  function run(id: MenuEntryId): void {
     const snapshot = state.snapshot;
     if (snapshot === null) return;
+    // SPEC-0300-0021 R-1554 / MUST-144: a registered app is NOT planned or put back (R-1056-1 does not apply, the selection stays): close, then launch
+    // with the target the menu was opened with (the right-clicked row, else the folder) -- a vanished target is the backend's answer (R-1536).
+    const external = /^ext:(\d+)$/.exec(id);
+    if (external !== null) {
+      const row = snapshot.rowTarget ?? null;
+      closeNow();
+      deps.externalApps?.launchOnTarget(Number(external[1]), row === null ? { path: snapshot.directory, kind: "dir" } : { path: row.path, kind: row.entryType });
+      return;
+    }
+    const itemId = id as MenuItemId;
     const visible = deps.filteredEntries();
-    const plan = planExecution({ snapshot, id, displayed: visible.map(toTarget), isZip: deps.isZip });
+    const plan = planExecution({ snapshot, id: itemId, displayed: visible.map(toTarget), isZip: deps.isZip });
     closeNow();
     if (plan.kind === "notice") {
       deps.status.show(plan.message);
@@ -162,9 +174,10 @@ export function createContextMenuWiring(deps: ContextMenuWiringDeps) {
       clipboardHasItems = false;
     }
     if (!state.isLatestOpenToken(token) || deps.isOverlayOpen() || deps.fileList.currentPath !== directory) return;
-    const entries = buildMenu({ kind, targets, clipboardHasItems, isZip: deps.isZip });
+    const entries = buildMenu({ kind, targets, clipboardHasItems, isZip: deps.isZip, externalApps: deps.externalApps?.entries, directory });
     if (entries.length === 0) return;
-    state.open({ kind, targets, clipboardHasItems, directory, entries, cursor: { x: e.clientX, y: e.clientY } });
+    const rowTarget = decision === "open-row" && target.kind === "row" ? (visible.find((v) => v.path === target.path) ?? null) : null;
+    state.open({ kind, targets, clipboardHasItems, directory, rowTarget: rowTarget === null ? null : toTarget(rowTarget), entries, cursor: { x: e.clientX, y: e.clientY } });
   }
 
   function onOutsideClose(e: { x: number; y: number }): void {

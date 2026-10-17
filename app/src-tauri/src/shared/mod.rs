@@ -33,3 +33,7 @@ mod window_theme_tests;
 pub mod abs_path;
 #[cfg(test)]
 mod abs_path_tests;
+
+// SPEC-0300-0021 R-1584 (TDD, unit-test-writer, 2026-10-17): `check_launch` of the E2E scope.
+#[cfg(test)]
+mod e2e_scope_launch_tests;

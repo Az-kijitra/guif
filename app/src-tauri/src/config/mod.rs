@@ -18,3 +18,7 @@ mod paths_tests;
 mod config_toml_tests;
 #[cfg(test)]
 mod startup_config_tests;
+
+// SPEC-0300-0021 (TDD, unit-test-writer, 2026-10-17): the raw top-level `external_apps` of `config.toml`.
+#[cfg(test)]
+mod config_toml_external_apps_tests;

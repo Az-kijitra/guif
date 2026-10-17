@@ -2,7 +2,7 @@
   // SPEC-0300-0020 §10 / §11 (R-1382~R-1384, R-1390~R-1392) / SPEC-0200-0001 §3.14.1-1: display only (props + callbacks).
   // The dropdown of one menu. The highlight is shown with `aria-activedescendant`; the keyboard focus stays on the heading.
   import { computeDropdownPosition } from "./dropdown-position";
-  import type { BarEntry, ItemId } from "./menu-model";
+  import type { BarEntry, BarItemId } from "./menu-model";
 
   let {
     label,
@@ -16,8 +16,8 @@
     entries: readonly BarEntry[];
     highlightId: string | null;
     anchor: HTMLElement | undefined;
-    onRun: (id: ItemId) => void;
-    onHover: (id: ItemId) => void;
+    onRun: (id: BarItemId) => void;
+    onHover: (id: BarItemId) => void;
   } = $props();
 
   const CHECK_MARK = "✓";

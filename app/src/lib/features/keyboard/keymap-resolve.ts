@@ -16,6 +16,8 @@ export interface KeydownLikeEvent {
   isComposing?: boolean;
   // SPEC-0200-0001 §3.7.10.3(c): legacy IME marker (229) used by R-764.
   keyCode?: number;
+  // SPEC-0300-0021 R-1549 / SPEC-0200-0001 §3.16.6: true for an auto-repeat keydown (filled by main-keydown-wiring).
+  repeat?: boolean;
 }
 
 // SPEC-0200-0001 §3.6.11.3 (MUST-86 (ii)/(iii), 発注者決定 2026-09-27): known
@@ -192,4 +194,18 @@ export function matchesAction(event: KeydownLikeEvent, bindings: readonly string
   }
 
   return false;
+}
+
+// SPEC-0300-0021 R-1551 2 / SPEC-0200-0001 §3.16.15 SHOULD-218: the inverse of `eventToNormalizedString` for ONE key string of the keymap
+// grammar (a comma element). It lets a registration key be judged by the real matcher (`matchesAction`) instead of a copy of it.
+// The modifiers and the key body are read the same way `normalizeKeyString` reads them; the word forms Comma / Plus / Space become the characters.
+export function keyStringToEvent(key: string): KeydownLikeEvent {
+  const parts = normalizeKeyString(key).split("+");
+  const body = parts[parts.length - 1];
+  const modifiers = new Set(parts.slice(0, -1));
+  const shiftKey = modifiers.has("Shift");
+  const named: Record<string, string> = { Comma: ",", Plus: "+", Space: " " };
+  let eventKey = named[body] ?? body;
+  if (eventKey.length === 1) eventKey = shiftKey ? eventKey.toUpperCase() : eventKey.toLowerCase();
+  return { key: eventKey, ctrlKey: modifiers.has("Ctrl"), altKey: modifiers.has("Alt"), shiftKey, metaKey: modifiers.has("Meta") };
 }

@@ -32,6 +32,8 @@
   import { createModalWiring } from "./modal-wiring.svelte";
   import { createSortMenuController } from "./sort-menu-wiring";
   import { createFocusedPathView, createTabStopController, resolveCurrentStop } from "./focus-wiring";
+  import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
+  import { createExternalAppsWiring } from "./external-apps-wiring";
   import { createMainContextMenu } from "./context-menu-main.svelte";
   import ContextMenuHost from "./_components/ContextMenuHost.svelte";
   import MenuBar from "$lib/features/menu-bar/MenuBar.svelte";
@@ -194,6 +196,12 @@
     pathBar,
   });
 
+  // SPEC-0300-0021: external apps (key / menu bar / right-click menu); delegates to the launch flow (no logic here).
+  const externalApps = createExternalAppsWiring({
+    entries: () => externalAppsState.entries, filteredEntries: () => filteredEntries, focusedPath,
+    currentPath: () => fileListState.currentPath, status: statusMessage,
+  });
+
   // SPEC-0300-0018: right-click menu; delegates to the controllers above (no logic here).
   const contextMenu = createMainContextMenu({
     fileList: fileListState,
@@ -206,6 +214,7 @@
     viewer: viewerOpenController,
     navigate: (path) => afterUserNavigation(fileListState.navigate(path)),
     status: statusMessage,
+    externalApps,
   });
   $effect(() => {
     const path = fileListState.currentPath;
@@ -215,7 +224,7 @@
   // SPEC-0300-0020: menu bar; calls the same handlers as the keys (with source "menu") on the file list's targets.
   const menuBar = createMenuBarWiring({
     fileList: fileListState, filteredEntries: () => filteredEntries, focusedPath, clipboard, focus, search: searchState,
-    overlays: [modalHost, navigationHistoryState, sortMenuState, contextMenu.state], pathEditing: () => pathBar.state.editing, isTreeFocused, onListAction,
+    overlays: [modalHost, navigationHistoryState, sortMenuState, contextMenu.state], pathEditing: () => pathBar.state.editing, isTreeFocused, onListAction, externalApps,
   });
 
   const { handleModalKey } = createModalWiring({
@@ -279,6 +288,7 @@
         onSearchAction: handleSearchAction,
         onTabStop,
         pathBar: { get editing() { return pathBar.state.editing; }, ...pathBar.keys },
+        externalApps,
       },
       initialDirectory: {
         lastVisited: navigationHistoryState.visitHistory[0],

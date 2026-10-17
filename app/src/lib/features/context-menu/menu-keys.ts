@@ -1,7 +1,7 @@
 // SPEC-0300-0018 R-1080~R-1084 / SPEC-0200-0001 §3.9.5. Pure.
 
 import { firstEnabled, nextEnabled } from "$lib/shared/menu-navigation";
-import type { MenuEntry, MenuItemId } from "./menu-model";
+import type { MenuEntry, MenuEntryId } from "./menu-model";
 
 export interface MenuKeyEvent {
   key: string;
@@ -36,13 +36,13 @@ export function resolveContextMenuKey(event: MenuKeyEvent): MenuKeyIntent {
 
 export function moveMenuHighlight(
   items: readonly MenuEntry[],
-  current: MenuItemId | null,
+  current: MenuEntryId | null,
   dir: "up" | "down",
-): MenuItemId | null {
+): MenuEntryId | null {
   return nextEnabled(items, current, dir, true);
 }
 
-export function resolveEnterTarget(items: readonly MenuEntry[], current: MenuItemId | null): MenuItemId | null {
+export function resolveEnterTarget(items: readonly MenuEntry[], current: MenuEntryId | null): MenuEntryId | null {
   // `current` counts only when it is an enabled item of the list.
   const isEnabled = items.some((e) => e.type === "item" && e.enabled && e.id === current);
   return isEnabled ? current : firstEnabled(items);

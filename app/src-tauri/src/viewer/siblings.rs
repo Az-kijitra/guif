@@ -40,7 +40,9 @@ pub fn build_sibling_list(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
-        if file_type.is_dir() {
+        // A junction / symlink to a folder is a folder, like in the file list (judged by what it points at).
+        let links_to_dir = file_type.is_symlink() && std::fs::metadata(entry.path()).is_ok_and(|m| m.is_dir());
+        if file_type.is_dir() || links_to_dir {
             continue;
         }
         files.push(entry.path());

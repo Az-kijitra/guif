@@ -9,6 +9,8 @@ export interface MenuExecutorDeps {
   onExitAction: (action: string) => boolean;
   // SPEC-0300-0018 R-1060 on the displayed targets.
   copyPath: () => void | Promise<unknown>;
+  // SPEC-0300-0021 R-1552 / R-1554: a registered app's item (`ext:<registration index>`). The target is decided by the caller at launch time.
+  launchExternal?: (index: number) => void;
 }
 
 // Items whose list action is NOT their own id.
@@ -24,6 +26,11 @@ const LIST_ITEMS: ReadonlySet<string> = new Set<ItemId>([
 // Extra arguments (e.g. the click event) are ignored on purpose: the Shift state of a click never reaches the handler (AC-1331).
 export function createMenuExecutor(deps: MenuExecutorDeps): (id: ItemId | string, ...ignored: unknown[]) => void {
   return function execute(id: ItemId | string): void {
+    const external = /^ext:(\d+)$/.exec(id);
+    if (external !== null) {
+      deps.launchExternal?.(Number(external[1]));
+      return;
+    }
     if (id === "exit") {
       deps.onExitAction("exit");
       return;

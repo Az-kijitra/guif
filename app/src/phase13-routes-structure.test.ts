@@ -88,7 +88,8 @@ describe("the main page (R-1300, §3.14.1-6)", () => {
 });
 
 describe("the new routes modules exist and obey the 400-line rule", () => {
-  it.each(["menu-bar-wiring.svelte.ts", "menu-bar-exec.ts", "menu-bar-shortcuts.ts"])("%s", (f) => {
+  // EXTERNAL-APPS (SPEC-0200-0001 §3.16.15 MUST-144): `external-apps-wiring.ts` joins the names (a missing file is a failure, not a silent pass).
+  it.each(["menu-bar-wiring.svelte.ts", "menu-bar-exec.ts", "menu-bar-shortcuts.ts", "external-apps-wiring.ts"])("%s", (f) => {
     const p = join(ROUTES, f);
     expect(existsSync(p), f).toBe(true);
     expect(lines(p), f).toBeLessThanOrEqual(LIMIT);

@@ -1,7 +1,7 @@
 // SPEC-0200-0001 §3.14.1-1 / §3.14.1-6: the shapes `MenuBar.svelte` reads (view) and calls (actions).
 // `routes/menu-bar-wiring.svelte.ts` provides both (the view through getters over its runes state).
 
-import type { BarEntry, ItemId, MenuId } from "./menu-model";
+import type { BarEntry, BarItemId, MenuId } from "./menu-model";
 
 export interface MenuBarView {
   readonly active: boolean;
@@ -19,6 +19,6 @@ export interface MenuBarActions {
   onHeadingMouseDown(): void;
   onHeadingClick(index: number): void;
   onHeadingHover(index: number): void;
-  onItemRun(id: ItemId): void;
-  onItemHover(id: ItemId): void;
+  onItemRun(id: BarItemId): void;
+  onItemHover(id: BarItemId): void;
 }

@@ -125,7 +125,7 @@ export class Cdp {
   }
 
   /** Only the keyDown half (a modifier held while other keys follow, e.g. Alt, Ctrl+Alt+Z). Pair it with keyUp. */
-  async keyDown(key, modifiers = 0, code) {
+  async keyDown(key, modifiers = 0, code, { autoRepeat = false } = {}) {
     const event = {
       type: "keyDown",
       key,
@@ -133,6 +133,7 @@ export class Cdp {
       windowsVirtualKeyCode: VK[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : undefined),
       modifiers,
     };
+    if (autoRepeat) event.autoRepeat = true; // SPEC-0300-0021 AC-1523: the DOM keydown then has `repeat === true`
     await this.send("Input.dispatchKeyEvent", event);
   }
 

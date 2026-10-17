@@ -81,7 +81,8 @@ fn rel(path: &Path) -> String {
 // another feature module (config included -- the DI fn-value pattern).
 #[test]
 fn viewer_does_not_use_other_feature_modules_directly() {
-    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive"];
+    // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list.
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "external_apps"];
     let mut offenders = Vec::new();
     for path in viewer_rust_files() {
         let code = code_only(&fs::read_to_string(&path).unwrap());

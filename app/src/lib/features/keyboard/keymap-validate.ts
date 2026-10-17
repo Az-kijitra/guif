@@ -48,7 +48,7 @@ const KNOWN_ACTION_IDS = new Set<string>(ACTION_IDS);
 // A single comma-separated element's grammar (R-45-4-1): zero or more
 // unique modifiers, each canonicalizable and non-duplicated, followed by a
 // known key body. No empty elements.
-function isValidBindingElement(element: string): boolean {
+export function isValidBindingElement(element: string): boolean {
   if (element === "") return false;
   const parts = element.split("+");
   const keyBody = parts[parts.length - 1];

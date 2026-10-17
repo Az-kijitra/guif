@@ -3,6 +3,7 @@
 // execution-time recheck (planExecution). Pure, DOM-free; imports no other
 // feature.
 
+import { SHARED_SENTENCES } from "$lib/shared/messages";
 import { MENU_ITEM_LABELS, MENU_NOTICES, MENU_REASONS } from "./messages";
 
 export type MenuItemId =
@@ -24,10 +25,22 @@ export interface MenuTarget {
   entryType: "file" | "dir";
 }
 
+// SPEC-0300-0021 R-1553 / SPEC-0200-0001 §3.16.8: a registered external app is a DYNAMIC item `ext:<registration index>`, never a `MenuItemId`
+// (the static ids, `MENU_ITEM_LABELS` and `planExecution` are untouched).
+export type ExternalMenuItemId = `ext:${number}`;
+
+// The id of any menu entry: a static item or a registered app.
+export type MenuEntryId = MenuItemId | ExternalMenuItemId;
+
+export interface MenuExternalApp {
+  index: number;
+  label: string;
+}
+
 export type MenuKind = "row" | "blank";
 
 export type MenuEntry =
-  | { type: "item"; id: MenuItemId; label: string; enabled: boolean; reason?: string }
+  | { type: "item"; id: MenuEntryId; label: string; enabled: boolean; reason?: string }
   | { type: "separator" };
 
 export interface MenuInput {
@@ -35,6 +48,10 @@ export interface MenuInput {
   targets: readonly MenuTarget[];
   clipboardHasItems: boolean;
   isZip: (name: string) => boolean;
+  // SPEC-0300-0021 R-1553 / R-1560: the usable registrations in order (absent = none). Never a shortcut text (R-1033).
+  externalApps?: readonly MenuExternalApp[];
+  // The current folder, the BLANK menu's target (R-1532): "" = none decided, which disables the registered items of the blank menu.
+  directory?: string;
 }
 
 // What the menu remembers from the moment it was opened (R-1042: never
@@ -44,6 +61,8 @@ export interface MenuSnapshot {
   targets: readonly MenuTarget[];
   clipboardHasItems: boolean;
   directory: string;
+  // SPEC-0300-0021 R-1532 / R-1535: the right-clicked row of a ROW menu (null / absent for the blank menu): the target of a registered app.
+  rowTarget?: MenuTarget | null;
   entries: readonly MenuEntry[];
   cursor: { x: number; y: number };
 }
@@ -60,13 +79,13 @@ export const REASON_CLIPBOARD_EMPTY = MENU_REASONS.clipboardEmpty;
 
 const LABELS: Record<MenuItemId, string> = MENU_ITEM_LABELS;
 
-type Layout = ReadonlyArray<MenuItemId | "---">;
+type Layout = ReadonlyArray<MenuItemId | "---" | "@ext">;
 
 // R-1030 / R-1031: the fixed order (a separator is never first, last or doubled).
 const ROW_LAYOUT: Layout = [
-  "open", "os_open", "---", "copy", "cut", "paste", "copy_path", "---", "delete", "rename", "---", "zip_create", "zip_extract",
+  "open", "os_open", "---", "@ext", "---", "copy", "cut", "paste", "copy_path", "---", "delete", "rename", "---", "zip_create", "zip_extract",
 ];
-const BLANK_LAYOUT: Layout = ["new_file", "---", "paste"];
+const BLANK_LAYOUT: Layout = ["new_file", "---", "paste", "---", "@ext"];
 
 const ENABLED = { enabled: true } as const;
 
@@ -95,15 +114,36 @@ export function evaluateItem(id: MenuItemId, input: MenuInput): { enabled: boole
   }
 }
 
+// R-1560: the row menu's registered items are always enabled; the blank menu's need a current folder (decided when the menu opens).
+function externalEntry(app: MenuExternalApp, input: MenuInput): MenuEntry {
+  const id = `ext:${app.index}` as const;
+  if (input.kind === "blank" && input.directory === "") return { type: "item", id, label: app.label, enabled: false, reason: SHARED_SENTENCES.noTarget };
+  return { type: "item", id, label: app.label, enabled: true };
+}
+
+// R-1031 / R-1032: a separator is never first, last or doubled (a layout with no registered item drops the slot and one neighbour).
+function compact(entries: readonly MenuEntry[]): MenuEntry[] {
+  const out: MenuEntry[] = [];
+  for (const entry of entries) {
+    if (entry.type === "separator" && (out.length === 0 || out[out.length - 1].type === "separator")) continue;
+    out.push(entry);
+  }
+  while (out.length > 0 && out[out.length - 1].type === "separator") out.pop();
+  return out;
+}
+
 export function buildMenu(input: MenuInput): MenuEntry[] {
   if (input.kind === "row" && input.targets.length === 0) return [];
   const layout = input.kind === "row" ? ROW_LAYOUT : BLANK_LAYOUT;
-  return layout.map((slot): MenuEntry => {
-    if (slot === "---") return { type: "separator" };
+  const apps = input.externalApps ?? [];
+  const entries = layout.flatMap((slot): MenuEntry[] => {
+    if (slot === "---") return [{ type: "separator" }];
+    if (slot === "@ext") return apps.map((app) => externalEntry(app, input));
     const result = evaluateItem(slot, input);
     const base = { type: "item" as const, id: slot, label: LABELS[slot], enabled: result.enabled };
-    return result.reason === undefined ? base : { ...base, reason: result.reason };
+    return [result.reason === undefined ? base : { ...base, reason: result.reason }];
   });
+  return compact(entries);
 }
 
 const NOTICE_NO_SELECTION = MENU_NOTICES.noSelection;

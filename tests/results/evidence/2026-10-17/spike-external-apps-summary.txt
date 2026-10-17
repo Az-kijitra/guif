@@ -1,0 +1,23 @@
+外部アプリ起動のスパイク(SPEC-0200-0001 §3.16 S-1〜S-4)2026-10-17
+発注者の同意のもと、作業用アカウントで実施。親プロセスは windows_subsystem = "windows" の使い捨ての Rust プログラム(GUI のアプリと同じ条件。依存なし)。
+作業フォルダー: scratchpad\spike-ext\work dir(空白を含む)。ファイル a b,c.txt / ab.txt。
+
+S-1 wt.exe(%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe、アプリ実行エイリアス)
+  std::fs::symlink_metadata: ok, attributes 0x420(REPARSE_POINT | ARCHIVE), is_file=true, is_symlink=false, len=0
+  std::fs::metadata(リンク先をたどる): ok, 0x420, is_file=true / Path::exists=true
+  → 標準ライブラリで「ファイルがある」と判定できる。H-A(隔離 unsafe)は不要。
+  Command::new(絶対パスの wt.exe).arg("-d").arg(<work dir>) + stdin/out/err = null: 起動成功。発注者の目視で「work dir で開いた」。
+S-2 explorer.exe /select
+  arg("/select,<path>")(Rust が全体を引用符で囲む): ドキュメントが開き選択なし(失敗)。名前にカンマが無い ab.txt でも同じ(空白を含むパスで全体が引用される場合に失敗)。
+  raw_arg("/select,\"<path>\""): work dir が開き a b,c.txt が選択(成功)。
+  arg("/select,").arg(<path>)(2 要素。標準の引用): work dir が開き a b,c.txt が選択(成功)。
+  判定は Shell.Application の Windows() の Folder.Self.Path と SelectedItems() で行った。
+  → 既定の Explorer の args_for_file を ["/select,", "{path}"] の 2 要素にすれば標準の引用で届く。H-B(raw_arg の例外)は不要。
+S-3 cmd.exe を CREATE_NEW_CONSOLE(0x10)で起動
+  stdin = null: すぐに終了した。
+  stdin を指定しない(GUI の親は標準ハンドルを持たない): ウィンドウ(Windows Terminal のタブ)は開くが、発注者の目視で「テキストは入力できるが、コマンドとして機能しない」。
+  → std の Command ではコンソールのプログラムを直接起動して使える状態にできない。発注者決定 2026-10-17: コンソールのプログラムは Windows Terminal 経由で登録してもらう(例 program = "wt.exe", args = ["-d", "{dir}", "powershell.exe"])。H-C は採らない。
+S-4 作業フォルダーが 260 文字を超える(306 文字)場合
+  Command::status: Err(os error 267「ディレクトリ名が無効です。」)。プロセスの作成そのものが失敗する(W-97 として表示される)。
+  UNC の実機確認は共有が無いため未実施。
+後片付け: スパイクが開いた cmd(PID 26180)と Explorer のウィンドウ 4 つ(COM の Quit)を閉じた。最初の S-2 の 2 回分と思われるドキュメントの Explorer のウィンドウ 2 つは、利用者のものの可能性があるため閉じていない。

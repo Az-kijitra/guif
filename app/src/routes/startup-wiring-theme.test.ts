@@ -70,7 +70,7 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
     );
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(
-      "config.toml の 2 行目を読み込めなかったため、既定のキー割り当てとテーマ(OS の設定に従う)を使います。 詳細: bad toml",
+      "config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: bad toml",
     );
     expect(notice).not.toContain("ui_theme を解釈できない");
   });

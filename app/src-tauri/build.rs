@@ -38,6 +38,8 @@ fn main() {
                 "clipboard_set_files",
                 "clipboard_get_files",
                 "clipboard_clear_if_unchanged",
+                "external_apps_load",
+                "external_app_launch",
             ])),
     )
     .expect("failed to run tauri-build");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { moveMenuHighlight, resolveContextMenuKey, resolveEnterTarget, type MenuKeyEvent } from "./menu-keys";
-import type { MenuEntry, MenuItemId } from "./menu-model";
+import type { MenuEntry, MenuItemId, MenuEntryId } from "./menu-model";
 
 // Spec: SPEC-0300-0018 R-1080 (only ArrowUp/Down/Enter/Escape), R-1081 (initial
 //   no highlight; cyclic over ENABLED items; null: Down -> first, Up -> last),
@@ -106,8 +106,8 @@ describe("moveMenuHighlight (R-1081, AC-1070)", () => {
   });
 
   it("Down walks only enabled items in order, skipping separators", () => {
-    const seq: Array<MenuItemId | null> = [];
-    let cur: MenuItemId | null = null;
+    const seq: Array<MenuEntryId | null> = [];
+    let cur: MenuEntryId | null = null;
     for (let i = 0; i < 6; i++) {
       cur = moveMenuHighlight(TWO_SELECTED, cur, "down");
       seq.push(cur);

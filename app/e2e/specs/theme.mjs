@@ -86,7 +86,7 @@ const DARK_VARIABLES = {
   "--list-row-height": "28px",
 };
 
-const S1_CONFIG = '# E2E scenario S1 (AC-960: a comment line must survive untouched)\nui_theme = "dark"   # fixed dark\n';
+const S1_CONFIG = '# E2E scenario S1 (AC-960: a comment line must survive untouched)\nui_theme = "dark"   # fixed dark\nexternal_apps = []\n';
 
 const s1Tests = [
   {
@@ -327,7 +327,7 @@ const s2Tests = [
     title: "no config.toml: the theme follows the OS (matchMedia = OS, DTO system), no startup notice",
     async run(t, ctx) {
       const notice = await reloadAndReadNotice(ctx);
-      t.eq(fs.existsSync(configFile(ctx)), false, "there is no config.toml in this scenario");
+      t.eq(/^\s*ui_theme\b/m.test(fs.readFileSync(configFile(ctx), "utf8")), false, "config.toml has no ui_theme line in this scenario");
       await checkFollowsOs(t, ctx);
       t.eq(notice, "", "no startup notice");
     },
@@ -510,7 +510,7 @@ const s2Tests = [
       const bgBefore = await uiBg(ctx);
       const darkBefore = await matchesDark(ctx);
       t.eq((await ctx.configDto()).uiTheme, "system", "DTO says system at the start");
-      fs.writeFileSync(configFile(ctx), 'ui_theme = "dark"\n', "utf8"); // written by the harness, not by the app
+      fs.writeFileSync(configFile(ctx), 'ui_theme = "dark"\nexternal_apps = []\n', "utf8"); // written by the harness, not by the app
       try {
         await sleep(10000);
         t.eq(await uiBg(ctx), bgBefore, "the colours did not change within 10 s");
@@ -521,7 +521,7 @@ const s2Tests = [
         t.eq(await uiBg(ctx), bgBefore, "after a reload the colours are unchanged");
         t.note("「再起動するとダークで起動する」は S1(ui_theme = dark で起動するシナリオ)で代える");
       } finally {
-        fs.rmSync(configFile(ctx), { force: true }); // back to "no config.toml"
+        fs.writeFileSync(configFile(ctx), "external_apps = []\n", "utf8"); // back to the scenario's file (no ui_theme)
       }
     },
   },
@@ -580,7 +580,7 @@ const s8Tests = [
       t.eq(dto.uiThemeInvalid, false, "no theme notice of its own");
       t.eq(dto.parseError?.wholeFile, true, "DTO parseError.wholeFile");
       t.eq(messageCount(message, "読み込めなかったため"), 1, "the R-45-2 notice (W-31) appears once", JSON.stringify(message));
-      t.ok(message.includes("既定のキー割り当てとテーマ(OS の設定に従う)を使います。"), "the notice says the theme falls back too (W-31)", message);
+      t.ok(message.includes("既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。"), "the notice says the theme falls back too (W-31)", message);
       t.ok(message.includes("テーマ"), "the notice mentions the theme", message);
       t.eq(messageCount(message, "ui_theme を解釈できない"), 0, "no separate theme notice (W-33)");
       checkConfigUntouched(t, ctx, before, "after the start");
@@ -620,18 +620,18 @@ const s9Tests = [
 
 export const scenarios = [
   { id: "S1", title: "ui_theme = dark", configToml: S1_CONFIG, tests: s1Tests },
-  { id: "S2", title: "no config.toml", configToml: null, tests: s2Tests },
-  { id: "S3", title: 'ui_theme = "system"', configToml: 'ui_theme = "system"\n', tests: s3Tests },
-  { id: "S4", title: 'ui_theme = "Dark" + keymap', configToml: `ui_theme = "Dark"\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-i", '"Dark"')] },
-  { id: "S5", title: "ui_theme = 1 + keymap", configToml: `ui_theme = 1\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-ii", "= 1")] },
-  { id: "S6", title: "ui_theme = { mode } + keymap", configToml: `ui_theme = { mode = "dark" }\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-iii", "= { mode = \"dark\" } (a table)")] },
+  { id: "S2", title: "no ui_theme line (external_apps only)", configToml: "external_apps = []\n", tests: s2Tests },
+  { id: "S3", title: 'ui_theme = "system"', configToml: 'ui_theme = "system"\nexternal_apps = []\n', tests: s3Tests },
+  { id: "S4", title: 'ui_theme = "Dark" + keymap', configToml: `ui_theme = "Dark"\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-i", '"Dark"')] },
+  { id: "S5", title: "ui_theme = 1 + keymap", configToml: `ui_theme = 1\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-ii", "= 1")] },
+  { id: "S6", title: "ui_theme = { mode } + keymap", configToml: `ui_theme = { mode = "dark" }\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-iii", "= { mode = \"dark\" } (a table)")] },
   {
     id: "S7",
     title: "invalid ui_theme + unknown keymap action",
-    configToml: `ui_theme = "Dark"\n${keymapBlock}no_such_action = "Ctrl+Alt+Z"\n`,
+    configToml: `ui_theme = "Dark"\nexternal_apps = []\n${keymapBlock}no_such_action = "Ctrl+Alt+Z"\n`,
     tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。" })],
   },
-  { id: "S8", title: "TOML syntax error", configToml: 'ui_theme = "dark"\nthis is = = not toml\n', tests: s8Tests },
-  { id: "S9", title: 'ui_theme = "dark" + input_keymap_custom not a table', configToml: 'ui_theme = "dark"\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },
+  { id: "S8", title: "TOML syntax error", configToml: 'ui_theme = "dark"\nthis is = = not toml\n', allowUndeclaredExternalApps: true, tests: s8Tests },
+  { id: "S9", title: 'ui_theme = "dark" + input_keymap_custom not a table', configToml: 'ui_theme = "dark"\nexternal_apps = []\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },
 ];
 

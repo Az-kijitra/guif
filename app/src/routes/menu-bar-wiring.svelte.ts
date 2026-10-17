@@ -59,6 +59,7 @@ export interface MenuBarWiringDeps {
   isTreeFocused: () => boolean;
   focus: { container(): void; tree(): void; searchInput(): void };
   onListAction: MenuExecutorDeps["onListAction"];
+  externalApps?: { barExtension(): Pick<BarInput, "externalApps" | "externalTargetAvailable">; launchByIndex(index: number): void };
   // Production defaults (the real keymap state, the exit route, the shared status line); tests may replace them.
   customOverrides?: () => Record<string, string>;
   onExitAction?: MenuExecutorDeps["onExitAction"];
@@ -115,6 +116,7 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
         time: deps.fileList.showTime(),
       },
       shortcuts: buildShortcutTable(customOverrides()),
+      ...deps.externalApps?.barExtension(),
     };
   }
 
@@ -134,7 +136,7 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
     );
   }
 
-  const execute = createMenuExecutor({ onListAction: deps.onListAction, onExitAction: deps.onExitAction ?? exitOnly, copyPath });
+  const execute = createMenuExecutor({ onListAction: deps.onListAction, onExitAction: deps.onExitAction ?? exitOnly, copyPath, launchExternal: (i) => deps.externalApps?.launchByIndex(i) });
 
   // ---- the focus (R-1350-1, R-1352) ----
 
