@@ -8,6 +8,7 @@ import { normalizeKeyString, resolveBinding } from "$lib/features/keyboard/keyma
 import type { ItemId } from "$lib/features/menu-bar/menu-model";
 
 // Items that run a keymap action of the same id. `os_open` is a fixed key and `copy_path` has no key (R-1331).
+// `config_open` runs the `settings` action (below) and `config_check` has no key (SPEC-0300-0022 R-1670).
 const ACTION_ITEMS: readonly ItemId[] = [
   "open", "new_file", "new_folder", "rename", "delete", "zip_create", "zip_extract", "exit",
   "cut", "copy", "paste", "select_all", "clear_selection", "search",
@@ -25,5 +26,8 @@ export function buildShortcutTable(customOverrides: Record<string, string>): Par
     table[id] = bindings.map(normalizeKeyString).join(",");
   }
   table.os_open = OS_OPEN_FIXED;
+  // SPEC-0300-0022 R-1670: 設定ファイルを開く shows the CURRENT assignment of `settings` (menu-model falls back to Ctrl+, when empty, T-28).
+  const settings = resolveBinding({ customOverrides, actionId: "settings", defaultBinding: DEFAULT_KEYMAP.settings ?? "" });
+  table.config_open = settings.map(normalizeKeyString).join(",");
   return table;
 }

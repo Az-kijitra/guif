@@ -176,7 +176,7 @@ describe("createMainKeydownHandler with the context menu open (R-1080, R-1084, A
   it("AC-1074: Ctrl+Q reaches the exit shortcut (priority 1) and not the menu", () => {
     const { deps, contextMenu } = makeDeps();
     createMainKeydownHandler(deps)(key("q", { ctrlKey: true }) as unknown as Event);
-    expect(deps.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(deps.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(contextMenu.handleKey).not.toHaveBeenCalled();
   });
 

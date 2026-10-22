@@ -19,14 +19,16 @@ import { checkTextLook, FIFTY } from "./viewer-text.mjs";
 import { closeViewerWindow, showInViewer } from "./_viewer.mjs";
 import { checkViewerPalette, unquoteFonts, VIEWER_FONT, VIEWER_LOOK, VIEWER_PALETTE } from "./viewer.mjs";
 
-// W-33 (SPEC-0300-0019)
-const THEME_NOTICE = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
+// W-33 with the line of `ui_theme` (SPEC-0300-0019 第5版 §4.9 / SPEC-0300-0022 R-1660 / R-1642, ISS-0234 (d)): the sentence is no longer the same for every
+// file, it names the line the key is on (every scenario below writes `ui_theme` on line 1).
+const themeNotice = (line) => `config.toml の ${line} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`;
+const THEME_NOTICE = themeNotice(1);
 const KEYMAP_LINE = 'toggle_time = "Ctrl+Alt+T"\n';
 const countOf = (text, part) => (part === "" ? 0 : text.split(part).length - 1);
 
 // ------------------------------------------------------------------ helpers
 
-/** Reload (so the 6 s startup notice is shown again: the DTO is a snapshot, SHOULD-184) and read the status message. */
+/** Reload (so the startup notice is shown again, 6 s or 15 s when the config.toml part has something to read -- SPEC-0300-0022 R-1663; the DTO is a snapshot, SHOULD-184) and read the status message. */
 async function reloadAndReadNotice(ctx) {
   await ctx.reload();
   return await ctx.ev(`document.querySelector('.status-message')?.textContent ?? ""`);
@@ -588,6 +590,29 @@ const s8Tests = [
   },
 ];
 
+// AC-1641 (SPEC-0300-0022 R-1640 / R-1641 / R-1645; the ONLY place it is checked: S8 is the one scenario that may start with a broken file, R-1682).
+s8Tests.push({
+  id: "AC-1641",
+  title: "syntax error on line 2: everything default, W-31 names line 2 and no setting item, config.toml unchanged",
+  async run(t, ctx) {
+    const before = configState(ctx);
+    const message = await reloadAndReadNotice(ctx);
+    const dto = await checkFollowsOs(t, ctx);
+    t.eq(dto.parseError?.wholeFile, true, "DTO parseError.wholeFile");
+    t.eq(dto.parseError?.line, 2, "DTO parseError.line is the line of the syntax error (this file's line 2)");
+    t.ok(
+      message.startsWith("config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: "),
+      "W-31 with its line 2 and the closing sentence",
+      JSON.stringify(message),
+    );
+    for (const item of ["ui_theme", "input_keymap_custom", "external_apps", "不正なキー割り当て", "外部アプリの登録", "不明な設定"]) {
+      t.eq(messageCount(message, item), 0, `no setting item in the notice: ${item} (R-1641)`);
+    }
+    t.eq((await ctx.externalAppsDto()).apps.length, 4, "the default four external apps (nothing was started: no key or menu was used here)");
+    checkConfigUntouched(t, ctx, before, "after the start");
+  },
+});
+
 const s9Tests = [
   {
     id: "AC-959-iii",
@@ -600,7 +625,8 @@ const s9Tests = [
       t.eq(dto.parseError?.wholeFile, false, "DTO parseError.wholeFile is false");
       t.eq(await matchesDark(ctx), true, "the page is dark (no emulation)");
       t.eq(await uiBg(ctx), "#1e1f22", "--ui-bg dark");
-      t.eq(message, "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。", "the R-45-2 (b) notice is exactly the W-30-2 sentence", message);
+      // W-30-2 with the line (SPEC-0300-0019 第5版 / SPEC-0300-0022 R-1642): input_keymap_custom is on line 3 of the scenario's file
+      t.eq(message, "config.toml の 3 行目の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。", "the R-45-2 (b) notice is exactly the W-30-2 sentence (with its line)", message);
       t.ok(!message.includes("テーマ") && !/theme/i.test(message), "the notice does not mention the theme", message);
       t.ok(!message.includes("詳細:"), "the notice has no detail part (W-30-2)", message);
       // default keymap: Ctrl+H toggles hidden files
@@ -629,7 +655,7 @@ export const scenarios = [
     id: "S7",
     title: "invalid ui_theme + unknown keymap action",
     configToml: `ui_theme = "Dark"\nexternal_apps = []\n${keymapBlock}no_such_action = "Ctrl+Alt+Z"\n`,
-    tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。" })],
+    tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action(6 行目)。" })],
   },
   { id: "S8", title: "TOML syntax error", configToml: 'ui_theme = "dark"\nthis is = = not toml\n', allowUndeclaredExternalApps: true, tests: s8Tests },
   { id: "S9", title: 'ui_theme = "dark" + input_keymap_custom not a table', configToml: 'ui_theme = "dark"\nexternal_apps = []\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },

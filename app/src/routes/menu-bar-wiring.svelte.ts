@@ -60,6 +60,7 @@ export interface MenuBarWiringDeps {
   focus: { container(): void; tree(): void; searchInput(): void };
   onListAction: MenuExecutorDeps["onListAction"];
   externalApps?: { barExtension(): Pick<BarInput, "externalApps" | "externalTargetAvailable">; launchByIndex(index: number): void };
+  settingsFile?: MenuExecutorDeps["settingsFile"]; // SPEC-0300-0022 R-1672: 設定ファイルを開く / チェック
   // Production defaults (the real keymap state, the exit route, the shared status line); tests may replace them.
   customOverrides?: () => Record<string, string>;
   onExitAction?: MenuExecutorDeps["onExitAction"];
@@ -136,7 +137,7 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
     );
   }
 
-  const execute = createMenuExecutor({ onListAction: deps.onListAction, onExitAction: deps.onExitAction ?? exitOnly, copyPath, launchExternal: (i) => deps.externalApps?.launchByIndex(i) });
+  const execute = createMenuExecutor({ onListAction: deps.onListAction, onExitAction: deps.onExitAction ?? exitOnly, copyPath, launchExternal: (i) => deps.externalApps?.launchByIndex(i), settingsFile: deps.settingsFile });
 
   // ---- the focus (R-1350-1, R-1352) ----
 
@@ -312,6 +313,7 @@ export function createMenuBarWiring(deps: MenuBarWiringDeps) {
     view,
     actions,
     keys,
+    deactivate, // SPEC-0300-0022 R-1671-1: the page closes the bar before Ctrl+, (only when it is open)
     // The only DOM-touching part: window subscriptions. Returns the unsubscribe.
     attach(win: Window): () => void {
       const tracker = createAltTracker();

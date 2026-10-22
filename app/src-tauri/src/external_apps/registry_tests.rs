@@ -29,7 +29,7 @@
 //! pub struct InvalidRegistration { pub position: usize /* 1-based index in the config array */, pub name: Option<String> /* a string that is not empty and has no control character */, pub reason: InvalidReason }
 //! pub struct Registry { pub apps: Vec<RegisteredApp>, pub invalid: Vec<InvalidRegistration> /* ascending position */, pub type_error: bool, /* + private path_var */ }
 //! impl Registry {
-//!     pub fn from_raw(raw: &ExternalAppsRaw, env: &dyn Fn(&str) -> Option<std::ffi::OsString>, path_var: Option<std::ffi::OsString>) -> Registry;
+//!     pub fn from_raw(raw: &ExternalAppsRaw, lines: &ExternalAppsLines, env: &dyn Fn(&str) -> Option<std::ffi::OsString>, path_var: Option<std::ffi::OsString>) -> Registry;
 //!     pub fn path_var(&self) -> Option<&std::ffi::OsStr>;   // the start-up snapshot of PATH
 //! }
 //! ```
@@ -39,6 +39,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 
 use super::registry::{InvalidReason, InvalidRegistration, Registry};
+use crate::shared::schema::config_lines::ExternalAppsLines;
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
 
 // ------------------------------------------------------------------ builders
@@ -52,7 +53,7 @@ const LOCAL: &str = r"C:\Users\u\AppData\Local";
 const SYSROOT: &str = r"C:\Windows";
 
 fn registry(raw: &ExternalAppsRaw) -> Registry {
-    Registry::from_raw(raw, &env_of(&[("LOCALAPPDATA", LOCAL), ("SystemRoot", SYSROOT), ("MYDIR", r"D:\p2")]), Some(OsString::from(r"D:\p1;D:\p2")))
+    Registry::from_raw(raw, &ExternalAppsLines::default(), &env_of(&[("LOCALAPPDATA", LOCAL), ("SystemRoot", SYSROOT), ("MYDIR", r"D:\p2")]), Some(OsString::from(r"D:\p1;D:\p2")))
 }
 
 fn s(v: &str) -> RawValue<String> {
@@ -150,7 +151,7 @@ fn the_registry_is_a_shareable_immutable_value() {
 fn the_start_up_path_is_kept_for_later_lookups_r1542() {
     let r = registry(&ExternalAppsRaw::Missing);
     assert_eq!(r.path_var(), Some(std::ffi::OsStr::new(r"D:\p1;D:\p2")));
-    let none = Registry::from_raw(&ExternalAppsRaw::Missing, &env_of(&[("LOCALAPPDATA", LOCAL), ("SystemRoot", SYSROOT)]), None);
+    let none = Registry::from_raw(&ExternalAppsRaw::Missing, &ExternalAppsLines::default(), &env_of(&[("LOCALAPPDATA", LOCAL), ("SystemRoot", SYSROOT)]), None);
     assert_eq!(none.path_var(), None);
 }
 
@@ -350,8 +351,8 @@ fn ac1502_the_second_and_third_elements_are_dropped_and_reported_with_position_a
     assert_eq!(
         r.invalid,
         vec![
-            InvalidRegistration { position: 2, name: Some("second".into()), reason: InvalidReason::Invalid },
-            InvalidRegistration { position: 3, name: Some("VS Codeで開く".into()), reason: InvalidReason::Invalid },
+            InvalidRegistration { position: 2, name: Some("second".into()), reason: InvalidReason::Invalid, line: None },
+            InvalidRegistration { position: 3, name: Some("VS Codeで開く".into()), reason: InvalidReason::Invalid, line: None },
         ]
     );
     assert!(!r.type_error);
@@ -371,7 +372,7 @@ fn the_name_of_a_report_is_given_only_when_it_is_readable() {
     // a 65-character name is still a readable string (only the element is invalid)
     let long65: String = "x".repeat(65);
     let r = registry(&arr(vec![with_name(RawValue::Value(long65.clone()))]));
-    assert_eq!(r.invalid, vec![InvalidRegistration { position: 1, name: Some(long65), reason: InvalidReason::Invalid }]);
+    assert_eq!(r.invalid, vec![InvalidRegistration { position: 1, name: Some(long65), reason: InvalidReason::Invalid, line: None }]);
 }
 
 #[test]
@@ -392,7 +393,7 @@ fn ac1505_twenty_are_used_and_the_twenty_first_is_reported_as_over_the_limit() {
     let r = registry(&arr(valid_apps(21)));
     assert_eq!(r.apps.len(), 20);
     assert_eq!(r.apps[19].name.as_deref(), Some("app20"));
-    assert_eq!(r.invalid, vec![InvalidRegistration { position: 21, name: Some("app21".into()), reason: InvalidReason::Limit }]);
+    assert_eq!(r.invalid, vec![InvalidRegistration { position: 21, name: Some("app21".into()), reason: InvalidReason::Limit, line: None }]);
 }
 
 #[test]

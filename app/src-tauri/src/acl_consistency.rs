@@ -22,13 +22,13 @@
 
 use std::collections::BTreeSet;
 
-const LIB_RS: &str = include_str!("lib.rs");
-const BUILD_RS: &str = include_str!("../build.rs");
-const CAPABILITY_JSON: &str = include_str!("../capabilities/default.json");
+pub(crate) const LIB_RS: &str = include_str!("lib.rs");
+pub(crate) const BUILD_RS: &str = include_str!("../build.rs");
+pub(crate) const CAPABILITY_JSON: &str = include_str!("../capabilities/default.json");
 // Phase 6 (SPEC-0300-0015 R-432; SPEC-0200-0001 §3.5.2, §3.5.12.5): the
 // viewer window's own capability file, separate from `default.json`
 // (`windows: ["viewer"]`). MUST-77/SHOULD-111 additions below.
-const VIEWER_CAPABILITY_JSON: &str = include_str!("../capabilities/viewer.json");
+pub(crate) const VIEWER_CAPABILITY_JSON: &str = include_str!("../capabilities/viewer.json");
 
 /// Commands that MUST be wired today (extend when adding a command; the
 /// generic consistency check below catches omissions even if this list is not
@@ -68,10 +68,13 @@ const REQUIRED_COMMANDS: &[&str] = &[
     // SPEC-0300-0021 (external-app launch; SPEC-0200-0001 §3.16.2 / §3.16.5): main window only (R-1555).
     "external_apps_load",
     "external_app_launch",
+    // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): "設定ファイルを開く" / "設定ファイルのチェック", main window only, no path / program / argument parameter.
+    "settings_file_open",
+    "settings_file_check",
 ];
 
 /// Removes `// ...` line comments (good enough for the three files here).
-fn strip_line_comments(text: &str) -> String {
+pub(crate) fn strip_line_comments(text: &str) -> String {
     text.lines()
         .map(|line| match line.find("//") {
             Some(at) => &line[..at],
@@ -89,7 +92,7 @@ fn bracket_body<'a>(text: &'a str, anchor: &str) -> Option<&'a str> {
     Some(&rest[..end])
 }
 
-fn quoted_strings(text: &str) -> Vec<String> {
+pub(crate) fn quoted_strings(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut parts = text.split('"');
     parts.next(); // text before the first quote
@@ -101,7 +104,7 @@ fn quoted_strings(text: &str) -> Vec<String> {
 }
 
 /// Command names listed in `tauri::generate_handler![...]` (last path segment).
-fn handler_commands(lib_rs: &str) -> BTreeSet<String> {
+pub(crate) fn handler_commands(lib_rs: &str) -> BTreeSet<String> {
     let cleaned = strip_line_comments(lib_rs);
     let body = bracket_body(&cleaned, "generate_handler![").expect("lib.rs must contain generate_handler![ ... ]");
     body.split(',')
@@ -112,7 +115,7 @@ fn handler_commands(lib_rs: &str) -> BTreeSet<String> {
 }
 
 /// Command names listed in `AppManifest::new().commands(&[ ... ])`.
-fn manifest_commands(build_rs: &str) -> BTreeSet<String> {
+pub(crate) fn manifest_commands(build_rs: &str) -> BTreeSet<String> {
     let cleaned = strip_line_comments(build_rs);
     let body = bracket_body(&cleaned, ".commands(&[").expect("build.rs must contain .commands(&[ ... ])");
     quoted_strings(body).into_iter().collect()
@@ -120,7 +123,7 @@ fn manifest_commands(build_rs: &str) -> BTreeSet<String> {
 
 /// `allow-*` permission identifiers (app-command permissions carry no `:`
 /// plugin/core prefix) listed in the capability's `permissions` array.
-fn capability_allows(capability_json: &str) -> BTreeSet<String> {
+pub(crate) fn capability_allows(capability_json: &str) -> BTreeSet<String> {
     let body = bracket_body(capability_json, "\"permissions\": [")
         .or_else(|| bracket_body(capability_json, "\"permissions\":["))
         .expect("capability must contain a \"permissions\" array");
@@ -130,7 +133,7 @@ fn capability_allows(capability_json: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn permission_for(command: &str) -> String {
+pub(crate) fn permission_for(command: &str) -> String {
     format!("allow-{}", command.replace('_', "-"))
 }
 
@@ -138,7 +141,7 @@ fn permission_for(command: &str) -> String {
 /// `permissions` array, unfiltered (unlike `capability_allows`, which drops
 /// anything containing `:` — that filtering is exactly why the existing
 /// checker could not have caught a stray `opener:*` or `core:default` entry).
-fn all_permissions(capability_json: &str) -> BTreeSet<String> {
+pub(crate) fn all_permissions(capability_json: &str) -> BTreeSet<String> {
     let body = bracket_body(capability_json, "\"permissions\": [")
         .or_else(|| bracket_body(capability_json, "\"permissions\":["))
         .expect("capability must contain a \"permissions\" array");
@@ -365,7 +368,7 @@ fn must77_viewer_capability_is_exactly_the_specified_seven_permissions() {
 // (rather than the test staying green today and breaking unexpectedly
 // later).
 #[test]
-fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives_plus_phase11_clipboard_plus_external_apps() {
+fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_phase7_config_plus_phase8_drives_plus_phase11_clipboard_plus_external_apps_plus_settings_file() {
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
         "allow-fs-list-drives",
@@ -397,6 +400,9 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_ph
         // SPEC-0300-0021 (SPEC-0200-0001 §3.16.5): 26 -> 28. NO shell / execute permission is ever granted (AC-1526).
         "allow-external-apps-load",
         "allow-external-app-launch",
+        // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): 28 -> 30. Still NO opener / shell permission (AC-1606).
+        "allow-settings-file-open",
+        "allow-settings-file-check",
     ]
     .into_iter()
     .map(String::from)

@@ -205,7 +205,7 @@ fn archive_does_not_use_other_feature_modules() {
 fn shared_does_not_use_any_feature_module() {
     // SPEC-0200-0001 §3.12.8 (g) / MINOR-12: `viewer` joins the list (`shared/abs_path.rs` is also called from viewer/).
     // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list (`shared/schema/external_apps.rs` is RAW DATA, it imports nothing).
-    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "viewer", "external_apps"];
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "viewer", "external_apps", "settings_file", "config_bridge"];
     let mut offenders = Vec::new();
     for path in all_rust_files_under("shared") {
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -457,7 +457,8 @@ fn is_test_source(path: &Path) -> bool {
 #[test]
 fn env_var_is_read_only_by_config_paths_and_the_e2e_scope_module() {
     let needle = env_var_call();
-    let allowed = ["src/config/paths.rs", "src/shared/e2e_scope.rs", "src/lib.rs"];
+    // SPEC-0200-0001 §3.17.15 (SPEC-0300-0022): the third reader moved from `lib.rs` to `config_bridge/env.rs`; `lib.rs` reads nothing.
+    let allowed = ["src/config/paths.rs", "src/shared/e2e_scope.rs", "src/config_bridge/env.rs"];
     let mut offenders = Vec::new();
     let mut files = Vec::new();
     rust_sources(&manifest_dir().join("src"), &mut files);
@@ -471,9 +472,11 @@ fn env_var_is_read_only_by_config_paths_and_the_e2e_scope_module() {
     }
     assert!(offenders.is_empty(), "`{needle}` outside {allowed:?}: {offenders:?}");
     assert!(manifest_dir().join(allowed[1]).is_file(), "{} must exist", allowed[1]);
-    // the allow-list entry must be used (no stale permission): lib.rs really reads the environment for the registry
-    let lib = code_only(&fs::read_to_string(manifest_dir().join(allowed[2])).unwrap());
-    assert!(lib.contains(needle.as_str()), "lib.rs is allowed to read the environment ONLY for Registry::from_raw (MUST-142); it must do so");
+    // the allow-list entry must be used (no stale permission): config_bridge/env.rs really reads the environment
+    let env_rs = code_only(&fs::read_to_string(manifest_dir().join(allowed[2])).unwrap_or_else(|e| panic!("{}: {e}", allowed[2])));
+    assert!(env_rs.contains("var_os("), "config_bridge/env.rs is the reader of the environment for the registry / VS Code (MUST-142 as rewritten); it must do so");
+    let lib = code_only(&fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap());
+    assert!(!lib.contains(needle.as_str()) && !lib.contains("var_os("), "lib.rs must not read the environment any more (§3.17.15)");
 }
 
 /// Lines (0-based, inclusive) of `#[cfg(debug_assertions)] mod imp { ... }` in rustfmt layout
@@ -628,10 +631,11 @@ fn h1_no_source_still_names_config_keymap_rs() {
     assert!(offenders.is_empty(), "these files still mention `config/keymap.rs`:\n  {}", offenders.join("\n  "));
 }
 
-// SHOULD-183 (a): `config_path(` is called from exactly one place, `StartupConfig::load`
-// (config/commands.rs). `config_load_keymap` serves the snapshot and never opens the path (R-917-8).
+// SHOULD-183 (a), rewritten by SPEC-0200-0001 §3.17.15 (SPEC-0300-0022 M-1): `config_path(` is called from exactly one place,
+// `config::startup_config::locate` (config/startup_config.rs). `StartupConfig::load`, `config_bridge/open.rs` and
+// `config_bridge/sample_startup.rs` all go through `locate`. `config_load_keymap` serves the snapshot and never opens the path (R-917-8).
 #[test]
-fn should183_a_config_path_is_called_in_exactly_one_place_startup_config_load() {
+fn should183_a_config_path_is_called_in_exactly_one_place_startup_config_locate() {
     let mut calls: Vec<(String, usize)> = Vec::new();
     for path in production_files() {
         let code = production_code(&path);
@@ -642,12 +646,25 @@ fn should183_a_config_path_is_called_in_exactly_one_place_startup_config_load() 
     }
     let total: usize = calls.iter().map(|(_, n)| n).sum();
     assert_eq!(total, 1, "`config_path(` must be called exactly once in production code: {calls:?}");
-    assert!(calls[0].0.ends_with("config/commands.rs"), "the one call must be in config/commands.rs: {calls:?}");
+    assert!(calls[0].0.ends_with("config/startup_config.rs"), "the one call must be in config/startup_config.rs: {calls:?}");
 
-    let commands = production_code(&manifest_dir().join("src/config/commands.rs"));
-    let impl_at = commands.find("impl StartupConfig").expect("config/commands.rs must define `impl StartupConfig`");
-    let call_at = commands.find("config_path(").unwrap();
-    assert!(call_at > impl_at, "the `config_path(` call must be inside `impl StartupConfig` (its `load`)");
+    let startup = production_code(&manifest_dir().join("src/config/startup_config.rs"));
+    let locate_at = startup.find("pub fn locate(").expect("config/startup_config.rs must define `pub fn locate(app: &AppHandle) -> io::Result<PathBuf>`");
+    let call_at = startup.find("config_path(").unwrap();
+    assert!(call_at > locate_at, "the `config_path(` call must be inside `locate`");
+    let rest = &startup[locate_at + "pub fn locate(".len()..];
+    let body = &rest[..rest.find("fn ").unwrap_or(rest.len())];
+    assert!(body.contains("config_path("), "the `config_path(` call must be in the body of `locate`, not of a later fn");
+    // `StartupConfig::load` resolves the path only through `locate`
+    let load_at = startup.find("fn load(").expect("StartupConfig::load must exist");
+    let load_rest = &startup[load_at + "fn load(".len()..];
+    let load_body = &load_rest[..load_rest.find("fn ").unwrap_or(load_rest.len())];
+    assert!(load_body.contains("locate("), "StartupConfig::load must call locate(..)");
+    for file in ["src/config_bridge/open.rs", "src/config_bridge/sample_startup.rs"] {
+        let code = production_code(&manifest_dir().join(file));
+        assert!(code.contains("locate("), "{file} must resolve the config folder through config::startup_config::locate");
+        assert!(!code.contains("config_path(") && !code.contains("app_config_dir"), "{file} must not resolve the path itself");
+    }
 }
 
 // SHOULD-183 (b): config_toml.rs has no way to write.
@@ -660,11 +677,13 @@ fn should183_b_config_toml_rs_has_no_write_api() {
     assert!(code.contains("fs::read"), "config_toml.rs must read the file with fs::read (sanity: the scan saw the real file)");
 }
 
-// SHOULD-183 (c): `StartupConfig::load` hands the path to `config_toml::load` and to nothing else.
+// SHOULD-183 (c), rewritten by §3.17.15: `StartupConfig` now lives in config/startup_config.rs; `load` hands the path to
+// `config_toml::load` (via `from_path`) and to nothing else.
 #[test]
 fn should183_c_startup_config_load_passes_the_path_only_to_config_toml_load() {
-    let commands = production_code(&manifest_dir().join("src/config/commands.rs"));
-    let impl_at = commands.find("impl StartupConfig").expect("impl StartupConfig must exist");
+    assert!(!production_code(&manifest_dir().join("src/config/commands.rs")).contains("impl StartupConfig"), "StartupConfig moved out of config/commands.rs");
+    let commands = production_code(&manifest_dir().join("src/config/startup_config.rs"));
+    let impl_at = commands.find("impl StartupConfig").expect("impl StartupConfig must exist in config/startup_config.rs");
     let load_at = impl_at + commands[impl_at..].find("fn load(").expect("StartupConfig::load must exist");
     // The body of `load`: up to the next `fn ` item of the impl (or the end of the production text).
     let rest = &commands[load_at + "fn load(".len()..];
@@ -746,8 +765,11 @@ fn s6_lib_rs_builds_then_sets_the_theme_then_runs() {
     assert!(!lib.contains(".run(tauri::generate_context!())"), "Builder::run(ctx) is replaced by build() + run()");
     // The theme is requested only through the pure mapping, and only the start-up snapshot decides it.
     assert!(lib.contains("requested_theme("), "set_theme must be driven by shared::window_theme::requested_theme");
-    let load = lib.find("StartupConfig::load(").expect("the start-up config is read via StartupConfig::load (R-917-8)");
-    assert!(build < load && load < theme, "StartupConfig::load runs after build() and before set_theme()");
+    // §3.17.15: the start-up config and the registry are made by the ONE shared function `config_bridge::snapshot(`
+    // (`StartupConfig::load` is called inside `config_bridge/evaluate.rs`, not by lib.rs; R-1651).
+    assert!(!lib.contains("StartupConfig::load("), "lib.rs goes through config_bridge::snapshot(..) now");
+    let load = lib.find("config_bridge::snapshot(").expect("the start-up config is read via config_bridge::snapshot (R-917-8, R-1651)");
+    assert!(build < load && load < theme, "config_bridge::snapshot runs after build() and before set_theme()");
 }
 
 // SHOULD-182 (2): `.setup` always shows the (initially hidden) main window; show() is not behind a condition.

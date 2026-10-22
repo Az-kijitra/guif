@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listTargets, MOD, sleep } from "./cdp.mjs";
 import { measureApi, PAGE_HELPERS } from "./measure.mjs";
-import { AbortRun } from "./launch.mjs";
+import { AbortRun, readSettingsLaunchLog } from "./launch.mjs";
 import { withClipboardGuard } from "./clipboard.mjs";
 import { copyMoveArgsAllowed, isInsideScope } from "./scope.mjs";
 
@@ -18,6 +18,8 @@ import { copyMoveArgsAllowed, isInsideScope } from "./scope.mjs";
 const BLOCKED_COMMANDS = [
   "fs_ops_copy", "fs_ops_move", "fs_ops_delete_trash", "fs_ops_delete_permanently", "fs_ops_rename", "fs_ops_create",
   "archive_create", "archive_extract", "viewer_os_open_path", "external_app_launch",
+  // SPEC-0300-0022 R-1681 / SPEC-0200-0001 §3.17.11: opens VS Code / the associated app. Passed to the backend only inside withSettingsFileOpen.
+  "settings_file_open",
 ];
 
 // `window.__TAURI_INTERNALS__.invoke` (and `.ipc` / `.postMessage`) are read-only in the page, so
@@ -181,6 +183,7 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     if (ctx.fileOpsRoot !== null) await applyScopedFileOps();
     if (ctx.clipboardScopeActive) await cdp.ev(`window.__e2e.clipboardScope = true; true`);
     if (ctx.externalLaunchRoot !== null) await applyExternalLaunch();
+    if (ctx.settingsOpenActive) await applySettingsFileOpen();
     // Prove the interception works: a blocked command must be refused with our marker message.
     await ctx.verifyStubs();
     return ctx.stubStatus;
@@ -241,6 +244,38 @@ export function createContext({ cdp, fx, shotsDir, log }) {
       await ctx.verifyStubs();
     }
   };
+
+  // SPEC-0300-0022 R-1681 / SPEC-0200-0001 §3.17.11 (S-2): settings_file_open is blocked (BLOCKED_COMMANDS) except inside withSettingsFileOpen, i.e. only
+  // around the operation that runs "設定ファイルを開く" (N-1: not by scenario number). It takes no argument, so there is nothing to judge here; the
+  // backend refuses the launch while the E2E scope is active (step 4, and again inside the launch function, S-3) and prints
+  // `[e2e] settings-file launch: refused` (read with ctx.readLaunchLog). Three layers: this stub, the backend, the function's own check.
+  ctx.settingsOpenActive = false;
+  const applySettingsFileOpen = async () => {
+    await cdp.ev(`window.__e2e.stubs.settings_file_open = async (_args, passThrough) => passThrough(); true`);
+  };
+  const blockSettingsFileOpen = async () => {
+    await cdp.ev(`window.__e2e.stubs.settings_file_open = () => ({ error: { code: "other", message: "E2E: blocked command" } }); true`);
+  };
+
+  /**
+   * Runs `fn` with settings_file_open passed to the backend. Afterwards the command is blocked again and the stubs are verified (MUST-118 (c)).
+   * Wrap exactly the operation that triggers "設定ファイルを開く" (menu item, Ctrl+,), and nothing wider.
+   */
+  ctx.withSettingsFileOpen = async (fn) => {
+    if (ctx.settingsOpenActive) throw new Error("withSettingsFileOpen cannot be nested");
+    ctx.settingsOpenActive = true;
+    await applySettingsFileOpen();
+    try {
+      return await fn();
+    } finally {
+      ctx.settingsOpenActive = false;
+      await blockSettingsFileOpen();
+      await ctx.verifyStubs();
+    }
+  };
+
+  /** The `[e2e] settings-file launch: <event>` lines of the app's standard error so far (refused | vscode | association), in order. */
+  ctx.readLaunchLog = () => readSettingsLaunchLog(ctx.handle.logDir);
 
   /** The startup snapshot of the external-app registrations as the page got it (read only, not blocked). */
   ctx.externalAppsDto = () => cdp.ev(`window.__TAURI_INTERNALS__.invoke("external_apps_load")`);

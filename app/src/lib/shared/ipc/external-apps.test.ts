@@ -42,11 +42,12 @@ describe("externalAppsLoad (R-1501)", () => {
   it("invokes external_apps_load with no arguments and returns the snapshot as it is", async () => {
     const dto: ExternalAppsDto = {
       apps: [
-        { index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C", keyInvalid: false },
-        { index: 1, defaultNo: null, name: "Mine", key: null, keyInvalid: true },
+        { index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C", keyInvalid: false, keyLine: null },
+        { index: 1, defaultNo: null, name: "Mine", key: null, keyInvalid: true, keyLine: null },
       ],
-      invalid: [{ position: 3, name: "VS Codeで開く", reason: "invalid" }],
+      invalid: [{ position: 3, name: "VS Codeで開く", reason: "invalid", line: null }],
       typeError: false,
+      typeErrorLine: null,
     };
     vi.mocked(invoke).mockResolvedValueOnce(dto);
     await expect(externalAppsLoad()).resolves.toEqual(dto);

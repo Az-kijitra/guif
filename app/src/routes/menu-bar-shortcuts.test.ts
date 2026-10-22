@@ -45,6 +45,8 @@ describe("AC-1320: the default keymap, as displayed", () => {
       delete: "Delete",
       zip_create: "Ctrl+Alt+Z",
       zip_extract: "Ctrl+Alt+X",
+      config_open: "Ctrl+,", // SPEC-0300-0022 R-1670: `settings` shown as 設定ファイルを開く
+      config_check: undefined, // no key (R-1671)
       exit: "Ctrl+Q",
       cut: "Ctrl+X",
       copy: "Ctrl+C",

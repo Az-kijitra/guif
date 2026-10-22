@@ -175,7 +175,7 @@ describe("while active (R-14-5-2, AC-91)", () => {
   it("Ctrl+Q still reaches the hardcoded shortcut (AC-1343)", () => {
     const { deps, menuBar } = makeDeps({ menuBar: { active: true, onKey: vi.fn(), onActivate: vi.fn() } });
     fire(deps, key("q", { ctrlKey: true }));
-    expect(deps.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(deps.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(menuBar.onKey).not.toHaveBeenCalled();
   });
 

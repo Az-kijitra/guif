@@ -30,6 +30,8 @@ export function configSaveNavigation(data: NavigationData): Promise<void> {
 export interface RawKeymapEntryDto {
   actionId: string;
   value: string | null;
+  // SPEC-0300-0022 R-1642: the line of the entry's key in config.toml, or null when it could not be found.
+  line: number | null;
 }
 
 export interface KeymapParseErrorDto {
@@ -40,6 +42,15 @@ export interface KeymapParseErrorDto {
   wholeFile: boolean;
 }
 
+// SPEC-0300-0022 R-1643: a setting the file has but the app does not know. `position` (from 1) is given for an `appField`
+// (a field of an `external_apps` element); the sentence (W-AC) is built by `features/settings-file/notice.ts`.
+export interface UnknownSettingDto {
+  kind: "key" | "appField";
+  name: string;
+  position?: number | null; // Rust sends null for a top-level key
+  line: number | null;
+}
+
 export interface KeymapRawLoadResultDto {
   entries: RawKeymapEntryDto[];
   parseError: KeymapParseErrorDto | null;
@@ -47,6 +58,11 @@ export interface KeymapRawLoadResultDto {
   // verification only (the screen's brightness is decided by CSS), and whether to report it.
   uiTheme: "system" | "light" | "dark";
   uiThemeInvalid: boolean;
+  // SPEC-0300-0022 R-1642: the line of `ui_theme`, or null.
+  uiThemeLine: number | null;
+  // R-1640: false when config.toml does not exist (a quiet start, and the check says so, W-AB).
+  present: boolean;
+  unknownSettings: UnknownSettingDto[];
 }
 
 export function configLoadKeymap(): Promise<KeymapRawLoadResultDto> {

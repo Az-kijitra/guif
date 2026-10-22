@@ -95,7 +95,7 @@ async function loadTests() {
 // returns a string the app is NOT started and the scenario's tests are recorded as SKIP with that reason. os-input is
 // opt-in (REFLEXFILES_E2E_OS_INPUT=1, R-12-5; the reason text begins "OS のキー入力のテストは無効") because it uses the
 // user's screen and keyboard.
-const SCENARIO_FILES = ["theme", "history-invalid", "menubar-keymap", "external-apps", "os-input"];
+const SCENARIO_FILES = ["theme", "history-invalid", "menubar-keymap", "external-apps", "settings-file", "os-input"];
 
 async function loadScenarios() {
   const all = [];
@@ -206,7 +206,7 @@ async function takeFinalShot(ctx, fx, cdp, file) {
 }
 
 /** Starts one app (the normal run or a scenario), runs `tests` in it, and always shuts it down again. */
-async function launchAndRun(tests, { configToml, navigationToml, scenario, finalShot }) {
+async function launchAndRun(tests, { configToml, navigationToml, seedConfigDir, scenario, finalShot }) {
   // The test folder exists BEFORE the launch: it is the backend's E2E file scope (R-10). New for every start.
   const fx = new Fixtures();
   current = { handle: undefined, cdp: undefined, fx };
@@ -221,8 +221,13 @@ async function launchAndRun(tests, { configToml, navigationToml, scenario, final
       fx,
     };
     if (navigationToml !== undefined) launchOptions.navigationToml = navigationToml; // (fx) => string | null, written before the spawn
+    if (seedConfigDir !== undefined) launchOptions.seedConfigDir = seedConfigDir; // (fx) => [{ name: "config.sample.toml", content | dir, mtime? }] (settings-file.mjs)
     if (configToml !== undefined) launchOptions.configToml = configToml; // else launchApp's default (ui_theme = "light")
-    if (scenario?.allowUndeclaredExternalApps === true) launchOptions.allowUndeclaredExternalApps = true; // theme.mjs S8 only (R-1585 2)
+    // theme.mjs S8 and settings-file.mjs F0 only (R-1585 2 / SPEC-0300-0022 R-1682); launchApp checks the id against its list
+    if (scenario?.allowUndeclaredExternalApps === true) {
+      launchOptions.allowUndeclaredExternalApps = true;
+      launchOptions.scenarioId = scenario.id;
+    }
     const handle = await launchApp(launchOptions); // checks the override line + the fs scope notice EVERY time
     current.handle = handle;
     realBefore ??= handle.realBefore;
@@ -316,7 +321,7 @@ async function main() {
         continue;
       }
     }
-    await launchAndRun(scenario.selected, { configToml: scenario.configToml, navigationToml: scenario.navigationToml, scenario });
+    await launchAndRun(scenario.selected, { configToml: scenario.configToml, navigationToml: scenario.navigationToml, seedConfigDir: scenario.seedConfigDir, scenario });
   }
 }
 

@@ -30,7 +30,6 @@ const ev = (
 
 function makeCtx(over: Record<string, unknown> = {}) {
   return {
-    isSettingsOpen: false,
     isOverlayOpen: false,
     isMenuBarActive: false,
     canActivateMenuBar: true,
@@ -167,16 +166,10 @@ describe("the situations in which the registrations are NOT consulted (R-1550 1,
     expect(ctx.onExternalAppKey).not.toHaveBeenCalled();
   });
 
-  it("the settings screen is open (R-14)", () => {
-    const ctx = makeCtx({ isSettingsOpen: true });
-    expect(run(CTRL_ALT_C, ctx)).toBe(false);
-    expect(ctx.onExternalAppKey).not.toHaveBeenCalled();
-  });
-
   it("the hard-coded Ctrl+Q wins", () => {
     const ctx = makeCtx();
     run(ev("q", { ctrlKey: true }), ctx);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(ctx.onExternalAppKey).not.toHaveBeenCalled();
   });
 });

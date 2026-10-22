@@ -10,11 +10,13 @@ import { MOD, sleep } from "../lib/cdp.mjs";
 export const HEADINGS = ["ファイル(F)", "編集(E)", "表示(V)", "移動(G)"];
 export const MENU_NAMES = ["ファイル", "編集", "表示", "移動"];
 
-/** R-1310: item names and the shortcut shown at the default key map ("" = nothing). "---" = a separator. */
+/** R-1310 / R-1310-2 (第3版): item names and the shortcut shown at the default key map ("" = nothing). "---" = a separator. */
 export const MENU_TABLE = [
   [
     ["開く", "Enter"], ["OSの関連付けで開く", "Shift+Enter"], "---", ["新規作成…", "Ctrl+N"], ["新しいフォルダー…", "Ctrl+Shift+N"], "---",
-    ["名前の変更", "F2"], ["削除", "Delete"], "---", ["ZIPに圧縮", "Ctrl+Alt+Z"], ["ZIPを展開", "Ctrl+Alt+X"], "---", ["終了", "Ctrl+Q"],
+    ["名前の変更", "F2"], ["削除", "Delete"], "---", ["ZIPに圧縮", "Ctrl+Alt+Z"], ["ZIPを展開", "Ctrl+Alt+X"], "---",
+    // SPEC-0300-0020 第3版 R-1310-2 / SPEC-0300-0022 R-1670: 設定ファイルを開く (settings -> Ctrl+,), 設定ファイルのチェック (no key), a separator, then 終了
+    ["設定ファイルを開く", "Ctrl+,"], ["設定ファイルのチェック", ""], "---", ["終了", "Ctrl+Q"],
   ],
   [["切り取り", "Ctrl+X"], ["コピー", "Ctrl+C"], ["貼り付け", "Ctrl+V"], ["パスのコピー", ""], "---", ["すべて選択", "Ctrl+A"], ["選択の解除", "Esc"], "---", ["検索", "/"]],
   [["ツリー", "Ctrl+Shift+B"], ["隠しファイル", "Ctrl+H"], ["サイズの列", "Ctrl+Shift+S"], ["更新日時の列", "Ctrl+Shift+T"], "---", ["並び替え…", "S"]],

@@ -3,6 +3,7 @@
 // features/keyboard/, not in routes/startup-wiring.ts, which only
 // concatenates the three startup notices, §4.1 SHOULD-19).
 
+import { limitList } from "$lib/shared/notice-list";
 import { KEYMAP_MESSAGES } from "./messages";
 
 export interface KeymapParseErrorLike {
@@ -21,18 +22,27 @@ export interface KeymapParseErrorLike {
 export function buildKeymapLoadNotice(
   parseError: KeymapParseErrorLike | null,
   invalidActions: readonly string[],
-  opts?: { alsoDefaultsTheme?: boolean },
+  // SPEC-0300-0022 R-1642: `invalidActionLines` is parallel to `invalidActions` (ValidatedKeymap); omitted = no line is known.
+  opts?: { alsoDefaultsTheme?: boolean; invalidActionLines?: readonly (number | null)[] },
 ): string | null {
   if (parseError !== null) {
     // W-30-2: the type error carries its own full sentence (no detail, the theme is not touched).
-    if (parseError.wholeFile === false) return KEYMAP_MESSAGES.customKeymapUnreadable;
+    // SPEC-0300-0022 R-1660: without a line the sentence is the one before.
+    if (parseError.wholeFile === false) {
+      return parseError.line === null ? KEYMAP_MESSAGES.customKeymapUnreadable : KEYMAP_MESSAGES.customKeymapUnreadableAt(parseError.line);
+    }
     const defaults = opts?.alsoDefaultsTheme
       ? KEYMAP_MESSAGES.closingKeymapAndTheme
       : KEYMAP_MESSAGES.closingKeymapOnly;
     return KEYMAP_MESSAGES.readFailed(KEYMAP_MESSAGES.readTarget(parseError.line), defaults, parseError.message);
   }
   if (invalidActions.length > 0) {
-    return KEYMAP_MESSAGES.invalidOverrides(invalidActions.length, invalidActions);
+    const lines = opts?.invalidActionLines ?? [];
+    const items = invalidActions.map((id, i) => {
+      const line = lines[i] ?? null;
+      return line === null ? id : KEYMAP_MESSAGES.idAtLine(id, line);
+    });
+    return KEYMAP_MESSAGES.invalidOverrides(invalidActions.length, limitList(items));
   }
   return null;
 }

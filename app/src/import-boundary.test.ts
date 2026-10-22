@@ -616,6 +616,7 @@ describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, S
     "navigation-history",
     "path-bar",
     "search",
+    "settings-file", // SETTINGS-FILE (SPEC-0300-0022 / SPEC-0200-0001 §3.17.8): the 12th feature with a messages.ts
     "viewer",
   ];
   const SHARED_MESSAGES = "lib/shared/messages.ts";
@@ -624,7 +625,7 @@ describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, S
   const ALL_MESSAGES = [SHARED_MESSAGES, ...FEATURE_MESSAGES, ROUTES_MESSAGES];
   const abs = (rel: string) => join(SRC, rel);
 
-  it("the planned modules exist: shared (1) + feature (11) + routes (1) = 13, and no other messages.ts is hiding elsewhere", () => {
+  it("the planned modules exist: shared (1) + feature (12) + routes (1) = 14, and no other messages.ts is hiding elsewhere", () => {
     for (const rel of ALL_MESSAGES) expect(() => statSync(abs(rel)), rel).not.toThrow();
     const found = walk(SRC)
       .filter((f) => /(^|[\\/])messages\.ts$/.test(f))

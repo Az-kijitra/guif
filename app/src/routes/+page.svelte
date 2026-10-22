@@ -33,7 +33,7 @@
   import { createSortMenuController } from "./sort-menu-wiring";
   import { createFocusedPathView, createTabStopController, resolveCurrentStop } from "./focus-wiring";
   import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
-  import { createExternalAppsWiring } from "./external-apps-wiring";
+  import { createEntryWiring } from "./entry-wiring";
   import { createMainContextMenu } from "./context-menu-main.svelte";
   import ContextMenuHost from "./_components/ContextMenuHost.svelte";
   import MenuBar from "$lib/features/menu-bar/MenuBar.svelte";
@@ -175,6 +175,12 @@
     reload: (opts) => fileListState.reload(opts),
   });
 
+  // SPEC-0300-0021/0022 entrances (no logic). closeMenus closes ONLY what is open (R-1671-1: closeNow() alone would steal the focus); both are made below.
+  const { externalApps, settingsFile } = createEntryWiring({
+    entries: () => externalAppsState.entries, filteredEntries: () => filteredEntries, focusedPath, currentPath: () => fileListState.currentPath, status: statusMessage,
+    closeMenus: () => { if (contextMenu.state.isOpen) contextMenu.closeNow(); if (menuBar.keys.active) menuBar.deactivate(true); },
+  });
+
   const { onListAction, onTreeAction, onTreeSelectPath } = createListTreeControllers({
     fileList: fileListState,
     treeState,
@@ -194,12 +200,7 @@
     focusContainer: focus.container,
     treeFullyVisibleRows: () => treeFullyVisibleRows,
     pathBar,
-  });
-
-  // SPEC-0300-0021: external apps (key / menu bar / right-click menu); delegates to the launch flow (no logic here).
-  const externalApps = createExternalAppsWiring({
-    entries: () => externalAppsState.entries, filteredEntries: () => filteredEntries, focusedPath,
-    currentPath: () => fileListState.currentPath, status: statusMessage,
+    settingsFile,
   });
 
   // SPEC-0300-0018: right-click menu; delegates to the controllers above (no logic here).
@@ -224,7 +225,7 @@
   // SPEC-0300-0020: menu bar; calls the same handlers as the keys (with source "menu") on the file list's targets.
   const menuBar = createMenuBarWiring({
     fileList: fileListState, filteredEntries: () => filteredEntries, focusedPath, clipboard, focus, search: searchState,
-    overlays: [modalHost, navigationHistoryState, sortMenuState, contextMenu.state], pathEditing: () => pathBar.state.editing, isTreeFocused, onListAction, externalApps,
+    overlays: [modalHost, navigationHistoryState, sortMenuState, contextMenu.state], pathEditing: () => pathBar.state.editing, isTreeFocused, onListAction, externalApps, settingsFile,
   });
 
   const { handleModalKey } = createModalWiring({
@@ -277,7 +278,7 @@
         sortMenu: sortMenuState,
         contextMenu: { get isOpen() { return contextMenu.state.isOpen; }, handleKey: contextMenu.handleKey },
         search: searchState,
-        onHardcodedShortcut: exitOnly,
+        onHardcodedShortcut: settingsFile.onHardcoded,
         onExitAction: exitOnly,
         handleModalKey,
         handleSortMenuKey: sortMenu.handleKey,

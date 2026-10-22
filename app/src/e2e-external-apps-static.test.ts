@@ -187,8 +187,13 @@ function collectConfigs(): Config[] {
   return out;
 }
 
-// The ONE exception (SPEC-0300-0021 R-1585 2 note, SPEC-0400-0001 R-08-1 1 note, decision 2026-10-17): a deliberately broken config.toml.
-const ALLOW_LIST: readonly { file: string; scenarioId: string }[] = [{ file: "specs/theme.mjs", scenarioId: "S8" }];
+// The exceptions (SPEC-0300-0021 R-1585 2 note, SPEC-0400-0001 R-08-1 1 note, decision 2026-10-17): a deliberately broken config.toml (theme.mjs S8); and,
+// since SPEC-0300-0022 R-1682 / AC-1680, the one E2E that starts WITHOUT a config.toml (AC-1645, settings-file.mjs F0: `configToml: null`). Nothing else.
+// The same list is `UNDECLARED_EXTERNAL_APPS_SCENARIOS` in lib/launch.mjs (checked below).
+const ALLOW_LIST: readonly { file: string; scenarioId: string }[] = [
+  { file: "specs/theme.mjs", scenarioId: "S8" },
+  { file: "specs/settings-file.mjs", scenarioId: "F0" },
+];
 const isAllowed = (c: Config): boolean => ALLOW_LIST.some((a) => a.file === c.file && a.scenarioId === c.scenarioId);
 
 describe("AC-1506: the scan sees the E2E tree (an empty scan must not pass)", () => {
@@ -215,8 +220,8 @@ describe("AC-1506: every config.toml the E2E writes declares external_apps (R-15
     expect(d.text).toContain('ui_theme = "light"');
   });
 
-  it("no scenario asks for 'no config.toml' (`configToml: null`) -- without a file the default four would be active", () => {
-    expect(configs.filter((c) => c.text === "<null>").map((c) => `${c.file}: ${c.what}`)).toEqual([]);
+  it("no scenario asks for 'no config.toml' (`configToml: null`) -- without a file the default four would be active -- except the allow-listed F0 (AC-1645)", () => {
+    expect(configs.filter((c) => c.text === "<null>" && !isAllowed(c)).map((c) => `${c.file}: ${c.what}`)).toEqual([]);
   });
 
   it("every configToml can be analysed and declares external_apps, except the allow-listed one", () => {
@@ -227,9 +232,19 @@ describe("AC-1506: every config.toml the E2E writes declares external_apps (R-15
     expect(bad).toEqual([]);
   });
 
-  it("the allow-list is exactly S8 of theme.mjs, and that scenario really exists (no stale permission)", () => {
-    expect(ALLOW_LIST).toEqual([{ file: "specs/theme.mjs", scenarioId: "S8" }]);
-    expect(configs.some((c) => isAllowed(c))).toBe(true);
+  it("the allow-list is exactly S8 of theme.mjs and F0 of settings-file.mjs, and both scenarios really exist (no stale permission)", () => {
+    expect(ALLOW_LIST).toEqual([
+      { file: "specs/theme.mjs", scenarioId: "S8" },
+      { file: "specs/settings-file.mjs", scenarioId: "F0" },
+    ]);
+    for (const a of ALLOW_LIST) expect(configs.some((c) => c.file === a.file && c.scenarioId === a.scenarioId), `${a.file} ${a.scenarioId}`).toBe(true);
+  });
+
+  it("F0 (AC-1645) is the only scenario without a config.toml, and the harness list names the same two ids", async () => {
+    expect(configs.filter((c) => c.text === "<null>").map((c) => `${c.file}:${c.scenarioId}`)).toEqual(["specs/settings-file.mjs:F0"]);
+    // @ts-ignore -- plain JS module without declarations
+    const { UNDECLARED_EXTERNAL_APPS_SCENARIOS } = (await import("../e2e/lib/launch.mjs")) as { UNDECLARED_EXTERNAL_APPS_SCENARIOS: string[] };
+    expect([...UNDECLARED_EXTERNAL_APPS_SCENARIOS].sort()).toEqual(ALLOW_LIST.map((a) => a.scenarioId).sort());
   });
 
   it("S9 (`input_keymap_custom = \"Ctrl+X\"`, which leaves the rest readable) is NOT excused: it declares external_apps like the others", () => {
@@ -298,6 +313,7 @@ describe("AC-1506: every start passes the config folder and the E2E scope (R-158
     const m = /const BLOCKED_COMMANDS\s*=\s*\[([\s\S]*?)\]/.exec(context);
     expect(m, "BLOCKED_COMMANDS").not.toBeNull();
     expect(m![1]).toContain('"external_app_launch"');
+    expect(m![1], "SPEC-0300-0022 R-1681: the command that opens VS Code / the associated app").toContain('"settings_file_open"');
   });
 });
 

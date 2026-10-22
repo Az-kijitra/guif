@@ -36,11 +36,15 @@ import { canonicalizeModifier, isKnownKeyBody } from "./keymap-resolve";
 export interface RawKeymapEntryLike {
   actionId: string;
   value: string | null;
+  // SPEC-0300-0022 R-1642: the line of the entry in config.toml (decided by the reading side; this module only passes it on).
+  line?: number | null;
 }
 
 export interface ValidatedKeymap {
   effective: Record<string, string>;
   invalidActions: string[];
+  // PARALLEL to `invalidActions` (same length and order); null = the entry carried no line (SPEC-0300-0022 R-1642).
+  invalidActionLines: (number | null)[];
 }
 
 const KNOWN_ACTION_IDS = new Set<string>(ACTION_IDS);
@@ -69,19 +73,24 @@ export function isValidBindingElement(element: string): boolean {
 export function validateKeymapEntries(entries: readonly RawKeymapEntryLike[]): ValidatedKeymap {
   const effective: Record<string, string> = {};
   const invalidActions: string[] = [];
+  const invalidActionLines: (number | null)[] = [];
 
   for (const entry of entries) {
     const { actionId, value } = entry;
+    const reject = (): void => {
+      invalidActions.push(actionId);
+      invalidActionLines.push(entry.line ?? null);
+    };
 
     // Step 1: unknown action ids are ignored (R-45-4 (i)).
     if (!KNOWN_ACTION_IDS.has(actionId)) {
-      invalidActions.push(actionId);
+      reject();
       continue;
     }
 
     // Step 2: a non-string TOML value is invalid (R-45-4 (ii)/AC-62 (ii)).
     if (value === null) {
-      invalidActions.push(actionId);
+      reject();
       continue;
     }
 
@@ -96,14 +105,14 @@ export function validateKeymapEntries(entries: readonly RawKeymapEntryLike[]): V
     const elements = value.split(",").map((s) => s.trim());
     const allValidGrammar = elements.every(isValidBindingElement);
     if (!allValidGrammar) {
-      invalidActions.push(actionId);
+      reject();
       continue;
     }
 
     // Step 5: `delete` + Shift is invalid (R-18-2), reusing the existing
     // single-purpose validator.
     if (elements.some((element) => validateCustomOverride(actionId, element) === null)) {
-      invalidActions.push(actionId);
+      reject();
       continue;
     }
 
@@ -111,5 +120,5 @@ export function validateKeymapEntries(entries: readonly RawKeymapEntryLike[]): V
     effective[actionId] = value;
   }
 
-  return { effective, invalidActions };
+  return { effective, invalidActions, invalidActionLines };
 }

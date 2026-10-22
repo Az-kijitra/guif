@@ -181,22 +181,23 @@ describe("the boundaries of the new feature (SPEC-0200-0001 §4.1)", () => {
 describe("the wirings are pass-throughs (MUST-144)", () => {
   const wiringText = (f: string): string => strip(read(join(ROUTES, f)));
 
-  it("routes/external-apps-wiring.ts is at most 400 lines, and the only caller of createExternalAppsWiring( is the page composition (once)", () => {
+  it("routes/external-apps-wiring.ts is at most 400 lines, and the only caller of createExternalAppsWiring( is routes/entry-wiring.ts (once; SPEC-0200-0001 §3.17.8: the page composes through createEntryWiring)", () => {
     expect(lines(join(ROUTES, "external-apps-wiring.ts"))).toBeLessThanOrEqual(400);
     const callers = walk(ROUTES)
       .filter((f) => !isTest(f) && !f.endsWith("external-apps-wiring.ts"))
       .map((f) => [rel(f), (strip(read(f)).match(/\bcreateExternalAppsWiring\(/g) ?? []).length] as const)
       .filter(([, n]) => n > 0);
     expect(callers.reduce((sum, [, n]) => sum + n, 0), JSON.stringify(callers)).toBe(1);
+    expect(callers.map(([f]) => f), JSON.stringify(callers)).toEqual(["routes/entry-wiring.ts"]);
   });
 
   it("+page.svelte stays within 400 lines", () => {
     expect(lines(join(ROUTES, "+page.svelte"))).toBeLessThanOrEqual(400);
   });
 
-  it("menu-bar-wiring.svelte.ts grows by at most 3 lines (391 -> 394): one dep passed through, the execution table lives in menu-bar-exec.ts", () => {
+  it("menu-bar-wiring.svelte.ts grows by at most 5 lines (391 -> 396; SPEC-0200-0001 §3.17.13: + settingsFile dep, the execution table lives in menu-bar-exec.ts, + deactivate in the return value)", () => {
     const f = join(ROUTES, "menu-bar-wiring.svelte.ts");
-    expect(lines(f)).toBeLessThanOrEqual(394);
+    expect(lines(f)).toBeLessThanOrEqual(396);
     const code = wiringText("menu-bar-wiring.svelte.ts");
     expect(code).toMatch(/externalApps/);
     expect(code).toMatch(/barExtension\(\)/);
@@ -234,14 +235,18 @@ describe("the wirings are pass-throughs (MUST-144)", () => {
     expect(code).toMatch(/externalApps/);
   });
 
-  it("startup-wiring.ts loads the registrations, builds the registry with the EFFECTIVE keymap, hydrates, and survives a failed load with one console.error", () => {
+  // SPEC-0300-0022 / SPEC-0200-0001 §3.17.8: the registry and the notice are now built by the pure routes/config-evaluate.ts (shared with the check).
+  it("startup-wiring.ts loads the registrations, evaluates them with config-evaluate.ts, hydrates, and survives a failed load with one console.error; config-evaluate.ts builds the registry with the EFFECTIVE keymap", () => {
     const code = wiringText("startup-wiring.ts");
     expect(code).toMatch(/externalAppsLoad\(\)/);
-    expect(code).toMatch(/buildRegistry\(/);
-    expect(code).toMatch(/keyRules\(\s*validated\.effective\s*\)/);
-    expect(code).toMatch(/buildExternalAppsNotice\(/);
+    expect(code).toMatch(/evaluateConfig\(/);
+    expect(code).toMatch(/externalAppsState\.hydrate\(/);
     expect(code).toMatch(/catch/);
     expect(code).toMatch(/console\.error\(/);
+    const evaluate = wiringText("config-evaluate.ts");
+    expect(evaluate).toMatch(/buildRegistry\(/);
+    expect(evaluate).toMatch(/keyRules\(\s*validated\.effective\s*\)/);
+    expect(evaluate).toMatch(/buildExternalAppsNotice\(/);
   });
 
   it("the three entrances all receive the wiring in the page composition (key, menu bar, right-click menu)", () => {

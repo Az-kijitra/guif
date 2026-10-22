@@ -12,7 +12,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use super::commands::{KeymapLoadResultDto, KeymapParseErrorDto, StartupConfig};
+use super::startup_config::{KeymapLoadResultDto, KeymapParseErrorDto, StartupConfig};
 use crate::shared::schema::ui_theme::ThemeSetting;
 
 fn from_text(body: &str) -> (tempfile::TempDir, PathBuf, StartupConfig) {
@@ -167,6 +167,9 @@ fn the_result_dto_serializes_ui_theme_fields_in_camel_case() {
         parse_error: None,
         ui_theme: "dark".into(),
         ui_theme_invalid: true,
+        ui_theme_line: None,
+        present: true,
+        unknown_settings: vec![],
     };
     let s = toml::to_string(&dto).expect("serialize");
     assert!(s.contains("uiTheme = \"dark\""), "{s}");

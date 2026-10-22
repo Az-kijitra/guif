@@ -25,8 +25,8 @@ import { buildRegistry, type KeyRules } from "./registry";
 
 type AppDto = ExternalAppsDto["apps"][number];
 
-const app = (over: Partial<AppDto> & { index: number }): AppDto => ({ defaultNo: null, name: "x", key: null, keyInvalid: false, ...over });
-const dto = (apps: AppDto[], over: Partial<ExternalAppsDto> = {}): ExternalAppsDto => ({ apps, invalid: [], typeError: false, ...over });
+const app = (over: Partial<AppDto> & { index: number }): AppDto => ({ defaultNo: null, name: "x", key: null, keyInvalid: false, keyLine: null, ...over });
+const dto = (apps: AppDto[], over: Partial<ExternalAppsDto> = {}): ExternalAppsDto => ({ apps, invalid: [], typeError: false, typeErrorLine: null, ...over });
 
 const DEFAULTS: AppDto[] = [
   app({ index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C" }),
@@ -60,7 +60,7 @@ describe("labels (R-1510-1, AC-1500)", () => {
 
   it("an empty registration list gives an empty registry (external_apps = [])", () => {
     const r = buildRegistry(dto([]), rules());
-    expect(r).toEqual({ entries: [], invalid: [], typeError: false, rejectedKeys: [] });
+    expect(r).toEqual({ entries: [], invalid: [], typeError: false, typeErrorLine: null, rejectedKeys: [] });
   });
 });
 
@@ -88,7 +88,7 @@ describe("keys (R-1550 / R-1551)", () => {
     const r = buildRegistry(dto([app({ index: 0, name: "Bad", key: "Hyper+Z" })]), rules());
     expect(r.entries).toHaveLength(1);
     expect(r.entries[0].keys).toEqual([]);
-    expect(r.rejectedKeys).toEqual([{ label: "Bad", key: "Hyper+Z" }]);
+    expect(r.rejectedKeys).toEqual([{ label: "Bad", key: "Hyper+Z", line: null }]);
   });
 
   it("a key that is not a string (keyInvalid) loses only the key; the registration stays and is reported once", () => {
@@ -108,9 +108,9 @@ describe("keys (R-1550 / R-1551)", () => {
     );
     expect(r.entries.map((e) => e.keys)).toEqual([[], [], []]);
     expect(r.rejectedKeys).toEqual([
-      { label: "Q", key: "Ctrl+Q" },
-      { label: "S", key: "Shift+S" },
-      { label: "T", key: "Tab" },
+      { label: "Q", key: "Ctrl+Q", line: null },
+      { label: "S", key: "Shift+S", line: null },
+      { label: "T", key: "Tab", line: null },
     ]);
   });
 
@@ -121,8 +121,8 @@ describe("keys (R-1550 / R-1551)", () => {
     );
     expect(r.entries.map((e) => e.keys)).toEqual([["Ctrl+Alt+T"], [], []]);
     expect(r.rejectedKeys).toEqual([
-      { label: "second", key: "Ctrl+Alt+T" },
-      { label: "third", key: "Ctrl+Alt+T" },
+      { label: "second", key: "Ctrl+Alt+T", line: null },
+      { label: "third", key: "Ctrl+Alt+T", line: null },
     ]);
   });
 
@@ -135,7 +135,7 @@ describe("keys (R-1550 / R-1551)", () => {
   it("with a comma list only the colliding element is dropped (R-1551)", () => {
     const r = buildRegistry(dto([app({ index: 0, name: "multi", key: "Ctrl+Alt+T, Ctrl+Q, F9" })]), rules(["Ctrl+Q"]));
     expect(r.entries[0].keys).toEqual(["Ctrl+Alt+T", "F9"]);
-    expect(r.rejectedKeys).toEqual([{ label: "multi", key: "Ctrl+Q" }]);
+    expect(r.rejectedKeys).toEqual([{ label: "multi", key: "Ctrl+Q", line: null }]);
   });
 
   it("the rules are asked per element (never for the whole comma string)", () => {
@@ -147,7 +147,7 @@ describe("keys (R-1550 / R-1551)", () => {
 
   it("an invalid registration list does not touch the keys of the usable ones", () => {
     const r = buildRegistry(
-      dto([app({ index: 0, name: "ok", key: "F9" })], { invalid: [{ position: 2, name: "bad", reason: "invalid" }] }),
+      dto([app({ index: 0, name: "ok", key: "F9" })], { invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }),
       rules(),
     );
     expect(r.entries[0].keys).toEqual(["F9"]);
@@ -157,8 +157,8 @@ describe("keys (R-1550 / R-1551)", () => {
 describe("pass-through (R-1574)", () => {
   it("invalid registrations and the type error are handed on unchanged", () => {
     const invalid: ExternalAppsDto["invalid"] = [
-      { position: 2, name: "second", reason: "invalid" },
-      { position: 21, name: "twenty-first", reason: "limit" },
+      { position: 2, name: "second", reason: "invalid", line: null },
+      { position: 21, name: "twenty-first", reason: "limit", line: null },
     ];
     const r = buildRegistry(dto(DEFAULTS, { invalid, typeError: true }), rules());
     expect(r.invalid).toEqual(invalid);

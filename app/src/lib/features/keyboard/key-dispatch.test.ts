@@ -138,7 +138,6 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
   // need to change.
   function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
@@ -154,15 +153,6 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
       ...overrides,
     };
   }
-
-  it("AC-04: when the settings screen is open, no handler in the chain is invoked (R-14)", () => {
-    const ctx = makeContext({ isSettingsOpen: true });
-    const handled = dispatchKeydown(key("ArrowDown"), ctx);
-    expect(handled).toBe(false);
-    expect(ctx.onOverlayKey).not.toHaveBeenCalled();
-    expect(ctx.onListAction).not.toHaveBeenCalled();
-    expect(ctx.onTreeAction).not.toHaveBeenCalled();
-  });
 
   it("AC-02: while an overlay (e.g. a modal) is open, list navigation keys do not reach the list handler (R-13)", () => {
     const ctx = makeContext({
@@ -216,7 +206,7 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
     });
     const handled = dispatchKeydown(key("q", { ctrlKey: true }), ctx);
     expect(handled).toBe(true);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(ctx.onOverlayKey).not.toHaveBeenCalled();
   });
 
@@ -241,13 +231,12 @@ describe("dispatchKeydown priority chain (SPEC-0300-0010 R-11, R-12, R-13, R-14)
 // SPEC-0300-0012 R-120/R-121 + docs/architecture/proposals/SPEC-0200-0001.md
 // §3.1.4 (MUST-38/41/42, ISS-0064, SPEC-0300-0010 追補 R-14-2, 発注者承認
 // 2026-09-24): while the search <input> is focused, R-14-2 is evaluated
-// immediately after R-14 (isSettingsOpen) and before priority 2 (exit
+// immediately after the menu bar stage (R-14 / isSettingsOpen was removed, SPEC-0300-0010 第18版) and before priority 2 (exit
 // action resolution). R-12's numbered priority table (1~6) itself is NOT
 // changed — R-14-2 is an independent guard alongside R-14, not a new row.
 describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-input-focused guard)", () => {
   function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
@@ -342,17 +331,10 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
     const handled = dispatchKeydown(key("j"), ctx);
     // handled=false: no preventDefault, so the browser still inserts "j"
     // into the <input> — dispatch is nonetheless stopped (onListAction must
-    // not fire), matching the isSettingsOpen (R-14) `return false` pattern.
+    // not fire), the `return false` pattern of the search-input guard.
     expect(handled).toBe(false);
     expect(ctx.onSearchAction).not.toHaveBeenCalled();
     expect(ctx.onListAction).not.toHaveBeenCalled();
-  });
-
-  it("MUST-41: R-14 (isSettingsOpen) is evaluated before R-14-2 and remains authoritative — settings-open still suppresses everything even while the search input is (nominally) focused", () => {
-    const ctx = makeContext({ isSettingsOpen: true, isSearchInputFocused: true });
-    const handled = dispatchKeydown(key("Escape"), ctx);
-    expect(handled).toBe(false);
-    expect(ctx.onSearchAction).not.toHaveBeenCalled();
   });
 
   it("priority 1 (hardcoded Ctrl+Q/Ctrl+,) still fires ahead of R-14-2 while the search input is focused", () => {
@@ -362,7 +344,7 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
     });
     const handled = dispatchKeydown(key("q", { ctrlKey: true }), ctx);
     expect(handled).toBe(true);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(ctx.onSearchAction).not.toHaveBeenCalled();
   });
 
@@ -392,7 +374,6 @@ describe("dispatchKeydown R-14-2 (SPEC-0200-0001 §3.1.4, ISS-0064 — search-in
 describe("dispatchKeydown R-14-3 (exit is not evaluated while an overlay is open)", () => {
   function makeContext(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
@@ -443,7 +424,7 @@ describe("dispatchKeydown R-14-3 (exit is not evaluated while an overlay is open
     });
     const handled = dispatchKeydown(key("q", { ctrlKey: true }), ctx);
     expect(handled).toBe(true);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expect(ctx.onOverlayKey).not.toHaveBeenCalled();
   });
 
@@ -453,13 +434,6 @@ describe("dispatchKeydown R-14-3 (exit is not evaluated while an overlay is open
     expect(handled).toBe(false);
     expect(ctx.onExitAction).not.toHaveBeenCalled();
     expect(ctx.onSearchAction).not.toHaveBeenCalled();
-  });
-
-  it("R-14 order: settings open still suppresses everything (exit key and overlay handler both untouched)", () => {
-    const ctx = makeContext({ isSettingsOpen: true, isOverlayOpen: true });
-    expect(dispatchKeydown(key("q"), ctx)).toBe(false);
-    expect(ctx.onExitAction).not.toHaveBeenCalled();
-    expect(ctx.onOverlayKey).not.toHaveBeenCalled();
   });
 
   it("a non-exit key while an overlay is open is unaffected (still goes to onOverlayKey with its own action)", () => {
@@ -473,7 +447,6 @@ describe("dispatchKeydown R-14-3 (exit is not evaluated while an overlay is open
 describe("DispatchContext (ISS-0105): no profile input", () => {
   it("dispatch works with a context that has no profile field and customOverrides only", () => {
     const ctx = {
-      isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
@@ -504,7 +477,6 @@ describe("DispatchContext (ISS-0105): no profile input", () => {
 
 function makeTabStopContext(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    isSettingsOpen: false,
     isOverlayOpen: false,
     isMenuBarActive: false,
     isTreeFocused: false,
@@ -601,7 +573,6 @@ describe("dispatchKeydown: onTabStop fallback (SPEC-0200-0001 §3.6.11.2 MUST-85
 describe("dispatchKeydown R-14-4 (path-bar editing guard)", () => {
   function ctxOf(over: Partial<Record<string, unknown>> = {}) {
     return {
-      isSettingsOpen: false,
       isOverlayOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
@@ -678,13 +649,10 @@ describe("dispatchKeydown R-14-4 (path-bar editing guard)", () => {
     expect(ctx.onExitAction).not.toHaveBeenCalled();
   });
 
-  it("R-760-1/AC-721: Ctrl+Q (hardcoded) and settings-open still take precedence", () => {
+  it("R-760-1/AC-721: Ctrl+Q (hardcoded) still takes precedence (SPEC-0300-0010 第18版: there is no settings screen, so no isSettingsOpen)", () => {
     const ctx = ctxOf();
     dispatchKeydown(key("q", { ctrlKey: true }), ctx);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
-    const s = ctxOf({ isSettingsOpen: true });
-    expect(dispatchKeydown(key("Enter"), s)).toBe(false);
-    expect(s.onPathBarKey).not.toHaveBeenCalled();
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
   });
 
   it("R-764/MUST-99(c)/AC-722: isComposing or keyCode 229 -> nothing handled, passes to the input", () => {

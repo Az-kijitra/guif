@@ -38,6 +38,7 @@ use super::launch::LaunchPlan;
 use super::registry::Registry;
 use super::target::Kind;
 use crate::shared::e2e_scope::{set_test_scope, Scope};
+use crate::shared::schema::config_lines::ExternalAppsLines;
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
 
 // ------------------------------------------------------------------ fixtures
@@ -79,7 +80,7 @@ fn raw_app(program: &str, args: &[&str], args_for_file: Option<&[&str]>) -> RawE
 }
 
 fn registry_of(apps: Vec<RawExternalApp>, path_var: Option<&str>) -> Registry {
-    Registry::from_raw(&ExternalAppsRaw::Array(apps), &|_: &str| None::<OsString>, path_var.map(OsString::from))
+    Registry::from_raw(&ExternalAppsRaw::Array(apps), &ExternalAppsLines::default(), &|_: &str| None::<OsString>, path_var.map(OsString::from))
 }
 
 /// One registration `Tool` -> `<root>\tool.exe`, args `["{path}"]` / `["{dir}"]` for a file.
@@ -196,7 +197,7 @@ fn an_index_past_the_registrations_is_unknown_app() {
     assert_eq!(result, Err(LaunchError::UnknownApp));
     assert!(plans.is_empty());
     assert_eq!(run(&r, usize::MAX, &text(&f.root), Kind::Dir).0, Err(LaunchError::UnknownApp));
-    let empty = Registry::from_raw(&ExternalAppsRaw::Array(vec![]), &|_: &str| None::<OsString>, None);
+    let empty = Registry::from_raw(&ExternalAppsRaw::Array(vec![]), &ExternalAppsLines::default(), &|_: &str| None::<OsString>, None);
     assert_eq!(run(&empty, 0, &text(&f.root), Kind::Dir).0, Err(LaunchError::UnknownApp));
 }
 

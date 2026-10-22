@@ -25,6 +25,8 @@ pub struct ExternalAppDto {
     pub name: Option<String>,
     pub key: Option<String>,
     pub key_invalid: bool,
+    /// R-1642: the line of this registration's `key` in `config.toml` (`None` for the default four).
+    pub key_line: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -33,6 +35,8 @@ pub struct InvalidRegistrationDto {
     pub position: usize,
     pub name: Option<String>,
     pub reason: &'static str,
+    /// R-1642: the line of the failing field (or the element's header).
+    pub line: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -41,6 +45,8 @@ pub struct ExternalAppsDto {
     pub apps: Vec<ExternalAppDto>,
     pub invalid: Vec<InvalidRegistrationDto>,
     pub type_error: bool,
+    /// R-1642 (W-9B): the line of `external_apps` when `type_error`.
+    pub type_error_line: Option<u32>,
 }
 
 /// Why a call was refused before anything happened.
@@ -69,6 +75,7 @@ pub fn registry_dto(registry: &Registry) -> ExternalAppsDto {
                 name: app.name.clone(),
                 key: app.key.clone(),
                 key_invalid: app.key_invalid,
+                key_line: app.key_line,
             })
             .collect(),
         invalid: registry
@@ -81,9 +88,11 @@ pub fn registry_dto(registry: &Registry) -> ExternalAppsDto {
                     InvalidReason::Invalid => "invalid",
                     InvalidReason::Limit => "limit",
                 },
+                line: i.line,
             })
             .collect(),
         type_error: registry.type_error,
+        type_error_line: registry.type_error_line,
     }
 }
 

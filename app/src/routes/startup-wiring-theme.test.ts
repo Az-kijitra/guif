@@ -22,7 +22,7 @@ import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
 type Dto = Awaited<ReturnType<typeof configLoadKeymap>>;
 
 function dto(over: Partial<Dto> = {}): Dto {
-  return { entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, ...over } as Dto;
+  return { entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over } as Dto;
 }
 
 // SPEC-0300-0019 (stage B): the startup notices are Japanese (W-30-2 / W-31 / W-32 / W-33); the join separators
@@ -58,7 +58,7 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
 
   it("AC-958 tail: an invalid ui_theme + an unknown action id join the keymap notice and the theme notice with one space, keymap first (R-917-4: separate sentences)", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(
-      dto({ entries: [{ actionId: "no_such_action", value: "Ctrl+X" }], uiThemeInvalid: true }),
+      dto({ entries: [{ actionId: "no_such_action", value: "Ctrl+X", line: null }], uiThemeInvalid: true }),
     );
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(`${W32_NO_SUCH_ACTION} ${THEME_NOTICE}`);
@@ -114,7 +114,7 @@ describe("loadKeymapForStartup: notice combination (SPEC-0200-0001 §3.11.4)", (
 describe("runStartupHydrate with the real keymap loader: config part, then ui-state, then navigation (R-45-6 / AC-958 tail)", () => {
   it("the combined config.toml notice stays in front of the ui-state and navigation notices, joined with ' / '", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(
-      dto({ entries: [{ actionId: "no_such_action", value: "Ctrl+X" }], uiThemeInvalid: true }),
+      dto({ entries: [{ actionId: "no_such_action", value: "Ctrl+X", line: null }], uiThemeInvalid: true }),
     );
 
     await runStartupHydrate({

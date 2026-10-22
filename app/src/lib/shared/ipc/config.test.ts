@@ -44,6 +44,9 @@ describe("configLoadKeymap: Phase 12 theme fields (SPEC-0200-0001 §3.11.4)", ()
       parseError: { message: "bad toml", line: 2, wholeFile: true },
       uiTheme: "system",
       uiThemeInvalid: false,
+      uiThemeLine: null,
+      present: true,
+      unknownSettings: [],
     };
     vi.mocked(invoke).mockResolvedValueOnce(result);
 

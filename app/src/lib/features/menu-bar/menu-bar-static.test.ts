@@ -84,7 +84,9 @@ describe("R-1311 / AC-1302: nothing for the excluded features is defined in the 
   it("no forbidden word in any non-test file of the slice (comments excluded)", () => {
     const hits: string[] = [];
     for (const f of prod()) {
-      const text = f.endsWith(".ts") ? stripJs(readFileSync(f, "utf-8")) : readFileSync(f, "utf-8").replace(/<!--[\s\S]*?-->/g, "");
+      const raw = f.endsWith(".ts") ? stripJs(readFileSync(f, "utf-8")) : readFileSync(f, "utf-8").replace(/<!--[\s\S]*?-->/g, "");
+      // SPEC-0300-0022 R-1670 / SPEC-0300-0020 第3版 R-1311: the two 設定ファイル items (W-A0 / W-A1) and `formatSettingsShortcut` are not the excluded 設定画面.
+      const text = raw.replace(/設定ファイル(を開く|のチェック)|formatSettingsShortcut/g, "");
       for (const w of FORBIDDEN_WORDS) if (text.includes(w)) hits.push(`${relative(FEATURE, f)}: ${w}`);
     }
     expect(hits).toEqual([]);

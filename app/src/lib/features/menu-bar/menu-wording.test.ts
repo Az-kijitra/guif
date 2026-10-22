@@ -42,8 +42,8 @@ describe("W-65~W-88: the item names, per menu, in order (AC-1214)", () => {
   const names = (idx: number): string[] =>
     buildMenuBar(NO_INPUT as never)[idx].entries.flatMap((e) => (e.type === "item" ? [e.label] : []));
 
-  it("ファイル: W-65~W-73", () => {
-    expect(names(0)).toEqual(["開く", "OSの関連付けで開く", "新規作成…", "新しいフォルダー…", "名前の変更", "削除", "ZIPに圧縮", "ZIPを展開", "終了"]);
+  it("ファイル: W-65~W-73 with W-A0 / W-A1 before 終了 (SPEC-0300-0022)", () => {
+    expect(names(0)).toEqual(["開く", "OSの関連付けで開く", "新規作成…", "新しいフォルダー…", "名前の変更", "削除", "ZIPに圧縮", "ZIPを展開", "設定ファイルを開く", "設定ファイルのチェック", "終了"]);
   });
 
   it("編集: W-74~W-80", () => {

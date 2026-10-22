@@ -27,7 +27,6 @@ const ev = (
 
 function makeCtx(over: Record<string, unknown> = {}) {
   return {
-    isSettingsOpen: false,
     isOverlayOpen: false,
     isMenuBarActive: false,
     isTreeFocused: false,
@@ -67,14 +66,14 @@ describe("AC-93 (a): while the menu bar is active, the key goes to the menu bar 
   it("priority 1 still wins: Ctrl+Q reaches onHardcodedShortcut('exit') and the menu bar does not see it (R-1355)", () => {
     const ctx = makeCtx({ isMenuBarActive: true });
     expect(run(ev("q", { ctrlKey: true }), ctx)).toBe(true);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
     expectOnly(ctx, ["onHardcodedShortcut"]);
   });
 
   it("Ctrl+, (settings) is priority 1 as well", () => {
     const ctx = makeCtx({ isMenuBarActive: true });
     run(ev(",", { ctrlKey: true }), ctx);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("settings");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("settings", expect.anything());
     expectOnly(ctx, ["onHardcodedShortcut"]);
   });
 
@@ -91,12 +90,6 @@ describe("AC-93 (a): while the menu bar is active, the key goes to the menu bar 
   it("the return value is the menu bar's: an OS key (Alt+F4) comes back as false and NOTHING else runs (no list / tree / overlay)", () => {
     const ctx = makeCtx({ isMenuBarActive: true, onMenuBarKey: vi.fn().mockReturnValue(false) });
     expect(run(ev("F4", { altKey: true }), ctx)).toBe(false);
-    expectOnly(ctx, ["onMenuBarKey"]);
-  });
-
-  it("R-14 is not evaluated: even with the settings screen open the menu bar's handler is called (the order is menu bar -> R-14)", () => {
-    const ctx = makeCtx({ isMenuBarActive: true, isSettingsOpen: true });
-    run(ev("ArrowLeft"), ctx);
     expectOnly(ctx, ["onMenuBarKey"]);
   });
 
@@ -156,12 +149,6 @@ describe("AC-93 (b): activation keys are evaluated after priority 1 and BEFORE R
     const ctx = makeCtx({ canActivateMenuBar: true });
     expect(run(ev(k, { altKey: true }), ctx)).toBe(true);
     expect((ctx.onMenuBarActivate as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("access");
-    expectOnly(ctx, ["onMenuBarActivate"]);
-  });
-
-  it("before R-14: with the settings screen open the activation still wins in the stated order", () => {
-    const ctx = makeCtx({ canActivateMenuBar: true, isSettingsOpen: true });
-    run(ev("F10"), ctx);
     expectOnly(ctx, ["onMenuBarActivate"]);
   });
 

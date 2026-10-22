@@ -33,6 +33,7 @@ use super::launch::{plan, spawn, LaunchPlan};
 use super::program::{resolve, ResolvedExe};
 use super::registry::{RegisteredApp, Registry};
 use super::target::{Kind, Target};
+use crate::shared::schema::config_lines::ExternalAppsLines;
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
 
 // ------------------------------------------------------------------ builders
@@ -46,7 +47,7 @@ fn env(name: &str) -> Option<OsString> {
 }
 
 fn defaults() -> Vec<RegisteredApp> {
-    Registry::from_raw(&ExternalAppsRaw::Missing, &env, Some(OsString::from(r"C:\bin"))).apps
+    Registry::from_raw(&ExternalAppsRaw::Missing, &ExternalAppsLines::default(), &env, Some(OsString::from(r"C:\bin"))).apps
 }
 
 fn exe_for(app: &RegisteredApp) -> ResolvedExe {
@@ -63,7 +64,7 @@ fn custom(args: &[&str], args_for_file: Option<&[&str]>) -> RegisteredApp {
         args_for_file: args_for_file.map_or(RawValue::Missing, to_vec),
         key: RawValue::Missing,
     };
-    let r = Registry::from_raw(&ExternalAppsRaw::Array(vec![raw]), &env, None);
+    let r = Registry::from_raw(&ExternalAppsRaw::Array(vec![raw]), &ExternalAppsLines::default(), &env, None);
     assert_eq!(r.apps.len(), 1, "the fixture must be a valid registration: {:?}", r.invalid);
     r.apps.into_iter().next().unwrap()
 }

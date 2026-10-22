@@ -16,9 +16,10 @@ import { createExternalAppsState, externalAppsState } from "./external-apps-stat
 import type { Registry } from "./registry";
 
 const registry = (labels: string[]): Registry => ({
-  entries: labels.map((label, index) => ({ index, label, keys: [] })),
+  entries: labels.map((label, index) => ({ index, label, keys: [], keyLine: null })),
   invalid: [],
   typeError: false,
+  typeErrorLine: null,
   rejectedKeys: [],
 });
 

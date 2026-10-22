@@ -33,6 +33,8 @@
     "allow-clipboard-clear-if-unchanged",
     "allow-external-apps-load",
     "allow-external-app-launch",
+    "allow-settings-file-open",
+    "allow-settings-file-check",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

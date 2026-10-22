@@ -74,9 +74,11 @@ export const tests = [
         t.eq(menus[i].role, "menu", `${MENU_NAMES[i]}: role=menu`);
       }
       const all = menus.flatMap((m) => items(m).map((e) => e.label));
-      for (const banned of ["元に戻す", "やり直し", "複製", "プロパティ", "設定", "キー一覧", "マニュアル", "バージョン情報", "再読み込み", "テーマ", "完全に削除", "選択の切り替え"]) {
+      for (const banned of ["元に戻す", "やり直し", "複製", "プロパティ", "キー一覧", "マニュアル", "バージョン情報", "再読み込み", "テーマ", "完全に削除", "選択の切り替え"]) {
         t.ok(!all.some((l) => l.includes(banned)), `no item "${banned}" (R-1311)`);
       }
+      // 第3版: 「設定ファイルを開く」「設定ファイルのチェック」(R-1310-2) are items; the R-1311 item 「設定」 (a settings screen) is still not (SPEC-0300-0010 第18版 R-14)
+      for (const banned of ["設定", "設定画面", "設定…"]) t.ok(!all.includes(banned), `no item "${banned}" (R-1311, no settings screen)`);
       t.eq(await ctx.ev(`document.querySelector('.menubar').getAttribute('aria-label')`), "メニューバー", "menu bar aria-label (W-60)");
       t.eq(await ctx.ev(`[...document.querySelectorAll('.menubar .heading')].map((h) => h.getAttribute('aria-label'))`), MENU_NAMES, "heading aria-labels have no bracket");
     },
@@ -601,7 +603,7 @@ export const tests = [
       await focusRowByName(ctx, "d"); // OSの関連付けで開く and ZIPを展開 are disabled
       await openByKeys(ctx, 0);
       const lit = async () => (await barState(ctx)).highlight;
-      const enabled = ["開く", "新規作成…", "新しいフォルダー…", "名前の変更", "削除", "ZIPに圧縮", "終了"];
+      const enabled = ["開く", "新規作成…", "新しいフォルダー…", "名前の変更", "削除", "ZIPに圧縮", "設定ファイルを開く", "設定ファイルのチェック", "終了"]; // 第3版: the two settings-file items are always enabled
       t.eq(await lit(), "開く", "first lit item");
       const walked = [];
       for (let i = 0; i < enabled.length; i++) {

@@ -26,8 +26,14 @@ export const EXTERNAL_APP_MESSAGES = {
   outOfScope: (name: string): string => `「${name}」を起動できませんでした。テスト用の範囲の外です。`,
   // W-9A: `list` is like `3(VS Codeで開く), 21(上限を超えています)` (built by notice.ts).
   invalidRegistrations: (n: number, list: string): string => `config.toml の外部アプリの登録 ${n} 件を使いません: ${list}。`,
+  // W-9A items with a line (SPEC-0300-0019 第5版): `3(VS Codeで開く、20 行目)`; when the name cannot be read, `1(20 行目)`.
+  invalidItemAt: (position: number, name: string, line: number): string => `${position}(${name}、${line} 行目)`,
+  invalidItemLineOnly: (position: number, line: number): string => `${position}(${line} 行目)`,
   // W-9B
   typeError: "config.toml の external_apps が正しくないため、外部アプリは既定の登録を使います。",
+  typeErrorAt: (line: number): string => `config.toml の ${line} 行目の external_apps が正しくないため、外部アプリは既定の登録を使います。`,
+  // W-9C item suffix: `ターミナルで開く: Ctrl+Alt+C(25 行目)`.
+  atLine: (line: number): string => `(${line} 行目)`,
   // W-9C: `list` is like `ターミナルで開く: Ctrl+Alt+C, ...`.
   unusableKeys: (n: number, list: string): string => `外部アプリのキー ${n} 件は使いません(正しくないか、他の操作と重なっています): ${list}。`,
   // The reason shown in place of a name for a registration over the limit (R-1505).

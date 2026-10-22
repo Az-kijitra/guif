@@ -23,23 +23,23 @@ use std::path::{Path, PathBuf};
 
 // =============================================================================================== helpers
 
-fn manifest_dir() -> PathBuf {
+pub(crate) fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn src(rel: &str) -> PathBuf {
+pub(crate) fn src(rel: &str) -> PathBuf {
     manifest_dir().join("src").join(rel)
 }
 
-fn read(path: &Path) -> String {
+pub(crate) fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
 }
 
-fn rel(path: &Path) -> String {
+pub(crate) fn rel(path: &Path) -> String {
     path.strip_prefix(manifest_dir()).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
-fn is_ident(c: char) -> bool {
+pub(crate) fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
@@ -150,16 +150,16 @@ fn scrub(src: &str, keep_strings: bool) -> String {
     out
 }
 
-fn code_only(text: &str) -> String {
+pub(crate) fn code_only(text: &str) -> String {
     scrub(text, false)
 }
 
-fn code_with_strings(text: &str) -> String {
+pub(crate) fn code_with_strings(text: &str) -> String {
     scrub(text, true)
 }
 
 /// Drops every `#[cfg(test)]` item (a `mod x;` or a braced item).
-fn strip_cfg_test(code: &str) -> String {
+pub(crate) fn strip_cfg_test(code: &str) -> String {
     let mut out = String::new();
     let mut rest = code;
     while let Some(at) = rest.find("#[cfg(test)]") {
@@ -196,7 +196,7 @@ fn strip_cfg_test(code: &str) -> String {
     out
 }
 
-fn rust_files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn rust_files_under(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries {
         let path = entry.expect("dir entry").path();
@@ -208,14 +208,14 @@ fn rust_files_under(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn files_under(sub: &str) -> Vec<PathBuf> {
+pub(crate) fn files_under(sub: &str) -> Vec<PathBuf> {
     let mut v = Vec::new();
     rust_files_under(&src(sub), &mut v);
     v.sort();
     v
 }
 
-fn is_test_file(path: &Path) -> bool {
+pub(crate) fn is_test_file(path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     name.ends_with("_tests.rs") || name == "test_support.rs" || name == "zip_fixture.rs" || name == "acl_consistency.rs"
 }
@@ -243,7 +243,7 @@ fn ext_file(name: &str) -> String {
     strip_cfg_test(&code_with_strings(&read(&path)))
 }
 
-fn crate_uses(code: &str) -> Vec<String> {
+pub(crate) fn crate_uses(code: &str) -> Vec<String> {
     let mut used = Vec::new();
     for (i, _) in code.match_indices("crate::") {
         let rest = &code[i + "crate::".len()..];
@@ -263,7 +263,7 @@ fn crate_uses(code: &str) -> Vec<String> {
 }
 
 /// Text from the `(` after `needle` to its matching `)` (exclusive).
-fn call_args(code: &str, needle: &str) -> Option<String> {
+pub(crate) fn call_args(code: &str, needle: &str) -> Option<String> {
     let at = code.find(needle)? + needle.len();
     let rest = &code[at..];
     let mut depth = 1;
@@ -283,7 +283,7 @@ fn call_args(code: &str, needle: &str) -> Option<String> {
 }
 
 /// `(name, type)` of the parameters of `fn name(...)`.
-fn fn_params(code: &str, name: &str) -> Option<Vec<(String, String)>> {
+pub(crate) fn fn_params(code: &str, name: &str) -> Option<Vec<(String, String)>> {
     let needle = format!("fn {name}");
     let mut from = 0;
     while let Some(rel) = code.get(from..)?.find(&needle) {
@@ -347,7 +347,7 @@ fn fn_params(code: &str, name: &str) -> Option<Vec<(String, String)>> {
     None
 }
 
-fn is_injected(ty: &str) -> bool {
+pub(crate) fn is_injected(ty: &str) -> bool {
     ty.starts_with("AppHandle")
         || ty.starts_with("Window")
         || ty.starts_with("WebviewWindow")
@@ -355,7 +355,7 @@ fn is_injected(ty: &str) -> bool {
         || ty.starts_with("tauri::")
 }
 
-fn has_cjk(text: &str) -> bool {
+pub(crate) fn has_cjk(text: &str) -> bool {
     text.chars().any(|c| ('\u{3000}'..='\u{30FF}').contains(&c) || ('\u{3400}'..='\u{9FFF}').contains(&c) || ('\u{FF00}'..='\u{FFEF}').contains(&c))
 }
 
@@ -364,13 +364,13 @@ fn has_cjk(text: &str) -> bool {
 #[test]
 fn the_new_modules_and_every_test_module_are_wired() {
     let mod_rs = code_with_strings(&read(&src("external_apps/mod.rs")));
-    for module in ["defaults", "registry", "template", "program", "exists", "target", "launch", "guarded", "error", "commands"] {
+    for module in ["defaults", "registry", "template", "program", "exists", "target", "launch", "guarded", "error", "commands", "open_file"] {
         assert!(mod_rs.contains(&format!("mod {module};")), "external_apps/mod.rs must declare `mod {module};`");
         assert!(src(&format!("external_apps/{module}.rs")).is_file(), "src/external_apps/{module}.rs must exist");
     }
     for test in [
         "template_tests", "program_tests", "exists_tests", "registry_tests", "target_tests", "launch_tests", "guarded_tests",
-        "commands_tests", "error_tests",
+        "commands_tests", "error_tests", "open_file_tests", "registry_lines_tests", "commands_lines_tests",
     ] {
         let at = mod_rs.find(&format!("mod {test};")).unwrap_or_else(|| panic!("external_apps/mod.rs must declare `mod {test};` (the tests are written, only the wiring is missing)"));
         assert!(mod_rs[..at].trim_end().ends_with("#[cfg(test)]"), "`mod {test};` must be behind #[cfg(test)]");
@@ -408,7 +408,7 @@ fn external_apps_depends_on_shared_and_itself_only() {
 #[test]
 fn no_other_module_uses_external_apps() {
     let mut offenders = Vec::new();
-    for dir in ["config", "fs", "fs_ops", "archive", "viewer", "shared"] {
+    for dir in ["config", "fs", "fs_ops", "archive", "viewer", "shared", "settings_file"] {
         for path in files_under(dir) {
             let code = code_only(&read(&path));
             if crate_uses(&code).iter().any(|u| u == "external_apps") || code.contains("super::external_apps") {
@@ -462,21 +462,56 @@ fn external_apps_never_reads_the_environment_or_the_current_folder_itself() {
     }
 }
 
+// SPEC-0200-0001 §3.17.15 (rewrites §3.16.15 MUST-142 (a)): the environment is read by `config_bridge/env.rs` (not `lib.rs`), and
+// `Registry::from_raw(` is called in ONE place, `config_bridge/evaluate.rs`, which injects the raw value, its lines, the lookup and
+// the PATH snapshot. `lib.rs` reads no environment at all and goes through `config_bridge::snapshot(`.
 #[test]
-fn lib_rs_is_the_one_reader_and_injects_the_path_and_the_environment_into_the_registry() {
+fn config_bridge_env_rs_is_the_one_reader_and_evaluate_rs_injects_it_into_the_registry() {
     let lib = code_with_strings(&read(&src("lib.rs")));
-    let args = call_args(&lib, "Registry::from_raw(").expect("lib.rs must call `Registry::from_raw(&startup.loaded.external_apps, ..)` once");
-    assert_eq!(lib.matches("Registry::from_raw(").count(), 1);
-    assert!(args.contains("external_apps"), "the raw value comes from the start-up config: {args}");
-    assert!(args.contains("var_os(\"PATH\")"), "the start-up PATH is injected: {args}");
-    assert!(args.matches("env::var_os(").count() >= 2, "the environment lookup is injected as a closure over `env::var_os`: {args}");
-    // every env read in lib.rs is inside that one call
-    let call_start = lib.find("Registry::from_raw(").unwrap();
-    let call_end = call_start + "Registry::from_raw(".len() + args.len();
-    for (at, _) in lib.match_indices("env::var") {
-        assert!(at >= call_start && at < call_end, "an env read at byte {at} of lib.rs is outside the Registry::from_raw(..) injection");
+    assert!(!lib.contains("env::var"), "lib.rs must not read the environment any more (§3.17.15): it is config_bridge/env.rs's job");
+    assert!(!lib.contains("Registry::from_raw("), "lib.rs must not build the registry itself: it calls config_bridge::snapshot(");
+    assert!(lib.contains("config_bridge::snapshot("), "lib.rs must call config_bridge::snapshot(..)");
+
+    let env_rs = strip_cfg_test(&code_with_strings(&read(&src("config_bridge/env.rs"))));
+    assert!(env_rs.contains("var_os("), "config_bridge/env.rs reads the environment");
+    for name in ["pub fn lookup(", "pub fn path_var(", "pub fn local_app_data("] {
+        assert!(env_rs.contains(name), "config_bridge/env.rs must define `{name}..`");
     }
-    assert!(lib[call_end..].contains(".manage("), "the registry is registered as managed state after it is built");
+
+    let mut calls = Vec::new();
+    for path in files_under("") {
+        if is_test_file(&path) {
+            continue;
+        }
+        let code = strip_cfg_test(&code_with_strings(&read(&path)));
+        let n = code.matches("Registry::from_raw(").count();
+        if n > 0 {
+            calls.push((rel(&path), n));
+        }
+    }
+    assert_eq!(calls, vec![("src/config_bridge/evaluate.rs".to_string(), 1)], "Registry::from_raw( has ONE production call site: {calls:?}");
+
+    let evaluate = strip_cfg_test(&code_with_strings(&read(&src("config_bridge/evaluate.rs"))));
+    let args = call_args(&evaluate, "Registry::from_raw(").expect("Registry::from_raw(..)");
+    assert!(args.contains("external_apps"), "the raw value (and its lines) come from the loaded config: {args}");
+    assert!(args.contains("lines"), "R-1642: the lines of the external apps are handed in: {args}");
+    // The one call is the shared `registry_of(startup, env, path_var)`, which both `snapshot(app)` (with `&env::lookup` and
+    // `env::path_var()`) and the AppHandle-free seam `snapshot_at(path, env, path_var)` feed: the call's arguments are the injected
+    // parameters, and the real environment enters in `snapshot` only.
+    assert!(evaluate.contains("&env::lookup"), "the %NAME% lookup of the real snapshot is config_bridge::env::lookup");
+    assert!(evaluate.contains("env::path_var()"), "the PATH snapshot of the real snapshot is config_bridge::env::path_var()");
+    assert!(!evaluate.contains("env::var"), "evaluate.rs goes through env.rs, it does not read the environment itself");
+
+    // The snapshot is a tuple: BOTH values it returns are registered as managed state, after it was taken (the old check, kept).
+    let snap = lib.find("config_bridge::snapshot(").expect("config_bridge::snapshot(");
+    let tuple_at = lib[..snap].rfind("let (").expect("the snapshot is bound as a tuple");
+    let bound = lib[tuple_at..snap].to_string();
+    let (startup, registry) = (bound.contains("startup"), bound.contains("external_apps_registry"));
+    assert!(startup && registry, "the tuple binds `startup` and `external_apps_registry`: {bound}");
+    for name in ["startup", "external_apps_registry"] {
+        let managed = lib[snap..].find(&format!(".manage({name})")).or_else(|| lib[snap..].find(&format!("app.manage({name})")));
+        assert!(managed.is_some(), "lib.rs must `.manage({name})` AFTER config_bridge::snapshot(..)");
+    }
 }
 
 // =============================================================================================== ONE process-creation site (SHOULD-212, AC-1520-1)

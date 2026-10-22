@@ -36,10 +36,15 @@ guif の設定フォルダーは `%APPDATA%\dev.guif.app` です。次のファ�
 
 | ファイル | 内容 |
 |---|---|
-| `config.toml` | 設定(キー割り当て、画面のテーマ。§6) |
+| `config.toml` | 設定(キー割り当て、画面のテーマ、外部アプリ。§6、§7)。利用者が書くファイルです |
+| `config.sample.toml` | 設定ファイルの見本(§8.3) |
 | `navigation.toml` | 訪問履歴とジャンプリスト |
 | `ui-state.toml` | 表示状態 |
 | `viewer-window.toml` | ビューアのウィンドウの状態 |
+
+- `config.toml` は最初はありません。無いときは既定の設定で起動します。メニューバーの「ファイル」の「設定ファイルを開く」(`Ctrl+,`)を使うと、`config.toml` が無いときは雛形が作られてから開きます(§8)。起動しただけでは作られません。
+- `config.sample.toml` は、アプリが起動のたびと「設定ファイルを開く」のときに、無いか内容が違えば書き直します。編集しても元に戻ります。アプリはこのファイルを設定として読みません。設定は `config.toml` に書きます。
+
 アンインストールで「アプリのデータを削除する」を入れなかったときは、このフォルダーが残ります。
 
 ## 4. 画面と基本操作
@@ -52,7 +57,7 @@ guif の設定フォルダーは `%APPDATA%\dev.guif.app` です。次のファ�
 
 - 開き方: `Alt` または `F10` を押すとメニューバーに移ります。アクセスキーは `Alt+F`(ファイル)、`Alt+E`(編集)、`Alt+V`(表示)、`Alt+G`(移動)です。
 - 操作: `←` `→` でメニューを切り替え、`↓` または `Enter` で開きます。`↑` `↓` で項目を選び、`Enter` で実行します。`Esc` で閉じます。
-- 各項目の右側には、現在有効なキー割り当てが併記されます。キー割り当てを変えたときは、併記も変わります。「パスのコピー」には対応するキーがないため、併記はありません。
+- 各項目の右側には、現在有効なキー割り当てが併記されます。キー割り当てを変えたときは、併記も変わります。「パスのコピー」と「設定ファイルのチェック」には対応するキーがないため、併記はありません。
 - メニューの項目は、元のフォーカスがどこにあっても、ファイル一覧の対象に対して働きます。
 - 実行できない項目は灰色で表示され、項目名の下に理由が小さく表示されます。無効の項目は実行できません。
 
@@ -60,14 +65,14 @@ guif の設定フォルダーは `%APPDATA%\dev.guif.app` です。次のファ�
 
 | メニュー | 項目 |
 |---|---|
-| ファイル | 開く(Enter)、OSの関連付けで開く(Shift+Enter)、新規作成…(Ctrl+N)、新しいフォルダー…(Ctrl+Shift+N)、名前の変更(F2)、削除(Delete)、ZIPに圧縮(Ctrl+Alt+Z)、ZIPを展開(Ctrl+Alt+X)、終了(Ctrl+Q) |
+| ファイル | 開く(Enter)、OSの関連付けで開く(Shift+Enter)、新規作成…(Ctrl+N)、新しいフォルダー…(Ctrl+Shift+N)、名前の変更(F2)、削除(Delete)、ZIPに圧縮(Ctrl+Alt+Z)、ZIPを展開(Ctrl+Alt+X)、設定ファイルを開く(Ctrl+,)、設定ファイルのチェック、終了(Ctrl+Q) |
 | 編集 | 切り取り(Ctrl+X)、コピー(Ctrl+C)、貼り付け(Ctrl+V)、パスのコピー、すべて選択(Ctrl+A)、選択の解除(Esc)、検索(/) |
 | 表示 | ツリー(Ctrl+Shift+B)、隠しファイル(Ctrl+H)、サイズの列(Ctrl+Shift+S)、更新日時の列(Ctrl+Shift+T)、並び替え…(S) |
 | 移動 | 親フォルダーへ(Backspace)、パス欄へ移動(Ctrl+L)、履歴(Ctrl+Y)、ジャンプリスト(Ctrl+J)、ジャンプリストに追加(Ctrl+Shift+J) |
 
 「表示」メニューの上の4項目は、現在の状態をチェックの印(✓)で示します。
 
-「ファイル」の「OSの関連付けで開く」の後には、登録した外部アプリの項目が並びます(§7)。
+「ファイル」の「OSの関連付けで開く」の後には、登録した外部アプリの項目が並びます(§7)。「設定ファイルを開く」と「設定ファイルのチェック」は「ZIPを展開」と「終了」の間にあり、いつでも実行できます(§8)。
 
 ### 4.2 ファイルとフォルダーを開く
 
@@ -141,6 +146,7 @@ Ctrl、Alt、Meta のいずれかを伴う矢印キー、PageUp / PageDown、Hom
 | 開く | Enter |
 | 親フォルダーへ | Backspace |
 | 終了 | Ctrl+Q |
+| 設定ファイルを開く(§8) | Ctrl+, |
 | パス欄へ移動 | Ctrl+L |
 | 隠しファイルの表示の切り替え | Ctrl+H |
 | ツリーの表示の切り替え | Ctrl+Shift+B |
@@ -163,11 +169,13 @@ Ctrl、Alt、Meta のいずれかを伴う矢印キー、PageUp / PageDown、Hom
 
 完全削除(`Shift+Delete`)は独立した割り当てではなく、「削除」のキーに Shift を加えた操作です。復元できません。
 
-この版では、F5(再読み込み)、Ctrl+,(設定)、F1(キー割り当ての案内)に対応する機能はありません。
+`Ctrl+,` は「設定ファイルを開く」(操作 ID は `settings`)です。`Ctrl+,` は `Ctrl+Q`(終了)と同じく固定のキーで、ほかの割り当てより先に働きます。`settings` に別のキーを書くとそのキーでも開けますが、`settings = ""` と書いても `Ctrl+,` は無効になりません。検索バーの入力中、ダイアログの表示中、パスバーの編集中にも働きます。右クリックメニューやメニューバーを開いているときは、それを閉じてから開きます。
+
+この版では、F5(再読み込み)、F1(キー割り当ての案内)に対応する機能はありません。
 
 ### 6.1 キー割り当てを変える
 
-キー割り当ては、設定フォルダー(`%APPDATA%\dev.guif.app`)の `config.toml` を手で編集して変えます。編集する画面はありません。
+キー割り当ては、設定フォルダー(`%APPDATA%\dev.guif.app`)の `config.toml` を手で編集して変えます。編集する画面はありません。`config.toml` は「設定ファイルを開く」(`Ctrl+,`。§8)で開けます。
 
 `config.toml` に `[input_keymap_custom]` の表を書き、操作の ID を左辺、キーを右辺に書きます。
 
@@ -185,9 +193,10 @@ move_down = "ArrowDown,J"
 - キー本体は、英数字1文字(大文字と小文字を区別しません)か、次の名前です: `ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Escape`、`Delete`、`Backspace`、`Tab`、`Space`、`Home`、`End`、`PageUp`、`PageDown`、`F1`〜`F12`、`Comma`、`Plus`。名前の大文字と小文字は区別しません。
 - `,` と `+` はそのままでは書けません(`,` は複数のキーの区切り、`+` は連結に使うため)。`Comma` と `Plus` と書きます。例: `Ctrl+Comma`、`Ctrl+Plus`。スペースは `Space` と書きます。
 - 上の一覧にない名前は、キー割り当てとして受け付けられません。
-- 操作の ID は、`move_up`、`move_down`、`move_left`、`move_right`、`page_up`、`page_down`、`select_toggle`、`select_all`、`clear_selection`、`open`、`go_parent`、`exit`、`focus_path`、`toggle_hidden`、`toggle_tree`、`copy`、`cut`、`paste`、`delete`、`rename`、`new_file`、`new_folder`、`search`、`sort_menu`、`history`、`history_jump_list`、`jump_add`、`toggle_size`、`toggle_time`、`zip_create`、`zip_extract` です。
+- 操作の ID は、`move_up`、`move_down`、`move_left`、`move_right`、`page_up`、`page_down`、`select_toggle`、`select_all`、`clear_selection`、`open`、`go_parent`、`exit`、`settings`、`focus_path`、`toggle_hidden`、`toggle_tree`、`copy`、`cut`、`paste`、`delete`、`rename`、`new_file`、`new_folder`、`search`、`sort_menu`、`history`、`history_jump_list`、`jump_add`、`toggle_size`、`toggle_time`、`zip_create`、`zip_extract` です。
 - `config.toml` はアプリの起動時に1回だけ読み込みます。変更は再起動で反映されます。
 - `config.toml` が無いときは、既定のキー割り当てで起動します。読み込めないとき(書き方の誤りなど)は、既定のキー割り当てで起動し、その旨がステータスバーに表示されます。
+- 起動時の表示には、誤りのある設定項目と `config.toml` の行番号が入ります(例: `config.toml の不正なキー割り当て 2 件を無視しました: copy(12 行目), undo(13 行目)。`)。読み方は §8.4 を参照してください。
 
 ### 6.2 画面のテーマ
 
@@ -254,20 +263,20 @@ key = "Ctrl+Alt+C"
 
 [[external_apps]]
 name = "VS Codeで開く"
-program = "%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"
+program = "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe"
 args = ["{path}"]
 key = "Ctrl+Alt+V"
 
 [[external_apps]]
 name = "エクスプローラーで開く"
-program = "%SystemRoot%\explorer.exe"
+program = "%SystemRoot%\\explorer.exe"
 args = ["{dir}"]
 args_for_file = ["/select,", "{path}"]
 key = "Ctrl+Alt+E"
 
 [[external_apps]]
 name = "GitHub Desktopで開く"
-program = "%LOCALAPPDATA%\GitHubDesktop\GitHubDesktop.exe"
+program = "%LOCALAPPDATA%\\GitHubDesktop\\GitHubDesktop.exe"
 args = ["{dir}"]
 key = "Ctrl+Alt+Shift+G"
 ```
@@ -309,7 +318,7 @@ key = "Ctrl+Alt+Shift+G"
 - 区切りの無い実行ファイルの名前(例: `wt.exe`)。環境変数 `PATH` のフォルダーから探します。現在のフォルダーや guif のフォルダーは探しません。
 - 実行ファイルは `.exe` に限ります。`.bat`、`.cmd`、`.ps1`、ショートカット(`.lnk`)は使えません。
 - `program` の中の `%名前%` は、起動時に環境変数の値に置き換えます(例: `%LOCALAPPDATA%`)。名前は英字・数字・`_`・`(`・`)` で、先頭は英字か `_` です。それ以外の `%` は文字のまま残ります。定義されていない環境変数を使った登録は使われません。
-- TOML の文字列の中では `\` を `\` と書きます。
+- TOML の文字列の中では、`\` を `\\` と書きます(例: `"C:\\Tools\\app.exe"`)。
 
 キーについて:
 
@@ -353,7 +362,92 @@ args = ["-p", "Ubuntu", "-d", "{dir}"]
 ```toml
 [[external_apps]]
 name = "VS Codeで開く"
-program = "%ProgramFiles%\Microsoft VS Code\Code.exe"
+program = "%ProgramFiles%\\Microsoft VS Code\\Code.exe"
 args = ["{path}"]
 key = "Ctrl+Alt+V"
 ```
+
+## 8. 設定ファイルを開く・チェックする
+
+設定は `config.toml`(設定フォルダー `%APPDATA%\dev.guif.app` の中。§3)に書きます。設定を変える画面はありません。メニューバーの「ファイル」の次の2つの項目で、`config.toml` を開いて編集し、書き方を確かめます。
+
+| 項目 | キー | 動作 |
+|---|---|---|
+| 設定ファイルを開く | `Ctrl+,` | `config.toml` をエディターで開きます(§8.1) |
+| 設定ファイルのチェック | なし | `config.toml` の書き方を確かめ、結果をステータスバーに表示します(§8.5) |
+
+### 8.1 設定ファイルを開く
+
+「設定ファイルを開く」は次の順に動きます。
+
+1. 見本 `config.sample.toml` を書き出します(無いか、内容が違うときだけ。§8.3)。
+2. `config.toml` が無ければ、雛形を作ります(§8.2)。
+3. VS Code を探します。探すのは、利用者ごとにインストールした VS Code の場所 `%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe` だけです。見つかれば、VS Code で `config.toml` を開きます。
+4. 見つからなければ、`config.toml` を Windows の関連付けで開きます。`.toml` に関連付けが無いときは、Windows がアプリを選ぶ画面を出します。
+
+- 全ユーザー向けにインストールした VS Code(`%ProgramFiles%\Microsoft VS Code\Code.exe`)や、`PATH` の `code` は使いません。その場合は関連付けで開きます。`config.toml` の `external_apps` の登録(§7)も使いません。
+- 既にある `config.toml` は、内容が空でも、書き方に誤りがあっても、書き換えずにそのまま開きます。
+- 開いても、今の設定は変わりません。編集した内容は、guif を再起動したときに反映されます。
+
+結果はステータスバーに表示されます。
+
+| 表示 | 意味 |
+|---|---|
+| `config.toml を VS Code で開きました` | VS Code で開きました。 |
+| `VS Code が見つからないため、Windows の関連付けで config.toml を開きます` | VS Code が見つからないため、Windows の関連付けで開きます。 |
+| `config.toml を作成しました。`(前に付く) | `config.toml` が無かったため、雛形を作りました。例: `config.toml を作成しました。config.toml を VS Code で開きました` |
+| `config.toml を開けませんでした。 詳細: {Windows の文言}` | VS Code または関連付けのアプリを起動できませんでした。 |
+| `config.toml を作成できませんでした。 詳細: {Windows の文言}` | 雛形を作れなかったため、開きませんでした。 |
+| `config.toml を開けませんでした。ファイルではありません。` | `config.toml` という名前のフォルダーなど、ファイルでないものがあります。 |
+| `config.sample.toml を書き出せませんでした。 詳細: {Windows の文言}`(後ろに付く) | 見本を書き出せませんでした。`config.toml` を開く処理は続けます。 |
+
+### 8.2 雛形
+
+`config.toml` が無いときに「設定ファイルを開く」を実行すると、雛形の `config.toml` が作られます。雛形には、すべての設定項目(`ui_theme`、`input_keymap_custom`、`external_apps`)の説明、取り得る値、既定の値がコメントで書かれています。
+
+- 行の書き分けは次のとおりです。
+  - `## ` で始まる行は説明です。
+  - `# ` で始まる行は設定の行です。右辺の値が、書かないときに使われる既定の値です。
+- 設定を変えるときは、変えたい設定の行の先頭の `# ` を消してから値を書き換えます。表の中の設定(`[input_keymap_custom]`、`[[external_apps]]`)は、その表の見出しの行の `# ` も消します。`# ` を消していない行は、書いていないのと同じです。
+- 作った直後の雛形は、すべての設定の行がコメントのため、`config.toml` が無いときと同じ設定になります。
+- `ui_theme` は、最初の表の見出し(`[input_keymap_custom]`)より前に書きます。見出しの後に書くと、その表の中の項目として読まれます。
+- `external_apps` の行の `# ` を消すと、書いた登録だけが使われ、既定の4つは使われません(§7.3)。
+- 雛形は作るだけで、アプリがその後に書き換えることはありません。
+
+### 8.3 見本ファイル
+
+設定フォルダーの `config.sample.toml` は見本です。雛形と同じ内容(先頭の説明の数行だけが違います)で、アプリの版で使える設定がすべて書かれています。
+
+- アプリは、起動のたびと「設定ファイルを開く」のときに、`config.sample.toml` が無いか、内容がアプリの持つ見本と違えば書き直します。同じなら書きません。
+- 編集しても、次の起動で元に戻ります。設定は `config.toml` に書いてください。
+- アプリは `config.sample.toml` を設定として読みません。
+- 新しい版で設定項目が増えたときは、見本から必要な部分を `config.toml` に書き写します。アプリは既にある `config.toml` に項目を書き足しません。
+
+### 8.4 起動時の表示
+
+起動時に `config.toml` を読み、書き方を確かめます。誤りのある項目だけが既定の設定になり、正しい項目はそのまま使われます。ファイル全体を TOML として読めないときは、すべて既定の設定で起動します。誤りがあると、ステータスバーに次のように表示されます。
+
+- 誤りのある設定項目と、`config.toml` の中の行番号(1 から数えます)を表示します。例: `config.toml の 3 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`
+- 一覧は先頭の 5 件までを表示し、残りは `ほか {件数} 件` と表示します。ステータスバーに収まらない部分は省略されます。マウスのポインターを重ねると全文が表示されます。
+- guif が知らない設定(綴りの誤りなど)は無視し、その旨を表示します。対象は、最上位の `ui_theme`、`input_keymap_custom`、`external_apps` 以外の名前と、`external_apps` の登録の中の `name`、`program`、`args`、`args_for_file`、`key` 以外の名前です。例: `config.toml の不明な設定 2 件を無視しました: ui_them(2 行目), external_apps の 2 番目の agrs(18 行目)。`
+- `config.toml` に誤りか知らない設定があるときは、表示は 15 秒続きます。それ以外の起動時の表示は 6 秒です。
+- `config.toml` が無いときは何も表示しません。起動時に `config.toml` が作られることもありません。
+
+### 8.5 設定ファイルのチェック
+
+「設定ファイルのチェック」は、その時点の `config.toml` を読み、起動時と同じ確かめ方をして、結果をステータスバーに表示します。
+
+- 結果を表示するだけで、設定は変わりません。キー割り当て、テーマ、外部アプリの登録、メニューの項目は起動したときのままです。編集した内容は、guif を再起動したときに反映されます。
+- 結果は、次に起動したときにどう扱われるかを表します。表示の先頭に `設定ファイルのチェック(次の起動での扱い): ` が付きます。
+- `config.toml` を作ったり書き換えたりせず、見本も書き出しません。
+- 何度でも実行できます。新しい結果は、表示中の前の結果や起動時の表示を置き換えます。
+
+表示の例:
+
+| 表示 | 意味 |
+|---|---|
+| `設定ファイルのチェック(次の起動での扱い): 問題はありません。変更は再起動で反映されます` | 誤りも知らない設定もありません。 |
+| `設定ファイルのチェック(次の起動での扱い): config.toml がないため、既定の設定を使います。` | `config.toml` がありません。 |
+| `設定ファイルのチェック(次の起動での扱い): config.toml の不正なキー割り当て 1 件を無視しました: copy(12 行目)。` | 誤りがあります。表示の書き方は起動時(§8.4)と同じです。 |
+
+誤りがあるとき・読めないときの表示は 15 秒、問題が無いとき・`config.toml` が無いときの表示は 2.5 秒続きます。

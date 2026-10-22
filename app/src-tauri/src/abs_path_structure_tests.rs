@@ -442,10 +442,11 @@ fn checked_args_by_command() -> BTreeMap<String, Vec<String>> {
 }
 
 #[test]
-fn a_every_argument_of_every_command_is_classified_and_there_are_thirty_two_commands() {
+fn a_every_argument_of_every_command_is_classified_and_there_are_thirty_four_commands() {
     let commands = handler_commands();
     // SPEC-0300-0021: +external_apps_load (no argument: no row, no exemption needed) +external_app_launch (index / path / kind).
-    assert_eq!(commands.len(), 32, "generate_handler! has 32 commands (SPEC-0300-0011 第10版 R-89-1); update the tables if it changes");
+    // SPEC-0300-0022 (SPEC-0300-0011 第11版 R-89-1 "対象外"): +settings_file_check +settings_file_open (only `window` / `app`: no row, no exemption).
+    assert_eq!(commands.len(), 34, "generate_handler! has 34 commands (SPEC-0300-0011 第11版 R-89-1); update the tables if it changes");
     let _ = checked_args_by_command(); // panics on an unclassified argument
 }
 

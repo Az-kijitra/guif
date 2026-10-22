@@ -51,7 +51,7 @@ const DEFAULT_FOUR = [
   { index: 3, label: "GitHub Desktopで開く", shortcutText: "Ctrl+Alt+Shift+G" },
 ];
 
-const OLD_FILE = ["open", "os_open", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "exit"];
+const OLD_FILE = ["open", "os_open", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit"];
 
 describe("AC-1530: the default four in 「ファイル」", () => {
   const entries = fileMenu(input({ externalApps: DEFAULT_FOUR, externalTargetAvailable: true }));
@@ -59,7 +59,7 @@ describe("AC-1530: the default four in 「ファイル」", () => {
   it("sit after 「OSの関連付けで開く」 and its separator, in order, then a separator, then 「新規作成…」", () => {
     expect(shape(entries)).toEqual([
       "open", "os_open", "---", "ext:0", "ext:1", "ext:2", "ext:3", "---", "new_file", "new_folder", "---", "rename", "delete", "---",
-      "zip_create", "zip_extract", "---", "exit",
+      "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit",
     ]);
   });
 
@@ -98,7 +98,7 @@ describe("AC-1501: no usable registration means the old menu, byte for byte", ()
 describe("the number of registrations (R-1552: 1 .. 20)", () => {
   it("one registration: one item between the two separators", () => {
     expect(shape(fileMenu(input({ externalApps: [DEFAULT_FOUR[0]], externalTargetAvailable: true })))).toEqual([
-      "open", "os_open", "---", "ext:0", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "exit",
+      "open", "os_open", "---", "ext:0", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit",
     ]);
   });
 
@@ -108,7 +108,7 @@ describe("the number of registrations (R-1552: 1 .. 20)", () => {
     expect(ext(entries).map((e) => e.label)).toEqual(apps.map((a) => a.label));
     const at = shape(entries).indexOf("ext:0");
     expect(shape(entries).slice(at, at + 20)).toEqual(apps.map((a) => `ext:${a.index}`));
-    expect(items(entries)).toHaveLength(9 + 20); // the nine fixed items of 「ファイル」 + the twenty registered ones
+    expect(items(entries)).toHaveLength(11 + 20); // the eleven fixed items of 「ファイル」 (SPEC-0300-0020 第3版: + 設定ファイルを開く / 設定ファイルのチェック) + the twenty registered ones
   });
 
   it("the id carries the registration's own index (not the position) -- the list may skip numbers", () => {

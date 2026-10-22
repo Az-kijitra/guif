@@ -25,6 +25,7 @@ use std::ffi::OsString;
 
 use super::commands::{check_main_window, registry_dto, ExternalAppDto, ExternalAppsDto, InvalidRegistrationDto};
 use super::registry::Registry;
+use crate::shared::schema::config_lines::ExternalAppsLines;
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
 
 fn env(name: &str) -> Option<OsString> {
@@ -44,7 +45,7 @@ fn app(name: &str, program: &str, key: RawValue<String>) -> RawExternalApp {
 }
 
 fn dto_of(raw: ExternalAppsRaw) -> ExternalAppsDto {
-    registry_dto(&Registry::from_raw(&raw, &env, None))
+    registry_dto(&Registry::from_raw(&raw, &ExternalAppsLines::default(), &env, None))
 }
 
 #[test]
@@ -55,10 +56,10 @@ fn the_default_four_are_sent_as_numbers_without_a_name() {
     assert_eq!(
         dto.apps,
         vec![
-            ExternalAppDto { index: 0, default_no: Some(1), name: None, key: Some("Ctrl+Alt+C".into()), key_invalid: false },
-            ExternalAppDto { index: 1, default_no: Some(2), name: None, key: Some("Ctrl+Alt+V".into()), key_invalid: false },
-            ExternalAppDto { index: 2, default_no: Some(3), name: None, key: Some("Ctrl+Alt+E".into()), key_invalid: false },
-            ExternalAppDto { index: 3, default_no: Some(4), name: None, key: Some("Ctrl+Alt+Shift+G".into()), key_invalid: false },
+            ExternalAppDto { index: 0, default_no: Some(1), name: None, key: Some("Ctrl+Alt+C".into()), key_invalid: false, key_line: None },
+            ExternalAppDto { index: 1, default_no: Some(2), name: None, key: Some("Ctrl+Alt+V".into()), key_invalid: false, key_line: None },
+            ExternalAppDto { index: 2, default_no: Some(3), name: None, key: Some("Ctrl+Alt+E".into()), key_invalid: false, key_line: None },
+            ExternalAppDto { index: 3, default_no: Some(4), name: None, key: Some("Ctrl+Alt+Shift+G".into()), key_invalid: false, key_line: None },
         ]
     );
 }
@@ -81,8 +82,8 @@ fn user_registrations_are_sent_with_their_name_and_no_default_mark() {
     assert_eq!(
         dto.apps,
         vec![
-            ExternalAppDto { index: 0, default_no: None, name: Some("Mine".into()), key: Some("Ctrl+Alt+M".into()), key_invalid: false },
-            ExternalAppDto { index: 1, default_no: None, name: Some("日本語の名前".into()), key: None, key_invalid: false },
+            ExternalAppDto { index: 0, default_no: None, name: Some("Mine".into()), key: Some("Ctrl+Alt+M".into()), key_invalid: false, key_line: None },
+            ExternalAppDto { index: 1, default_no: None, name: Some("日本語の名前".into()), key: None, key_invalid: false, key_line: None },
         ]
     );
 }
@@ -102,7 +103,7 @@ fn the_index_is_the_position_among_the_usable_registrations_not_in_config_toml()
 #[test]
 fn a_key_that_is_not_a_string_is_flagged_and_the_registration_stays() {
     let dto = dto_of(ExternalAppsRaw::Array(vec![app("k", r"C:\t\k.exe", RawValue::WrongType)]));
-    assert_eq!(dto.apps, vec![ExternalAppDto { index: 0, default_no: None, name: Some("k".into()), key: None, key_invalid: true }]);
+    assert_eq!(dto.apps, vec![ExternalAppDto { index: 0, default_no: None, name: Some("k".into()), key: None, key_invalid: true, key_line: None }]);
 }
 
 #[test]
@@ -114,8 +115,8 @@ fn the_invalid_registrations_are_sent_in_position_order_with_their_reason() {
     assert_eq!(
         dto.invalid,
         vec![
-            InvalidRegistrationDto { position: 1, name: Some("bad".into()), reason: "invalid" },
-            InvalidRegistrationDto { position: 22, name: Some("n21".into()), reason: "limit" },
+            InvalidRegistrationDto { position: 1, name: Some("bad".into()), reason: "invalid", line: None },
+            InvalidRegistrationDto { position: 22, name: Some("n21".into()), reason: "limit", line: None },
         ]
     );
 }
@@ -131,7 +132,7 @@ fn the_dto_has_no_program_or_arguments_for_the_screen_r1581() {
 
 #[test]
 fn the_app_dto_serializes_in_camel_case() {
-    let s = toml::to_string(&ExternalAppDto { index: 2, default_no: Some(3), name: None, key: Some("Ctrl+Alt+E".into()), key_invalid: false }).expect("serialize");
+    let s = toml::to_string(&ExternalAppDto { index: 2, default_no: Some(3), name: None, key: Some("Ctrl+Alt+E".into()), key_invalid: false, key_line: None }).expect("serialize");
     assert!(s.contains("defaultNo = 3"), "{s}");
     assert!(s.contains("keyInvalid = false"), "{s}");
     assert!(s.contains("index = 2"), "{s}");
@@ -140,7 +141,7 @@ fn the_app_dto_serializes_in_camel_case() {
 
 #[test]
 fn the_snapshot_dto_serializes_type_error_in_camel_case() {
-    let s = toml::to_string(&InvalidRegistrationDto { position: 3, name: Some("VS Codeで開く".into()), reason: "invalid" }).expect("serialize");
+    let s = toml::to_string(&InvalidRegistrationDto { position: 3, name: Some("VS Codeで開く".into()), reason: "invalid", line: None }).expect("serialize");
     assert!(s.contains("position = 3"), "{s}");
     assert!(s.contains("reason = \"invalid\""), "{s}");
 }

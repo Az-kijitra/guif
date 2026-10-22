@@ -15,18 +15,24 @@ export interface ExternalAppDto {
   key: string | null;
   // `key` was present but not a string (R-1503-1).
   keyInvalid: boolean;
+  // SPEC-0300-0022 R-1642: the line of the registration's `key`, or null (always null for the default four).
+  keyLine: number | null;
 }
 
 export interface InvalidRegistrationDto {
   position: number;
   name: string | null;
   reason: "invalid" | "limit";
+  // SPEC-0300-0022 R-1642: the line of the registration (its heading / element), or null.
+  line: number | null;
 }
 
 export interface ExternalAppsDto {
   apps: ExternalAppDto[];
   invalid: InvalidRegistrationDto[];
   typeError: boolean;
+  // SPEC-0300-0022 R-1642: the line of `external_apps`, or null.
+  typeErrorLine: number | null;
 }
 
 export type ExternalAppKind = "file" | "dir";

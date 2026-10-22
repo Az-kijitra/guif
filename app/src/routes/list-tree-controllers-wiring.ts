@@ -42,6 +42,8 @@ export interface ListTreeControllersDeps {
   treeFullyVisibleRows: () => number;
   // SPEC-0300-0016 R-710: the `focus_path` action's implementation.
   pathBar?: { open(): void };
+  // SPEC-0300-0022 R-1671: the `settings` action (open the settings file).
+  settingsFile?: ListActionDeps<FsEntry>["settingsFile"];
 }
 
 export function createListTreeControllers(deps: ListTreeControllersDeps) {
@@ -67,6 +69,7 @@ export function createListTreeControllers(deps: ListTreeControllersDeps) {
     sortMenu: { toggle: deps.sortMenuToggle },
     focus: { container: deps.focusContainer },
     pathBar: deps.pathBar,
+    settingsFile: deps.settingsFile,
   });
 
   const onTreeAction = createTreeActionHandler({

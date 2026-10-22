@@ -28,15 +28,15 @@ import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
 
 type KeymapDto = Awaited<ReturnType<typeof configLoadKeymap>>;
-const keymap = (over: Partial<KeymapDto> = {}): KeymapDto => ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, ...over }) as KeymapDto;
+const keymap = (over: Partial<KeymapDto> = {}): KeymapDto => ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over }) as KeymapDto;
 
 const DEFAULT_FOUR: ExternalAppsDto["apps"] = [
-  { index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C", keyInvalid: false },
-  { index: 1, defaultNo: 2, name: null, key: "Ctrl+Alt+V", keyInvalid: false },
-  { index: 2, defaultNo: 3, name: null, key: "Ctrl+Alt+E", keyInvalid: false },
-  { index: 3, defaultNo: 4, name: null, key: "Ctrl+Alt+Shift+G", keyInvalid: false },
+  { index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C", keyInvalid: false, keyLine: null },
+  { index: 1, defaultNo: 2, name: null, key: "Ctrl+Alt+V", keyInvalid: false, keyLine: null },
+  { index: 2, defaultNo: 3, name: null, key: "Ctrl+Alt+E", keyInvalid: false, keyLine: null },
+  { index: 3, defaultNo: 4, name: null, key: "Ctrl+Alt+Shift+G", keyInvalid: false, keyLine: null },
 ];
-const ext = (over: Partial<ExternalAppsDto> = {}): ExternalAppsDto => ({ apps: DEFAULT_FOUR, invalid: [], typeError: false, ...over });
+const ext = (over: Partial<ExternalAppsDto> = {}): ExternalAppsDto => ({ apps: DEFAULT_FOUR, invalid: [], typeError: false, typeErrorLine: null, ...over }) as ExternalAppsDto;
 
 const THEME_NOTICE = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
 const W32 = "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。";
@@ -47,7 +47,7 @@ const W9C_TERMINAL = "外部アプリのキー 1 件は使いません(正しく
 beforeEach(() => {
   vi.mocked(configLoadKeymap).mockReset();
   vi.mocked(externalAppsLoad).mockReset();
-  externalAppsState.hydrate({ entries: [], invalid: [], typeError: false, rejectedKeys: [] }); // the singleton is shared by the tests of this file
+  externalAppsState.hydrate({ entries: [], invalid: [], typeError: false, typeErrorLine: null, rejectedKeys: [] }); // the singleton is shared by the tests of this file
 });
 
 afterEach(() => {
@@ -74,7 +74,7 @@ describe("a plain install (AC-1500 / AC-1535)", () => {
 
   it("user registrations arrive with their own names", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap());
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [{ index: 0, defaultNo: null, name: "My Tool", key: "Ctrl+Alt+T", keyInvalid: false }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [{ index: 0, defaultNo: null, name: "My Tool", key: "Ctrl+Alt+T", keyInvalid: false, keyLine: null }] }));
     await loadKeymapForStartup();
     expect(externalAppsState.entries.map((e) => e.label)).toEqual(["My Tool"]);
   });
@@ -83,7 +83,7 @@ describe("a plain install (AC-1500 / AC-1535)", () => {
 describe("the notice parts and their order (R-1574, AC-1508)", () => {
   it("registrations: the W-9A sentence alone", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap());
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [], invalid: [{ position: 2, name: "bad", reason: "invalid" }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [], invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }));
     expect((await loadKeymapForStartup()).notice).toBe(W9A_2);
   });
 
@@ -95,7 +95,7 @@ describe("the notice parts and their order (R-1574, AC-1508)", () => {
   });
 
   it("AC-1532: a default key that the user's keymap took (`sort_menu = Ctrl+Alt+C`) is dropped and reported with the screen's name of the default", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C" }] }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }] }));
     vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext());
     expect((await loadKeymapForStartup()).notice).toBe(W9C_TERMINAL);
     expect(externalAppsState.entries[0].keys).toEqual([]);
@@ -104,7 +104,7 @@ describe("the notice parts and their order (R-1574, AC-1508)", () => {
   });
 
   it("the effective keymap is the VALIDATED one: an invalid override does not take the key", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Bogus+Nonsense" }] }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Bogus+Nonsense", line: null }] }));
     vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext());
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe("config.toml の不正なキー割り当て 1 件を無視しました: sort_menu。"); // only the keymap notice; the registrations are all usable
@@ -112,24 +112,24 @@ describe("the notice parts and their order (R-1574, AC-1508)", () => {
   });
 
   it("freeing a key by customising makes it usable (R-1551 note)", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "zip_create", value: "Ctrl+Shift+Z" }] }));
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [{ index: 0, defaultNo: null, name: "Z", key: "Ctrl+Alt+Z", keyInvalid: false }] }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "zip_create", value: "Ctrl+Shift+Z", line: null }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ apps: [{ index: 0, defaultNo: null, name: "Z", key: "Ctrl+Alt+Z", keyInvalid: false, keyLine: null }] }));
     expect((await loadKeymapForStartup()).notice).toBeNull();
     expect(externalAppsState.entries[0].keys).toEqual(["Ctrl+Alt+Z"]);
   });
 
   it("AC-1508: keymap -> theme -> external registrations -> external keys, ONE message, one half-width space between the sentences", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(
-      keymap({ entries: [{ actionId: "no_such_action", value: "Ctrl+X" }, { actionId: "sort_menu", value: "Ctrl+Alt+C" }], uiThemeInvalid: true }),
+      keymap({ entries: [{ actionId: "no_such_action", value: "Ctrl+X", line: null }, { actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }], uiThemeInvalid: true }),
     );
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ invalid: [{ position: 2, name: "bad", reason: "invalid" }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }));
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(`${W32} ${THEME_NOTICE} ${W9A_2} ${W9C_TERMINAL}`);
   });
 
   it("the type error comes between the registrations and the keys", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C" }] }));
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ typeError: true, invalid: [{ position: 2, name: "bad", reason: "invalid" }] }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ typeError: true, invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }));
     expect((await loadKeymapForStartup()).notice).toBe(`${W9A_2} ${W9B} ${W9C_TERMINAL}`);
   });
 
@@ -173,8 +173,8 @@ describe("a failure of the external-apps load itself (§3.16.6, MINOR-33)", () =
 
 describe("runStartupHydrate: the config.toml part stays in front and is not erased (R-1574, AC-1508)", () => {
   it("the external sentences are in the config part, followed by ' / ' and the ui-state and navigation notices", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C" }] }));
-    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ invalid: [{ position: 2, name: "bad", reason: "invalid" }] }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ entries: [{ actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }] }));
+    vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }));
     await runStartupHydrate({
       loadUiState: async () => ({ notice: "UI" }),
       loadKeymap: loadKeymapForStartup,

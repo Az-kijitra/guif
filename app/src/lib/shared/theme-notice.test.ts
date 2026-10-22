@@ -50,3 +50,34 @@ describe("buildThemeNotice (SPEC-0300-0017 R-917-4, AC-958)", () => {
     expect(buildThemeNotice(true)).toBe(buildThemeNotice(true));
   });
 });
+
+// SPEC-0300-0022 R-1642 / 第5版 W-33: `config.toml の {N} 行目の ui_theme を解釈できないため、…` when the reading side returned the `ui_theme` line;
+// a null / absent line keeps the sentence above (R-1660: "行番号が得られないときは現行の文のまま").
+// API: buildThemeNotice(invalid: boolean, line?: number | null): string | null
+describe("buildThemeNotice with the line of ui_theme (SPEC-0300-0022 W-33, AC-1640)", () => {
+  const WITH_LINE = (n: number): string =>
+    `config.toml の ${n} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`;
+
+  it("AC-1640: line 3 -> `config.toml の 3 行目の ui_theme を解釈できないため、…`", () => {
+    expect(buildThemeNotice(true, 3)).toBe(WITH_LINE(3));
+  });
+
+  it("a null or undefined line keeps the current sentence", () => {
+    const plain = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
+    expect(buildThemeNotice(true, null)).toBe(plain);
+    expect(buildThemeNotice(true, undefined)).toBe(plain);
+    expect(buildThemeNotice(true)).toBe(plain);
+  });
+
+  it("not invalid -> null, whatever the line", () => {
+    expect(buildThemeNotice(false, 3)).toBeNull();
+    expect(buildThemeNotice(false, null)).toBeNull();
+  });
+
+  it("the sentence stays one line ending with a full stop", () => {
+    const text = buildThemeNotice(true, 120) ?? "";
+    expect(text).toBe(WITH_LINE(120));
+    expect(text.endsWith("。")).toBe(true);
+    expect(text).not.toMatch(/[\r\n]/);
+  });
+});

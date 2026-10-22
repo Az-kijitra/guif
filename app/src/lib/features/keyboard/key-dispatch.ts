@@ -77,7 +77,6 @@ export function isTreeHandledAction(actionId: string): boolean {
 export type SearchAction = "cancel" | "confirm" | "history_prev" | "query_clear";
 
 export interface DispatchContext {
-  isSettingsOpen: boolean;
   isOverlayOpen: boolean;
   isMenuBarActive: boolean;
   isTreeFocused: boolean;
@@ -88,7 +87,8 @@ export interface DispatchContext {
   // true while the search bar is open, regardless of where focus is.
   isSearchActive?: boolean;
   customOverrides: Record<string, string>;
-  onHardcodedShortcut: (action: "exit" | "settings") => boolean;
+  // SPEC-0300-0022 R-1606: the event is passed so that an auto-repeat (`repeat`) of Ctrl+, can be swallowed by the wiring.
+  onHardcodedShortcut: (action: "exit" | "settings", event: KeydownLikeEvent) => boolean;
   onExitAction: (action: string) => boolean;
   onOverlayKey: (action: string | null, event: KeydownLikeEvent) => boolean;
   onMenuBarKey: (action: string | null, event: KeydownLikeEvent) => boolean;
@@ -183,11 +183,10 @@ function matchesSearchInputAction(event: KeydownLikeEvent): SearchAction | null 
 // Priority order (R-12, unchanged — R-14-2 is an independent guard next to
 // R-14, not a new numbered row, MUST-41/42):
 //   1. hardcoded shortcuts (Ctrl+Q / Ctrl+,) — independent of keymap/state
-//   2. settings screen open -> suppress all further processing (R-14)
+//   (2. there is no settings screen, so no suppression: SPEC-0300-0010 第18版 R-14)
 //   R-14-2. search input focused -> only its own 4 keys are processed
 //      (SPEC-0300-0012 R-120/R-121, SPEC-0200-0001 §3.1.4). Evaluated
-//      immediately after R-14 and before priority 2 below, so R-14's
-//      guarantee (nothing fires while settings is open) is never weakened.
+//      before priority 2 below.
 //   R-14-4. path bar editing -> its own fixed keys / 3 overlay actions only
 //      (SPEC-0300-0016 R-760~R-765); evaluated before the search-active Escape.
 //   3. exit action resolved via the keymap (in case it's rebound)
@@ -198,7 +197,7 @@ function matchesSearchInputAction(event: KeydownLikeEvent): SearchAction | null 
 export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): boolean {
   const hardcoded = matchesHardcodedShortcut(event);
   if (hardcoded !== null) {
-    return !!ctx.onHardcodedShortcut(hardcoded);
+    return !!ctx.onHardcodedShortcut(hardcoded, event);
   }
 
   // R-14-5-2: while the menu bar is active the key goes to it right after priority 1 and the chain stops there.
@@ -215,10 +214,6 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
     }
   }
 
-  if (ctx.isSettingsOpen) {
-    return false;
-  }
-
   if (ctx.isSearchInputFocused) {
     // R-14-2-7: Tab moves between Tab stops even while the search input is
     // focused, ahead of the 4 recognized search keys.
@@ -231,7 +226,7 @@ export function dispatchKeydown(event: KeydownLikeEvent, ctx: DispatchContext): 
       return true;
     }
     // Not one of the 4 recognized search keys: stop the dispatch chain here
-    // (mirrors the isSettingsOpen `return false` pattern) without
+    // without
     // preventDefault, so the <input> keeps handling it as ordinary text
     // entry (AC-123).
     return false;

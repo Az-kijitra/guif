@@ -168,6 +168,12 @@ function declaresExternalApps(toml) {
   return false;
 }
 
+// SPEC-0300-0021 R-1585 2 / AC-1506, SPEC-0300-0022 R-1682 / AC-1680, SPEC-0400-0001 R-08-1 1: the ONLY scenarios that may start without `external_apps` in
+// config.toml. S8 (specs/theme.mjs) is a deliberately broken file; F0 (specs/settings-file.mjs, AC-1645) starts WITHOUT a config.toml. Both are
+// guarded by (i) the page-side block of `external_app_launch` (BLOCKED_COMMANDS), (ii) the backend scope check, (iii) this list. The same list is
+// in src/e2e-external-apps-static.test.ts (ALLOW_LIST).
+export const UNDECLARED_EXTERNAL_APPS_SCENARIOS = ["S8", "F0"];
+
 /** Throws AbortRun unless `configToml` (a string) declares external_apps; null / undefined / non-strings are refused too. */
 export function assertExternalAppsDeclared(configToml) {
   if (typeof configToml === "string" && declaresExternalApps(configToml)) return;
@@ -178,13 +184,16 @@ export function assertExternalAppsDeclared(configToml) {
  * Launches `tauri dev` and returns once the override line has been verified and the main
  * page is listed by the debug port. Throws AbortRun (after killing the app) otherwise.
  */
-export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML, navigationToml, fx, allowUndeclaredExternalApps = false }) {
+export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverride, fsScope, configToml = DEFAULT_CONFIG_TOML, navigationToml, seedConfigDir, fx, allowUndeclaredExternalApps = false, scenarioId }) {
   // R-10: the backend refuses file operations outside this folder (the test folder, realpath form).
   if (typeof fsScope !== "string" || !path.isAbsolute(fsScope) || !fs.statSync(fsScope).isDirectory()) {
     throw new AbortRun(`unusable E2E file scope folder: ${fsScope}`);
   }
   // R-1585 2: refuse before anything is created. The ONE explicit opt-out is a deliberately broken config (theme.mjs S8).
   const configText = typeof configToml === "function" ? configToml(fx) : configToml;
+  if (allowUndeclaredExternalApps && !UNDECLARED_EXTERNAL_APPS_SCENARIOS.includes(scenarioId)) {
+    throw new AbortRun(`scenario ${scenarioId ?? "(none)"} is not on the list of scenarios that may start without external_apps (${UNDECLARED_EXTERNAL_APPS_SCENARIOS.join(", ")})`);
+  }
   if (!allowUndeclaredExternalApps) assertExternalAppsDeclared(configText);
   const scopeRoot = fs.realpathSync.native(fsScope);
   await assertPortsFree([VITE_PORT, cdpPort]);
@@ -222,6 +231,25 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
       removeDir(cfgDir);
       removeDir(userData);
       throw new AbortRun(`could not write the test navigation.toml: ${e.message}`);
+    }
+  }
+
+  // SPEC-0300-0022 AC-1620 / AC-1621 / AC-1623: a scenario may put a `config.sample.toml` (a file with a given content and age, or a FOLDER) into the throw-away
+  // config folder before the start, to see what the start does with it. `seedConfigDir` is `(fx) => [{ name, content?, dir?, mtime? }]`; ONLY the name
+  // `config.sample.toml` is accepted (never `config.toml`: that one is written above, after the external_apps check) and only inside cfgDir.
+  if (seedConfigDir !== undefined && seedConfigDir !== null) {
+    try {
+      for (const entry of seedConfigDir(fx)) {
+        if (entry.name !== "config.sample.toml") throw new Error(`seedConfigDir may only create config.sample.toml (got ${entry.name})`);
+        const target = path.join(cfgDir, entry.name);
+        if (entry.dir === true) fs.mkdirSync(target);
+        else fs.writeFileSync(target, entry.content, "utf8");
+        if (entry.mtime !== undefined) fs.utimesSync(target, entry.mtime, entry.mtime);
+      }
+    } catch (e) {
+      removeDir(cfgDir);
+      removeDir(userData);
+      throw new AbortRun(`could not seed the test config folder: ${e.message}`);
     }
   }
 
@@ -317,6 +345,16 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
   }
   handle.target = target;
   return handle;
+}
+
+// SPEC-0300-0022 R-1681 / AC-1608 (SPEC-0200-0001 §3.17.11): the backend prints ONE line per decision of "設定ファイルを開く" to its standard error while an
+// E2E scope is active (`[e2e] settings-file launch: refused|vscode|association`); no file is written. This reads those lines from the app's
+// standard-error log (`handle.logDir`), in order. `refused` = the scope refused the launch; `vscode` / `association` = a launch was started
+// (must never be seen in an E2E).
+const SETTINGS_LAUNCH_LINE = /^\[e2e\] settings-file launch: (\S+)\s*$/;
+export function readSettingsLaunchLog(logDir) {
+  const text = fs.readFileSync(path.join(logDir, "app.err.log"), "utf8");
+  return text.split(/\r?\n/).map((line) => SETTINGS_LAUNCH_LINE.exec(line)).filter((m) => m !== null).map((m) => m[1]);
 }
 
 /** --attach: reuse an app that THIS script started with --keep (so its override is known). */

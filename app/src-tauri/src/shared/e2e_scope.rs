@@ -265,6 +265,22 @@ pub fn check_launch(exe: &Path, target: &Path) -> Result<(), ScopeViolation> {
     with_scope(|s| s.check_launch(exe, target))
 }
 
+/// SPEC-0300-0022 R-1681 / AC-1608 (SPEC-0200-0001 §3.17.11): the one line the E2E harness reads from the app's standard error to
+/// learn what "設定ファイルを開く" decided: `refused` (the scope refused), `vscode` or `association` (just before that launch).
+pub fn settings_launch_line(event: &str) -> String {
+    format!("[e2e] settings-file launch: {event}")
+}
+
+/// Prints `settings_launch_line(event)` to standard error while an E2E scope is active, and does nothing otherwise (always, in
+/// release builds, which never set a scope). It writes NO file (R-1614 and SPEC-0400-0001 R-10 stay untouched) and reads no
+/// environment (SHOULD-180: only `mod imp` does).
+pub fn note_settings_launch(event: &str) {
+    let scope_active = with_scope(|_| Err(ScopeViolation(String::new()))).is_err();
+    if scope_active {
+        eprintln!("{}", settings_launch_line(event));
+    }
+}
+
 /// SPEC-0200-0001 §3.12.9 AC-88 / MINOR-11 (unit-test-writer): a `#[cfg(test)]` thread-local scope
 /// override, OUTSIDE `mod imp`. `ScopeGuard::drop` always restores the previous value, so a test
 /// never leaks a scope into another test (even with `--test-threads=1`, which reuses threads).

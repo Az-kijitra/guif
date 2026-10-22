@@ -11,6 +11,8 @@ export interface MenuExecutorDeps {
   copyPath: () => void | Promise<unknown>;
   // SPEC-0300-0021 R-1552 / R-1554: a registered app's item (`ext:<registration index>`). The target is decided by the caller at launch time.
   launchExternal?: (index: number) => void;
+  // SPEC-0300-0022 R-1672: 設定ファイルを開く / 設定ファイルのチェック (no target, no operation id).
+  settingsFile?: { open(): unknown; check(): unknown };
 }
 
 // Items whose list action is NOT their own id.
@@ -29,6 +31,14 @@ export function createMenuExecutor(deps: MenuExecutorDeps): (id: ItemId | string
     const external = /^ext:(\d+)$/.exec(id);
     if (external !== null) {
       deps.launchExternal?.(Number(external[1]));
+      return;
+    }
+    if (id === "config_open") {
+      void deps.settingsFile?.open();
+      return;
+    }
+    if (id === "config_check") {
+      void deps.settingsFile?.check();
       return;
     }
     if (id === "exit") {

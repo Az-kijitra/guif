@@ -32,6 +32,8 @@ export const ITEM_LABELS = {
   zip_create: OPERATION_NAMES.zipCompress,
   zip_extract: OPERATION_NAMES.zipExtract,
   exit: "終了",
+  config_open: "設定ファイルを開く", // W-A0
+  config_check: "設定ファイルのチェック", // W-A1
   cut: OPERATION_NAMES.cut,
   copy: OPERATION_NAMES.copy,
   paste: OPERATION_NAMES.paste,

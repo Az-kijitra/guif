@@ -31,7 +31,8 @@ export interface MainKeydownWiringDeps {
   // SPEC-0300-0018 / SPEC-0200-0001 §3.9.17.7: the right-click menu (optional).
   contextMenu?: { readonly isOpen: boolean; handleKey(event: KeydownLikeEvent): boolean };
   search: { readonly active: boolean; readonly inputFocused: boolean };
-  onHardcodedShortcut: (action: "exit" | "settings") => boolean;
+  // SPEC-0300-0022 R-1606: the event is passed so that an auto-repeat of Ctrl+, can be swallowed.
+  onHardcodedShortcut: (action: "exit" | "settings", event: KeydownLikeEvent) => boolean;
   onExitAction: (action: string) => boolean;
   handleModalKey: (event: KeydownLikeEvent) => boolean;
   handleSortMenuKey: (event: KeydownLikeEvent) => boolean;
@@ -88,7 +89,6 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       pathBarEditing: deps.pathBar?.editing ?? false,
     });
     const ctx: DispatchContext = {
-      isSettingsOpen: false,
       isMenuBarActive: deps.menuBar?.active ?? false,
       // R-14-5-1: not while an overlay is shown or the path bar is being edited.
       canActivateMenuBar: deps.menuBar !== undefined && !flags.isOverlayOpen && !flags.isPathBarEditing,

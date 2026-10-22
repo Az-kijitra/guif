@@ -39,8 +39,8 @@ pub fn viewer_window_path(app: &AppHandle) -> io::Result<PathBuf> {
 }
 
 /// Full path of `config.toml` (SPEC-0300-0010 R-45; SPEC-0200-0001 §3.6.1).
-/// Read-only from the app's perspective (R-77-4/MUST-92: `config/config_toml.rs`
-/// is the only reader, and there is no writer anywhere in the crate).
+/// Read-only from this module's perspective (R-77-4/MUST-92: `config/config_toml.rs`
+/// is the only reader; the one writer in the crate is `settings_file/scaffold.rs`, create-new only, SPEC-0300-0022 R-1610).
 pub fn config_path(app: &AppHandle) -> io::Result<PathBuf> {
     Ok(app_config_dir(app)?.join("config.toml"))
 }

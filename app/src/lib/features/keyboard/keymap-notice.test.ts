@@ -18,6 +18,7 @@ const W30_CLOSING = "既定のキー割り当てを使います。";
 // SPEC-0300-0019 第3版 W-31 (SPEC-0300-0021 R-1504 / D-13): when the whole file is unreadable the external apps fall back to the default four too.
 const W31_CLOSING = "既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。";
 const W30_2 = "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。";
+const W30_2_AT = (n: number): string => `config.toml の ${n} 行目の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。`;
 
 describe("buildKeymapLoadNotice: behaviour when `opts` is omitted (R-45-2 / R-45-5)", () => {
   it("returns null when there is no parse error and no invalid action (R-45-1: no notice)", () => {
@@ -119,7 +120,59 @@ describe("buildKeymapLoadNotice: W-30-2 (wholeFile === false: input_keymap_custo
     expect(buildKeymapLoadNotice(typeError, [], { alsoDefaultsTheme: false })).toBe(W30_2);
   });
 
-  it("does not use the message or a line number even when one is given", () => {
-    expect(buildKeymapLoadNotice({ message: "anything else", line: 7, wholeFile: false }, [])).toBe(W30_2);
+  // SPEC-0300-0022 R-1642 / 第5版 W-30-2: the line of the `input_keymap_custom` key (or table heading) is named when the reading side has it.
+  it("SPEC-0300-0022 W-30-2 with a line: `config.toml の {N} 行目の input_keymap_custom を解釈できないため、…`; the message is still not used", () => {
+    expect(buildKeymapLoadNotice({ message: "anything else", line: 7, wholeFile: false }, [])).toBe(W30_2_AT(7));
+    expect(buildKeymapLoadNotice({ message: "anything else", line: 7, wholeFile: false }, [], { alsoDefaultsTheme: true })).toBe(W30_2_AT(7));
+  });
+
+  it("SPEC-0300-0022: a null line keeps the sentence without a line (R-1642 \"行番号が得られない項目は、行を書かない\")", () => {
+    expect(buildKeymapLoadNotice({ message: "x", line: null, wholeFile: false }, [])).toBe(W30_2);
+  });
+});
+
+// SPEC-0300-0022 R-1642 / R-1660 / R-1662 / 第5版 W-32: each id carries its line as `copy(12 行目)`; the list is cut after 5 items (`ほか {m} 件`) while {n}
+// stays the full count. The lines come from `validateKeymapEntries().invalidActionLines` (parallel to `invalidActions`) via `opts.invalidActionLines`.
+describe("buildKeymapLoadNotice: W-32 with lines and the 5-item cut (SPEC-0300-0022 AC-1640, AC-1643)", () => {
+  it("AC-1640: `copy(12 行目)` -- the id, then the line in half-width parentheses", () => {
+    expect(buildKeymapLoadNotice(null, ["copy"], { invalidActionLines: [12] })).toBe(
+      "config.toml の不正なキー割り当て 1 件を無視しました: copy(12 行目)。",
+    );
+  });
+
+  it("an id whose line is null is listed without parentheses, beside ones that have a line", () => {
+    expect(buildKeymapLoadNotice(null, ["undo", "copy"], { invalidActionLines: [null, 12] })).toBe(
+      "config.toml の不正なキー割り当て 2 件を無視しました: undo, copy(12 行目)。",
+    );
+  });
+
+  it("without `invalidActionLines` the sentence is exactly the pre-SPEC-0300-0022 one", () => {
+    expect(buildKeymapLoadNotice(null, ["undo", "sort_menu"], {})).toBe("config.toml の不正なキー割り当て 2 件を無視しました: undo, sort_menu。");
+  });
+
+  it("five items are listed in full", () => {
+    const ids = ["a1", "a2", "a3", "a4", "a5"];
+    expect(buildKeymapLoadNotice(null, ids, { invalidActionLines: [1, 2, 3, 4, 5] })).toBe(
+      "config.toml の不正なキー割り当て 5 件を無視しました: a1(1 行目), a2(2 行目), a3(3 行目), a4(4 行目), a5(5 行目)。",
+    );
+  });
+
+  it("AC-1643: eight invalid entries -> {n} is 8, the list is the first five and `ほか 3 件`", () => {
+    const ids = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"];
+    expect(buildKeymapLoadNotice(null, ids, { invalidActionLines: [1, 2, 3, 4, 5, 6, 7, 8] })).toBe(
+      "config.toml の不正なキー割り当て 8 件を無視しました: a1(1 行目), a2(2 行目), a3(3 行目), a4(4 行目), a5(5 行目), ほか 3 件。",
+    );
+  });
+
+  it("the cut also applies when no line is known", () => {
+    expect(buildKeymapLoadNotice(null, ["a", "b", "c", "d", "e", "f"], {})).toBe(
+      "config.toml の不正なキー割り当て 6 件を無視しました: a, b, c, d, e, ほか 1 件。",
+    );
+  });
+
+  it("a parse error still takes precedence over the invalid actions, lines or not", () => {
+    const text = buildKeymapLoadNotice({ message: "x", line: 2 }, ["copy"], { invalidActionLines: [12] }) ?? "";
+    expect(text).toContain("2 行目を読み込めなかった");
+    expect(text).not.toContain("copy");
   });
 });

@@ -96,7 +96,6 @@ describe("computeDispatchOverlayFlags (§3.3.2)", () => {
 describe("integration with dispatchKeydown (search bar open + modal opened)", () => {
   function makeCtx(flags: ReturnType<typeof computeDispatchOverlayFlags>, overrides: Record<string, unknown> = {}) {
     return {
-      isSettingsOpen: false,
       isMenuBarActive: false,
       isTreeFocused: false,
       customOverrides: {},
@@ -160,7 +159,7 @@ describe("integration with dispatchKeydown (search bar open + modal opened)", ()
     expect(ctx.onExitAction).not.toHaveBeenCalled();
     expect(ctx.onOverlayKey).toHaveBeenCalled();
     dispatchKeydown(key("q", { ctrlKey: true }), ctx);
-    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit");
+    expect(ctx.onHardcodedShortcut).toHaveBeenCalledWith("exit", expect.anything());
   });
 });
 
@@ -224,7 +223,6 @@ describe("AC-56: modal-local keys are independent of custom keymap overrides", (
     const modal = { isOpen: true, top: { kind: "form" as const }, dispatch: vi.fn() };
     const handler = createModalKeyHandler({ modal, focus: { cycle: vi.fn() } });
     const ctx = {
-      isSettingsOpen: false,
       isOverlayOpen: true,
       isMenuBarActive: false,
       isTreeFocused: false,

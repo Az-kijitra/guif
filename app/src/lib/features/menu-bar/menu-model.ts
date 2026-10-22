@@ -3,12 +3,13 @@
 // The reasons are the SAME constants the key operations show (SHARED_SENTENCES, AC-1314).
 
 import { SHARED_SENTENCES } from "$lib/shared/messages";
-import { formatExitShortcut, formatShortcut } from "./shortcut-format";
+import { formatExitShortcut, formatSettingsShortcut, formatShortcut } from "./shortcut-format";
 import { headingLabel, ITEM_LABELS, MENU_HEADINGS } from "./messages";
 
 export type MenuId = "file" | "edit" | "view" | "go";
 export type ItemId =
   | "open" | "os_open" | "new_file" | "new_folder" | "rename" | "delete" | "zip_create" | "zip_extract" | "exit"
+  | "config_open" | "config_check"
   | "cut" | "copy" | "paste" | "copy_path" | "select_all" | "clear_selection" | "search"
   | "toggle_tree" | "toggle_hidden" | "toggle_size" | "toggle_time" | "sort_menu"
   | "go_parent" | "focus_path" | "history" | "history_jump_list" | "jump_add";
@@ -62,7 +63,7 @@ type Slot = ItemId | "---" | "@ext";
 
 // R-1310: the fixed order; a separator is never first, last or doubled.
 const LAYOUT: Record<MenuId, readonly Slot[]> = {
-  file: ["open", "os_open", "---", "@ext", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "exit"],
+  file: ["open", "os_open", "---", "@ext", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit"],
   edit: ["cut", "copy", "paste", "copy_path", "---", "select_all", "clear_selection", "---", "search"],
   view: ["toggle_tree", "toggle_hidden", "toggle_size", "toggle_time", "---", "sort_menu"],
   go: ["go_parent", "focus_path", "---", "history", "history_jump_list", "jump_add"],
@@ -116,10 +117,11 @@ export function evaluateBarItem(id: BarItemId, input: BarInput): { enabled: bool
   }
 }
 
-// R-1330 / R-1331: the text of the shortcut; copy_path never has one; the exit item shows Ctrl+Q even when its binding is empty.
+// R-1330 / R-1331: the text of the shortcut; copy_path and config_check never have one; config_open shows `settings` (Ctrl+, when empty, SPEC-0300-0022 T-28); the exit item shows Ctrl+Q even when its binding is empty.
 function shortcutOf(id: ItemId, input: BarInput): string {
-  if (id === "copy_path") return "";
+  if (id === "copy_path" || id === "config_check") return "";
   if (id === "exit") return formatExitShortcut(input.shortcuts.exit);
+  if (id === "config_open") return formatSettingsShortcut(input.shortcuts.config_open);
   return formatShortcut(input.shortcuts[id]);
 }
 

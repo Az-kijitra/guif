@@ -1,6 +1,7 @@
 //! `external_apps/` (SPEC-0300-0021 external-app launch; SPEC-0200-0001 §3.16). A vertical slice like `viewer/` and
-//! `archive/`: it depends on `shared/` and `std` only (never `config/` or another feature; `lib.rs` is the one place that
-//! joins `config/` and this module, by handing the RAW `external_apps` of `config.toml` to `registry::Registry::from_raw`).
+//! `archive/`: it depends on `shared/` and `std` only (never `config/` or another feature; `config_bridge/evaluate.rs` -- the part of the
+//! bootstrap that `lib.rs` delegates to, SPEC-0200-0001 §3.17 H-2 -- is the one place that joins `config/` and this module, by handing the
+//! RAW `external_apps` of `config.toml` to `registry::Registry::from_raw`).
 //!
 //! - `defaults`: the four default registrations as DATA (no wording, no special branches; AC-1534).
 //! - `registry`: start-up validation of the registrations (R-1503 / R-1505) and the default four (R-1502 / R-1504).
@@ -9,6 +10,7 @@
 //! - `exists`: "is there a file here" (`probe` / pure `classify`).
 //! - `target`: the target value, `{dir}` of a file, the pre-launch check (R-1525 / R-1536).
 //! - `launch`: the launch plan and the ONE process-creation site (`spawn`).
+//! - `open_file`: open ONE file with an absolute-path executable, no registration involved (SPEC-0300-0022, H-3).
 //! - `guarded`: the inner layer of `external_app_launch` (ABS -> resolve -> scope -> verify -> spawn).
 //! - `error`: `LaunchError` and its wire DTO (codes only; the wording is on the screen).
 //! - `commands`: the two Tauri commands (`external_apps_load`, `external_app_launch`).
@@ -21,6 +23,7 @@ pub mod error;
 pub mod exists;
 pub mod guarded;
 pub mod launch;
+pub mod open_file;
 pub mod program;
 pub mod registry;
 pub mod target;
@@ -45,3 +48,11 @@ mod registry_tests;
 mod target_tests;
 #[cfg(test)]
 mod template_tests;
+
+// SPEC-0300-0022 (TDD, unit-test-writer, 2026-10-20; SPEC-0200-0001 §3.17.3, H-3). `open_file` (above) and the line fields of `Registry` / the DTOs:
+#[cfg(test)]
+mod commands_lines_tests;
+#[cfg(test)]
+mod open_file_tests;
+#[cfg(test)]
+mod registry_lines_tests;

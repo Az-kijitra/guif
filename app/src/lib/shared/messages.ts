@@ -41,6 +41,8 @@ export const COMMON = {
   loading: "読み込み中…", // W-12 / W-51
   noItems: "項目なし", // W-14 / W-16
   detailPrefix: "詳細: ", // R-1204
+  // SPEC-0300-0022 R-1662: the tail of a cut list (W-32 / W-9A / W-9C / W-AC): the first 5 items, then `ほか {m} 件`.
+  listRest: (m: number): string => `ほか ${m} 件`,
 } as const;
 
 // Sentences that more than one feature shows.
@@ -81,6 +83,9 @@ export const FILE_OP_ERROR_MESSAGES: Record<string, string> = {
 export const SHARED_NOTICES = {
   // W-33
   themeInvalid: 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。',
+  // W-33 with the line (SPEC-0300-0022 第5版)
+  themeInvalidAt: (line: number): string =>
+    `config.toml の ${line} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`,
   // W-36 (R-242 item 3)
   navigationCorrupted: "navigation.toml を読み込めなかったため、履歴・ジャンプリスト・検索履歴を空にしました。元のファイルは退避しました。",
   // W-37

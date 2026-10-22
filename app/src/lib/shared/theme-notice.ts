@@ -4,7 +4,8 @@
 
 import { SHARED_NOTICES } from "$lib/shared/messages";
 
-export function buildThemeNotice(invalid: boolean): string | null {
+// SPEC-0300-0022 W-33: with the line of `ui_theme`, `config.toml の {N} 行目の ui_theme を…`; without it the sentence is as before (R-1660).
+export function buildThemeNotice(invalid: boolean, line?: number | null): string | null {
   if (!invalid) return null;
-  return SHARED_NOTICES.themeInvalid;
+  return line == null ? SHARED_NOTICES.themeInvalid : SHARED_NOTICES.themeInvalidAt(line);
 }

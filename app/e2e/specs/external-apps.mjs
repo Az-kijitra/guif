@@ -698,9 +698,13 @@ function e2Registrations(fx) {
     { program: p, args: ["G"] },
   ];
 }
+// SPEC-0300-0019 第5版 §4.9 W-9A / W-9C with the lines (SPEC-0300-0022 R-1642, ISS-0234 (d)): the file is `ui_theme` (line 1), E2_KEYMAP (line 2), then 5 lines per
+// registration (heading, name, program, args, key) starting on line 3, and 3 lines for the nameless 7 (heading, program, args). The line of an invalid
+// registration is the line of the field that is wrong (3: its relative `program`), or its heading when no field is to blame (7: no name; the name cannot
+// be shown, so only `7(32 行目)`); the line of an unusable key is its `key` line (5 lines apart: 7, 12, 26, 31).
 const E2_NOTICE =
-  "config.toml の外部アプリの登録 2 件を使いません: 3(壊れたC), 7。 " +
-  "外部アプリのキー 4 件は使いません(正しくないか、他の操作と重なっています): 重なるA: Ctrl+Alt+C, 固定B: Ctrl+Q, 重なるE: Ctrl+Alt+K, タブF: Tab。";
+  "config.toml の外部アプリの登録 2 件を使いません: 3(壊れたC、15 行目), 7(32 行目)。 " +
+  "外部アプリのキー 4 件は使いません(正しくないか、他の操作と重なっています): 重なるA: Ctrl+Alt+C(7 行目), 固定B: Ctrl+Q(12 行目), 重なるE: Ctrl+Alt+K(26 行目), タブF: Tab(31 行目)。";
 
 const e2Tests = [
   {

@@ -8,10 +8,14 @@
 //!   `fs_ops::commands` registers the commands below, including R-40~R-45
 //!   copy/move progress events and cancellation, ISS-0052)
 //! - `config` (persistence I/O, SPEC-0200-0001 §6; `config/config_toml.rs` is the
-//!   sole reader of `config.toml` (`input_keymap_custom` + `ui_theme`, read once into
-//!   `config::commands::StartupConfig`), SPEC-0200-0001
+//!   sole reader of `config.toml` (`input_keymap_custom` + `ui_theme` + `external_apps`, read once into
+//!   `config::startup_config::StartupConfig`), SPEC-0200-0001
 //!   §3.6.11.3 MUST-92 — the former `keymap/` module was removed once
-//!   `config/io.rs`'s deletion left it with no remaining caller)
+//!   `config/io.rs`'s deletion left it with no remaining caller; the one writer of the
+//!   crate is `settings_file/scaffold.rs`, create-new only, SPEC-0300-0022)
+//! - `settings_file` / `config_bridge` (SPEC-0300-0022 "設定ファイルを開く" and "設定ファイルのチェック",
+//!   SPEC-0200-0001 §3.17; `config_bridge` is the part of this bootstrap that joins `config`,
+//!   `external_apps` and `settings_file`)
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
 //! - `archive` (SPEC-0300-0014 ZIP create/extract — Phase 5; see
 //!   `archive/mod.rs`)
@@ -32,6 +36,10 @@ pub mod fs;
 pub mod external_apps;
 pub mod fs_ops;
 pub mod shared;
+// SPEC-0300-0022 "設定ファイルを開く" (SPEC-0200-0001 §3.17): `settings_file` is the feature (shared + std only); `config_bridge` is the
+// part of this bootstrap that joins `config`, `external_apps` and `settings_file` (H-2) and is imported by nothing but this file.
+pub mod settings_file;
+pub mod config_bridge;
 // SPEC-0300-0015 (Phase 6, ReflexViewer): not implemented yet (TDD). See
 // `viewer/mod.rs` for the planned submodule list; this declaration alone is
 // enough for `viewer/*_tests.rs` to be picked up by `cargo test`, and is
@@ -53,6 +61,16 @@ mod abs_path_structure_tests;
 // first test of this file lists (`external_apps/mod.rs`, `shared/mod.rs`, `config/mod.rs`, `shared/schema/mod.rs`).
 #[cfg(test)]
 mod external_apps_structure_tests;
+
+// SPEC-0300-0022 (TDD, unit-test-writer, 2026-10-20; SPEC-0200-0001 §3.17.4): structure tests of the settings-file feature and the three-place
+// wiring of its two commands (`pub mod settings_file;` / `pub mod config_bridge;` above, `.manage(SettingsFileLock)` and the two entries
+// of `generate_handler!` below).
+#[cfg(test)]
+mod settings_file_structure_tests;
+#[cfg(test)]
+mod acl_consistency_bridge_tests;
+#[cfg(test)]
+mod settings_file_structure_tail_tests;
 
 /// Builds and runs the Tauri application. This is the sole place in the
 /// backend that `use`s more than one feature module's public command
@@ -103,6 +121,9 @@ pub fn run() {
         // SPEC-0300-0011 R-18 / SPEC-0200-0001 §3.10.4: the main window's HWND (the OS clipboard
         // owner), stored in `.setup`.
         .manage(fs_ops::clipboard::commands::ClipboardOwner::default())
+        // SPEC-0300-0022 (SPEC-0200-0001 §3.17.3): serializes the two writers of `config.sample.toml` (the start-up one and
+        // "設定ファイルを開く"), which would otherwise race for the same temporary file.
+        .manage(settings_file::sample::SettingsFileLock::default())
         .setup(|app| {
             // SPEC-0400-0001 R-06-2: a bad `REFLEXFILES_CONFIG_DIR` (debug builds) is a startup
             // error; it never falls back to the real config folder.
@@ -139,6 +160,9 @@ pub fn run() {
             // R-919-1: the window is created hidden and shown from here, after the background colour is set.
             // Rust decides when (no front-end round trip, no `core:window:allow-show`).
             main.show()?;
+            // SPEC-0300-0022 R-1621 / AC-1624: the up-to-date `config.sample.toml` is written in the background AFTER the first
+            // window is shown, so it never delays the first list. A failure is one line on standard error (R-1623).
+            config_bridge::sample_startup::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -174,6 +198,9 @@ pub fn run() {
             fs_ops::clipboard::commands::clipboard_clear_if_unchanged,
             external_apps::commands::external_apps_load,
             external_apps::commands::external_app_launch,
+            // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): "設定ファイルを開く" / "設定ファイルのチェック", main window only.
+            config_bridge::open::settings_file_open,
+            config_bridge::check::settings_file_check,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -181,21 +208,16 @@ pub fn run() {
     // R-917-8: `config.toml` is read here, once, before any window exists. A bad
     // `REFLEXFILES_CONFIG_DIR` (SPEC-0400-0001 R-06-2) is a start-up error, distinct from an unreadable file.
     config::paths::config_dir_override().expect("invalid REFLEXFILES_CONFIG_DIR (SPEC-0400-0001 R-06-2)");
-    let startup = config::commands::StartupConfig::load(app.handle());
+    // SPEC-0300-0022 R-1651 / SPEC-0200-0001 §3.17.3 (H-2): start-up and "設定ファイルのチェック" take the snapshot through the SAME
+    // function, `config_bridge::snapshot`, which also reads the environment for the external apps (`config_bridge/env.rs`; `lib.rs`
+    // reads none any more, MUST-142 as rewritten) and keeps `config/` and `external_apps/` from importing each other.
+    let (startup, external_apps_registry) = config_bridge::snapshot(app.handle());
     // R-917 / R-918: a fixed theme becomes the event loop's preferred theme, so tao creates the title bar
     // and the WebView (main and viewer alike) in it and ignores OS switches. Following the OS requests
     // nothing (never `set_theme(None)`), so the platform keeps tracking the OS.
     if let Some(theme) = shared::window_theme::requested_theme(startup.theme.setting) {
         app.set_theme(Some(theme));
     }
-    // SPEC-0300-0021 / SPEC-0200-0001 §3.16.15 MUST-142: `lib.rs` is the ONE reader of the environment for the external apps.
-    // The raw `external_apps` of the start-up snapshot, the start-up `PATH` and the lookup of `%NAME%` variables are injected;
-    // `external_apps/` itself reads nothing (and `config/` and `external_apps/` never import each other).
-    let external_apps_registry = external_apps::registry::Registry::from_raw(
-        &startup.loaded.external_apps,
-        &|name| std::env::var_os(name),
-        std::env::var_os("PATH"),
-    );
     app.manage(startup);
     app.manage(external_apps_registry);
     app.run(|_app, _event| {});

@@ -42,3 +42,8 @@ mod e2e_scope_launch_tests;
 // Product name shared by the main window and the viewer title (SPEC-0300-0015 R-423).
 #[cfg(test)]
 mod product_tests;
+
+// SPEC-0300-0022 (TDD, unit-test-writer, 2026-10-20): the E2E launch record of "設定ファイルを開く" (`note_settings_launch`).
+// code-generator: ALSO add `pub mod config_lines;` to `shared/schema/mod.rs` (pure data, SPEC-0200-0001 §3.17.3).
+#[cfg(test)]
+mod e2e_scope_settings_tests;

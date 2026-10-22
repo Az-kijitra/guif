@@ -2,6 +2,7 @@
 // From the NORMAL FORM binding string (built in routes with the keyboard feature's normalisation) to the display text.
 
 const EXIT_DEFAULT = "Ctrl+Q";
+const SETTINGS_DEFAULT = "Ctrl+,";
 
 // The internal spellings of a key body that are shown differently.
 const KEY_DISPLAY: Record<string, string> = {
@@ -24,4 +25,10 @@ export function formatShortcut(binding: string | undefined): string {
 export function formatExitShortcut(binding: string | undefined): string {
   const shown = formatShortcut(binding);
   return shown === "" ? EXIT_DEFAULT : shown;
+}
+
+// The 設定ファイルを開く item (SPEC-0300-0022 R-1670, T-28): Ctrl+, is pre-empted at priority 1, so an empty binding still shows it.
+export function formatSettingsShortcut(binding: string | undefined): string {
+  const shown = formatShortcut(binding);
+  return shown === "" ? SETTINGS_DEFAULT : shown;
 }

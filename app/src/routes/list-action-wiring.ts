@@ -78,6 +78,8 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   // implementation (path-bar-wiring.ts::openPathBar). Optional like tree/
   // sortMenu/focus: unset => the action does nothing.
   pathBar?: { open(): void };
+  // SPEC-0300-0022 R-1671 / SPEC-0200-0001 §3.17.9: the `settings` action = open the settings file (optional like pathBar: unset => nothing).
+  settingsFile?: { open(): void | Promise<unknown> };
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
@@ -94,7 +96,7 @@ export interface ListActionOptions {
 }
 
 export function createListActionHandler<E extends EntryLike>(deps: ListActionDeps<E>) {
-  return function onListAction(action: string | null, event: { shiftKey: boolean }, opts?: ListActionOptions): boolean {
+  return function onListAction(action: string | null, event: { shiftKey: boolean; repeat?: boolean }, opts?: ListActionOptions): boolean {
     if (action === null) return false;
 
     // R-14-14: consumed but a no-op while the tree has focus (keys only; the menu skips this guard, R-1340-1).
@@ -193,6 +195,10 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
       // TREE_FOCUS_BLOCKED_ACTIONS).
       case "focus_path":
         deps.pathBar?.open();
+        return true;
+      // SPEC-0300-0022 R-1606: an auto-repeat is consumed but runs nothing (a menu call has no `repeat`).
+      case "settings":
+        if (!event.repeat) void deps.settingsFile?.open();
         return true;
       // MUST-94: the tree's reaction to toggle_tree is composed HERE (not
       // inside list-state.svelte.ts) so file-list/list-state.svelte.ts never
