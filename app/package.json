@@ -1,9 +1,9 @@
 {
-  "name": "reflexfiles-successor",
+  "name": "guif",
   "private": true,
   "version": "0.3.0",
   "type": "module",
-  "description": "MVP Phase 1 (file list / tree view, keyboard navigation). See docs/architecture/proposals/SPEC-0200-0001.md and SPEC-0400-0001.md.",
+  "description": "A keyboard-driven modern Windows filer built with Tauri 2, Rust, and Svelte 5.",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
