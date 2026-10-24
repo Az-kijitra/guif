@@ -3,19 +3,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// [静的 / 単体] Spec: SPEC-0300-0017 第8版 R-913-1-1 (the table: classification -> `--vw-hl-*` variable -> light / dark adopted value; exactly three
-//   adjusted colours: light built_in `#e36209 -> #c24e00`, light addition text `#22863a -> #1e7f35`, dark section `#1f6feb -> #4a8cf7`; plain text and
-//   unstyled classes use `--vw-fg`; bold / italic as in the official stylesheet), 【再レビュー m-d】 (selector SPECIFICITY equals the official
-//   stylesheet's: compound selectors are written in the official form, never flattened to single classes, never relying on source order),
-//   R-913-1 第8版注記 (the values live ONLY in `viewer-theme.css`, as `--vw-*` variables), AC-905-1 (c), SPEC-0300-0015 R-466-7 / R-466-8 (every colour is
-//   >= 4.5:1 against its own background), AC-528 (the unit part: "宣言が表の行・値と過不足なく一致し、コントラスト比が 4.5:1 以上").
-// Architecture: SPEC-0200-0001 §3.14.7 "配色" (`--vw-hl-*` in `viewer-theme.css`, light in `html`, dark inside the existing `prefers-color-scheme: dark`
-//   block; the rules `.hljs-keyword, .hljs-doctag { color: var(--vw-hl-keyword) }` ... with the official compound selectors; the three adjusted
-//   colours carry the official value and the ratio in a comment).
-//
-//
-// Variable names are taken from the table of R-913-1-1 (the spec calls them examples but the design says "変数名は表に従い"); if the implementer
-// renames them, change the NAMES below together with that decision -- the structure of the check stays.
+// [静的] Spec: SPEC-0300-0023 R-1727 (the 13 highlight colours are COMPUTED by the back end: GitHub / GitHub Dark values, only those below 4.5:1 adjusted; the table of
+//   values, the 4.5:1 maths and the six-preset check are Rust tests: `highlight_tests.rs` / AC-1725), SPEC-0200-0001 §3.18.15 MUST-1 (no colour value in CSS).
+//   KEPT from SPEC-0300-0017 第8版 R-913-1-1: the classification -> variable mapping (`.hljs-keyword { color: var(--vw-hl-keyword) }` ...), selector SPECIFICITY equal to the
+//   official stylesheet (compound selectors, no !important), plain text / unstyled classes inherit --vw-fg, bold / italic as official, addition / deletion carry text + background.
+// Variable names are the table's; the stylesheet declares none of them (the initialization script sets them).
 
 const CSS_PATH = resolve(__dirname, "routes", "viewer", "viewer-theme.css");
 const RAW = readFileSync(CSS_PATH, "utf-8");
@@ -36,8 +28,6 @@ function darkBlock(css: string): { light: string; dark: string } {
   }
   return { light: css.slice(0, m.index) + css.slice(i), dark: css.slice(start, i - 1) };
 }
-const { light: LIGHT_PART, dark: DARK_PART } = darkBlock(CSS);
-
 function rulesOf(css: string): { selectors: string[]; body: Map<string, string> }[] {
   const out: { selectors: string[]; body: Map<string, string> }[] = [];
   const re = /([^{}]+)\{([^{}]*)\}/g;
@@ -52,48 +42,7 @@ function rulesOf(css: string): { selectors: string[]; body: Map<string, string> 
   }
   return out;
 }
-const declsOfHtml = (part: string): Map<string, string> => {
-  const merged = new Map<string, string>();
-  for (const r of rulesOf(part)) if (r.selectors.includes("html")) for (const [k, v] of r.body) merged.set(k, v);
-  return merged;
-};
-const norm = (v: string | undefined): string => {
-  const t = (v ?? "<missing>").trim().toLowerCase();
-  const m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(t);
-  return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : t;
-};
-
-// ---- the table of R-913-1-1 ----------------------------------------------------------------------------------------------------------
-const HL_LIGHT: Record<string, string> = {
-  "--vw-hl-keyword": "#d73a49",
-  "--vw-hl-title": "#6f42c1",
-  "--vw-hl-constant": "#005cc5",
-  "--vw-hl-string": "#032f62",
-  "--vw-hl-builtin": "#c24e00", // adjusted (official #e36209)
-  "--vw-hl-comment": "#6a737d",
-  "--vw-hl-name": "#22863a",
-  "--vw-hl-section": "#005cc5",
-  "--vw-hl-bullet": "#735c0f",
-  "--vw-hl-addition-fg": "#1e7f35", // adjusted (official #22863a)
-  "--vw-hl-addition-bg": "#f0fff4",
-  "--vw-hl-deletion-fg": "#b31d28",
-  "--vw-hl-deletion-bg": "#ffeef0",
-};
-const HL_DARK: Record<string, string> = {
-  "--vw-hl-keyword": "#ff7b72",
-  "--vw-hl-title": "#d2a8ff",
-  "--vw-hl-constant": "#79c0ff",
-  "--vw-hl-string": "#a5d6ff",
-  "--vw-hl-builtin": "#ffa657",
-  "--vw-hl-comment": "#8b949e",
-  "--vw-hl-name": "#7ee787",
-  "--vw-hl-section": "#4a8cf7", // adjusted (official #1f6feb)
-  "--vw-hl-bullet": "#f2cc60",
-  "--vw-hl-addition-fg": "#aff5b4",
-  "--vw-hl-addition-bg": "#033a16",
-  "--vw-hl-deletion-fg": "#ffdcd7",
-  "--vw-hl-deletion-bg": "#67060c",
-};
+const norm = (v: string | undefined): string => (v ?? "<missing>").trim().toLowerCase();
 
 // classification (official selector, in the official compound form) -> the variable that colours it
 const COLOUR_RULES: [string, string][] = [
@@ -120,55 +69,6 @@ const declOf = (selector: string, prop: string): string | undefined => {
   for (const r of rulesOf(CSS)) if (r.selectors.includes(selector) && r.body.has(prop)) v = r.body.get(prop);
   return v;
 };
-
-// WCAG 2.1 relative luminance contrast
-function lum(hex: string): number {
-  let h = norm(hex).replace("#", "");
-  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-const contrast = (a: string, b: string): number => {
-  const [x, y] = [lum(a), lum(b)];
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-};
-
-describe("R-913-1-1 / AC-905-1 (c): the --vw-hl-* declarations equal the table, in both themes, with nothing extra and nothing missing", () => {
-  const lightDecls = declsOfHtml(LIGHT_PART);
-  const darkDecls = declsOfHtml(DARK_PART);
-  const hlNames = (d: Map<string, string>): string[] => [...d.keys()].filter((k) => k.startsWith("--vw-hl-")).sort();
-
-  it("light (`html`): exactly the 13 variables with the adopted values", () => {
-    expect(hlNames(lightDecls)).toEqual(Object.keys(HL_LIGHT).sort());
-    for (const [k, v] of Object.entries(HL_LIGHT)) expect(norm(lightDecls.get(k)), k).toBe(norm(v));
-  });
-
-  it("dark (`@media (prefers-color-scheme: dark) { html }`): exactly the same 13 names with the adopted values", () => {
-    expect(hlNames(darkDecls)).toEqual(Object.keys(HL_DARK).sort());
-    for (const [k, v] of Object.entries(HL_DARK)) expect(norm(darkDecls.get(k)), k).toBe(norm(v));
-  });
-
-  it("light and dark declare the SAME hl variable names (a theme switch can never leave one unset)", () => {
-    expect(hlNames(lightDecls)).toEqual(hlNames(darkDecls));
-  });
-
-  it("every declaration of the stylesheet is a --vw-* custom property or a plain property (no --ui-*, no custom names outside --vw-)", () => {
-    const names = [...CSS.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]);
-    expect(names.filter((n) => !n.startsWith("--vw-"))).toEqual([]);
-  });
-
-  it("exactly three colours differ from the official github / github-dark values, and the comments keep the official value", () => {
-    const adjusted = [
-      ["--vw-hl-builtin", "light", "#e36209"],
-      ["--vw-hl-addition-fg", "light", "#22863a"],
-      ["--vw-hl-section", "dark", "#1f6feb"],
-    ] as const;
-    for (const [, , official] of adjusted) expect(RAW.toLowerCase(), `the official ${official} must be recorded in a comment`).toContain(official);
-    expect(norm(lightDecls.get("--vw-hl-builtin"))).not.toBe("#e36209");
-    expect(norm(lightDecls.get("--vw-hl-addition-fg"))).not.toBe("#22863a");
-    expect(norm(darkDecls.get("--vw-hl-section"))).not.toBe("#1f6feb");
-  });
-});
 
 describe("the colour rules: official classifications -> variables (R-466-7)", () => {
   it.each(COLOUR_RULES)("%s { color: var(%s) }", (selector, variable) => {
@@ -242,45 +142,15 @@ describe("【再レビュー m-d】 specificity equals the official stylesheet's
   });
 });
 
-describe("R-466-8 / AC-528: every colour is at least 4.5:1 against its own background (computed from the values in the CSS)", () => {
-  const read = (part: string): Map<string, string> => declsOfHtml(part);
-
-  it("light: each text colour on --vw-bg", () => {
-    const d = read(LIGHT_PART);
-    const bg = d.get("--vw-bg") ?? "#fff";
-    for (const k of ["keyword", "title", "constant", "string", "builtin", "comment", "name", "section", "bullet"]) {
-      expect(contrast(d.get(`--vw-hl-${k}`) ?? "", bg), k).toBeGreaterThanOrEqual(4.5);
-    }
+describe("R-1727 / MUST-1: the highlight rules reference variables only", () => {
+  it("no --vw-hl-* variable is declared in the stylesheet, and no @media theme block exists", () => {
+    expect([...CSS.matchAll(/(--vw-hl-[\w-]+)\s*:/g)].map((m) => m[1])).toEqual([]);
+    expect(CSS).not.toMatch(/prefers-color-scheme/);
   });
 
-  it("dark: each text colour on --vw-bg", () => {
-    const d = read(DARK_PART);
-    const bg = d.get("--vw-bg") ?? "#1e1e1e";
-    for (const k of ["keyword", "title", "constant", "string", "builtin", "comment", "name", "section", "bullet"]) {
-      expect(contrast(d.get(`--vw-hl-${k}`) ?? "", bg), k).toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("addition / deletion on their OWN background, both themes", () => {
-    for (const part of [LIGHT_PART, DARK_PART]) {
-      const d = read(part);
-      for (const k of ["addition", "deletion"]) {
-        expect(contrast(d.get(`--vw-hl-${k}-fg`) ?? "", d.get(`--vw-hl-${k}-bg`) ?? ""), `${k} ${part === LIGHT_PART ? "light" : "dark"}`).toBeGreaterThanOrEqual(4.5);
-      }
-    }
-  });
-
-  it("the line-number colour on the gutter and on the body (SPEC-0300-0015 R-462-4: dark #8c8c8c is 4.55 / 4.96)", () => {
-    for (const part of [LIGHT_PART, DARK_PART]) {
-      const d = read(part);
-      expect(contrast(d.get("--vw-lineno") ?? "", d.get("--vw-gutter-bg") ?? ""), "on the gutter").toBeGreaterThanOrEqual(4.5);
-      expect(contrast(d.get("--vw-lineno") ?? "", d.get("--vw-bg") ?? ""), "on the body").toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("the helper itself: black on white is 21, #8c8c8c on #252526 is about 4.55", () => {
-    expect(contrast("#000", "#fff")).toBeCloseTo(21, 5);
-    expect(contrast("#8c8c8c", "#252526")).toBeGreaterThan(4.5);
-    expect(contrast("#8c8c8c", "#252526")).toBeLessThan(4.6);
+  it("every hl variable used by a rule is one of the 13 names (no stray variable)", () => {
+    const used = new Set([...CSS.matchAll(/var\((--vw-hl-[\w-]+)\)/g)].map((m) => m[1]));
+    const known = ["keyword", "title", "constant", "string", "builtin", "comment", "name", "section", "bullet", "addition-fg", "addition-bg", "deletion-fg", "deletion-bg"].map((k) => `--vw-hl-${k}`);
+    expect([...used].sort()).toEqual([...known].sort());
   });
 });

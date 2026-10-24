@@ -58,7 +58,9 @@ fn the_new_modules_and_their_test_modules_are_wired() {
         (
             "config/mod.rs",
             &["config_toml_lines", "startup_config"],
-            &["config_toml_inline_tests", "config_toml_lines_tests", "config_toml_load_lines_tests", "startup_config_lines_tests"],
+            // SPEC-0300-0023: `startup_config_lines_tests` is replaced by `startup_config_snapshot_tests` (appearance_structure_tests wires the rest)
+            // (the lines / load tests were migrated to `config_toml_lines_keys_tests` / `config_toml_load_keys_tests` for SPEC-0300-0023)
+            &["config_toml_inline_tests", "config_toml_lines_keys_tests", "config_toml_load_keys_tests"],
         ),
         ("shared/mod.rs", &[], &["e2e_scope_settings_tests"]),
         ("shared/schema/mod.rs", &["config_lines"], &[]),
@@ -123,7 +125,8 @@ fn must92_scaffold_rs_can_only_create_and_remove_what_it_created() {
 
 #[test]
 fn config_toml_and_its_lines_module_have_no_write_words() {
-    for f in ["config/config_toml.rs", "config/config_toml_lines.rs"] {
+    // SPEC-0300-0023 (SPEC-0200-0001 §3.18.10): `config/appearance_raw.rs` reads the appearance tables and has no write word either.
+    for f in ["config/config_toml.rs", "config/config_toml_lines.rs", "config/appearance_raw.rs"] {
         let code = code_only(&file(f));
         for token in ["fs::write", "File::create", "OpenOptions", "rename", "remove_file", "atomic_write", "create_dir", "set_permissions"] {
             assert!(!code.contains(token), "{f} must not contain `{token}` (config.toml has one READER, R-1645)");
@@ -136,6 +139,8 @@ fn write_words_in_config_bridge_and_settings_file_are_confined_to_the_designed_p
     let banned = ["fs::write", "File::create", "OpenOptions", "create_new(", "rename(", "remove_file(", "remove_dir", "atomic_write", "create_dir", "set_permissions", "fs::copy", ".truncate(", ".append("];
     let mut files = production("settings_file");
     files.extend(production("config_bridge"));
+    // SPEC-0300-0023 (SPEC-0200-0001 §3.18.10): `appearance/` has none of these words either (it is pure; nothing in it is "allowed" below).
+    files.extend(production("appearance"));
     for (path, code) in files {
         let c = code_only(&code);
         for token in banned {
@@ -223,7 +228,8 @@ fn config_and_external_apps_never_use_the_new_modules_and_stay_apart() {
     for dir in ["config", "external_apps", "shared", "fs", "fs_ops", "archive", "viewer"] {
         for path in files_under(dir).into_iter().filter(|p| !is_test_file(p)) {
             let c = code_only(&read(&path));
-            for forbidden in ["settings_file", "config_bridge"] {
+            // SPEC-0300-0023: the appearance feature is imported by lib.rs and config_bridge/ only (appearance_structure_tests.rs checks the whole crate)
+            for forbidden in ["settings_file", "config_bridge", "appearance"] {
                 if crate_uses(&c).iter().any(|u| u == forbidden) {
                     offenders.push(format!("{}: crate::{forbidden}", rel(&path)));
                 }
@@ -257,10 +263,10 @@ fn lib_rs_and_check_rs_both_go_through_snapshot_and_check_rs_manages_and_writes_
     let check = file("config_bridge/check.rs");
     assert!(code_only(&check).contains("snapshot"), "check.rs: the check uses the same evaluate::snapshot* function (AC-1652)");
     let c = code_only(&check);
-    for forbidden in [".manage(", "fs::write", "File::create", "atomic_write", "OpenOptions", "write_sample_if_stale", "create_template_if_missing", "interpret_ui_theme", "validate("] {
+    for forbidden in [".manage(", "fs::write", "File::create", "atomic_write", "OpenOptions", "write_sample_if_stale", "create_template_if_missing", "interpret_ui_theme", "validate(", "set_theme", "apply_background", "window_paint"] {
         assert!(!c.contains(forbidden), "check.rs must not use `{forbidden}`: it reads, does not reflect (R-1652), and has no checker of its own (R-1651)");
     }
-    assert!(c.contains("to_dto(") && c.contains("registry_dto("), "the check returns the same DTOs as start-up");
+    assert!(c.contains("to_dto(") && c.contains("registry_dto(") && c.contains("appearance_dto("), "the check returns the same DTOs as start-up (SPEC-0300-0023: appearance included)");
 }
 
 #[test]

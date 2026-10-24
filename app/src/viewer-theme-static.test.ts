@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 //   `--vw-*` variables, imported from `routes/viewer/+page.svelte`), §3.11.12 (3), §3.11.16 MINOR-5 (no
 //   `app.css` in comments of the viewer files), MINOR-7 (only `routes/viewer/+page.svelte` imports it).
 //
+// SPEC-0300-0023 UPDATE: value tables removed (see the block comment below).
 // Files under test: app/src/routes/viewer/viewer-theme.css and the changed
 // routes/viewer/+page.svelte.
 
@@ -26,7 +27,7 @@ function cssText(): string {
   return stripCssComments(readRaw(VIEWER_CSS));
 }
 
-// Light part = everything outside the dark media block; dark part = the media block's content.
+// (No theme switch any more: `light` is the whole stylesheet.)
 function split(css: string): { light: string; dark: string; blocks: number } {
   const re = /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{/g;
   let light = "";
@@ -81,145 +82,65 @@ function htmlDecls(part: string): Map<string, string> {
   return merged;
 }
 
-// #fff and #ffffff are the same colour: normalise before comparing.
-const normHex = (v: string | undefined): string => {
-  if (v === undefined) return "<missing>";
-  const t = v.trim().toLowerCase();
-  const m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(t);
-  return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : t;
-};
-
-// R-913-1 table, expressed as the --vw-* variables of design §3.11.7.
-// PHASE 13 UPDATE (SPEC-0300-0017 第8版 R-913-1 / R-913-1-1 / R-913-4, SPEC-0200-0001 §3.14.12-13): the table grows by the gutter colours (2), the
-// `--vw-hl-*` highlight colours (13, rows of R-913-1-1) and -- light only -- the two font variables (2); the dark line-number colour is `#8c8c8c`
-// (承認時の発注者決定 2026-10-10; it was `#777`). The old "9 values" expectation became "9 + 2 + 13 (+ 2 fonts in the light part)".
-const LIGHT: Record<string, string> = {
-  "--vw-bg": "#fff", // html / body / viewer root background
-  "--vw-fg": "#111", // text colour
-  "--vw-header-bg": "#f0f0f0",
-  "--vw-border": "#d0d0d0", // line under the header
-  "--vw-banner-bg": "#fff4ce", // truncation banner
-  "--vw-banner-fg": "#5c4400",
-  "--vw-muted": "#666", // loading / no-file text
-  "--vw-error": "#b00020",
-  "--vw-lineno": "#666",
-  // 第8版: the line-number gutter (SPEC-0300-0015 R-462-1 / R-462-4)
-  "--vw-gutter-bg": "#f0f0f0",
-  "--vw-gutter-border": "#d0d0d0",
-  // 第8版: highlight colours (R-913-1-1; the full check incl. selectors / contrast is viewer-theme-highlight.test.ts)
-  "--vw-hl-keyword": "#d73a49",
-  "--vw-hl-title": "#6f42c1",
-  "--vw-hl-constant": "#005cc5",
-  "--vw-hl-string": "#032f62",
-  "--vw-hl-builtin": "#c24e00",
-  "--vw-hl-comment": "#6a737d",
-  "--vw-hl-name": "#22863a",
-  "--vw-hl-section": "#005cc5",
-  "--vw-hl-bullet": "#735c0f",
-  "--vw-hl-addition-fg": "#1e7f35",
-  "--vw-hl-addition-bg": "#f0fff4",
-  "--vw-hl-deletion-fg": "#b31d28",
-  "--vw-hl-deletion-bg": "#ffeef0",
-};
-const DARK: Record<string, string> = {
-  "--vw-bg": "#1e1e1e",
-  "--vw-fg": "#ddd",
-  "--vw-header-bg": "#2a2a2a",
-  "--vw-border": "#444",
-  "--vw-banner-bg": "#4a3b00",
-  "--vw-banner-fg": "#ffd866",
-  "--vw-muted": "#999",
-  "--vw-error": "#ff8080",
-  "--vw-lineno": "#8c8c8c", // 第8版: was #777 (3.4:1); #8c8c8c is 4.55 / 4.96 (R-462-4)
-  "--vw-gutter-bg": "#252526",
-  "--vw-gutter-border": "#3a3a3a",
-  "--vw-hl-keyword": "#ff7b72",
-  "--vw-hl-title": "#d2a8ff",
-  "--vw-hl-constant": "#79c0ff",
-  "--vw-hl-string": "#a5d6ff",
-  "--vw-hl-builtin": "#ffa657",
-  "--vw-hl-comment": "#8b949e",
-  "--vw-hl-name": "#7ee787",
-  "--vw-hl-section": "#4a8cf7",
-  "--vw-hl-bullet": "#f2cc60",
-  "--vw-hl-addition-fg": "#aff5b4",
-  "--vw-hl-addition-bg": "#033a16",
-  "--vw-hl-deletion-fg": "#ffdcd7",
-  "--vw-hl-deletion-bg": "#67060c",
-};
-
+// SPEC-0300-0023 §4.4 (R-1726 variables), SPEC-0200-0001 §3.18.15 MUST-1: the stylesheet holds NO colour value. The 24 `--vw-*` values (11 + 13 highlight) are
+// computed by the Rust `appearance/` and handed over by the initialization script; the value tables moved to the Rust `vars_tests.rs` / `highlight_tests.rs`.
+// This file keeps the structure: no theme switch, `html` colour-scheme from a variable, no `--ui-*`, fonts, body rules, the import site.
 const R911_NAMES = [
   "--ui-bg", "--ui-fg", "--ui-surface", "--ui-surface-2", "--ui-surface-3", "--ui-border", "--ui-border-strong",
   "--ui-border-muted", "--ui-muted", "--ui-muted-2", "--ui-hover", "--ui-selected", "--ui-focused", "--ui-row-head",
   "--ui-link", "--ui-error", "--ui-backdrop", "--ui-shadow-1", "--ui-shadow-2",
+  // SPEC-0300-0023 R-1723 (new main-window variables; the viewer must not carry any of them either)
+  "--ui-border-active", "--ui-cursor-fg", "--ui-cursor-bg", "--ui-folder", "--ui-executable", "--ui-selected-fg", "--ui-status-fg", "--ui-status-bg",
+  "--ui-menu-active-fg", "--ui-menu-active-bg", "--ui-tree-current", "--ui-tree-cursor", "--ui-color-scheme",
 ];
 
-function pick(decls: Map<string, string>, table: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const k of Object.keys(table)) out[k] = normHex(decls.get(k));
-  return out;
-}
-const normTable = (t: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(Object.entries(t).map(([k, v]) => [k, normHex(v)]));
-
-describe("R-913-1: the viewer colour table in viewer-theme.css (SPEC-0200-0001 §3.11.7)", () => {
-  it("the light `html` rule defines all 24 --vw-* values of the table (9 + gutter 2 + highlight 13)", () => {
-    expect(Object.keys(LIGHT).length).toBe(24);
-    const { light } = split(cssText());
-    expect(pick(htmlDecls(light), LIGHT)).toEqual(normTable(LIGHT));
+describe("R-913-1 / R-913-2 / R-1721: the viewer stylesheet has no colour values and no theme switch", () => {
+  it("no `@media (prefers-color-scheme` (AC-1726)", () => {
+    expect(cssText()).not.toMatch(/prefers-color-scheme/);
   });
 
-  it("the dark `@media (prefers-color-scheme: dark)` block's `html` rule defines the 24 dark values (the previous fixed-dark values are kept, except the line number colour #8c8c8c)", () => {
-    expect(Object.keys(DARK).length).toBe(24);
-    const { dark, blocks } = split(cssText());
-    expect(blocks).toBe(1);
-    expect(pick(htmlDecls(dark), DARK)).toEqual(normTable(DARK));
+  it("no colour literal anywhere (not even inside a --vw-* declaration: the values come from the initialization script)", () => {
+    const css = cssText();
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).not.toMatch(/\b(?:rgba?|hsla?)\(/);
   });
 
-  it("R-913-4: --vw-font and --vw-font-mono are declared in the LIGHT `html` rule only (fonts do not change with the theme)", () => {
-    const { light, dark } = split(cssText());
-    expect(htmlDecls(light).has("--vw-font")).toBe(true);
-    expect(htmlDecls(light).has("--vw-font-mono")).toBe(true);
-    expect(htmlDecls(dark).has("--vw-font")).toBe(false);
-    expect(htmlDecls(dark).has("--vw-font-mono")).toBe(false);
+  it("no --vw-* COLOUR variable is declared (only --vw-font and --vw-font-mono, R-913-4 / R-1728)", () => {
+    const names = [...cssText().matchAll(/(--vw-[\w-]+)\s*:/g)].map((m) => m[1]);
+    expect(names.filter((n) => !/^--vw-font(-mono)?$/.test(n))).toEqual([]);
   });
 
-  it("the light and the dark parts declare the same colour variables (every --vw-* except the two font variables, which are light-only)", () => {
-    const { light, dark } = split(cssText());
-    const names = (d: Map<string, string>): string[] => [...d.keys()].filter((k) => k.startsWith("--vw-") && !k.startsWith("--vw-font")).sort();
-    expect(names(htmlDecls(light))).toEqual(names(htmlDecls(dark)));
-    expect(names(htmlDecls(light)).length).toBe(24);
+  it("R-913-4: --vw-font and --vw-font-mono are declared in the `html` rule", () => {
+    const d = htmlDecls(split(cssText()).light);
+    expect(d.has("--vw-font")).toBe(true);
+    expect(d.has("--vw-font-mono")).toBe(true);
   });
 
-  it("R-913-2: `html` color-scheme is `light` in the light part and `dark` in the dark block", () => {
-    const { light, dark } = split(cssText());
-    expect(htmlDecls(light).get("color-scheme")).toBe("light");
-    expect(htmlDecls(dark).get("color-scheme")).toBe("dark");
+  it("R-913-2 / R-1741: `html` color-scheme is var(--vw-color-scheme, light dark) (the fallback has no colour)", () => {
+    expect(htmlDecls(split(cssText()).light).get("color-scheme")).toBe("var(--vw-color-scheme, light dark)");
   });
 
-  it("`html, body` paint their background from var(--vw-bg) (moved here from +page.svelte's :global rules)", () => {
-    const { light } = split(cssText());
-    const r = rules(light).find((x) => x.selector.split(",").map((s) => s.trim()).sort().join() === "body,html");
+  it("`html, body` paint their background from var(--vw-bg)", () => {
+    const r = rules(cssText()).find((x) => x.selector.split(",").map((s) => s.trim()).sort().join() === "body,html");
     expect(r, "an `html, body { background: ... }` rule").toBeDefined();
     expect(declarations(r!.body).get("background")).toBe("var(--vw-bg)");
   });
 
-  it("R-913-3 (6th edition): `html, body` have no page margin, so the 100vh viewer does not overflow the document", () => {
-    const { light } = split(cssText());
-    const r = rules(light).find((x) => x.selector.split(",").map((s) => s.trim()).sort().join() === "body,html");
+  it("R-913-3: `html, body` have no page margin and no overflow rule", () => {
+    const r = rules(cssText()).find((x) => x.selector.split(",").map((s) => s.trim()).sort().join() === "body,html");
     expect(declarations(r!.body).get("margin")).toBe("0");
-    expect(declarations(r!.body).has("overflow"), "overflow stays visible (not hidden as in main)").toBe(false);
+    expect(declarations(r!.body).has("overflow")).toBe(false);
   });
 
-  it("the stylesheet holds no colour literal outside the --vw-* declarations (rules use var())", () => {
-    const rest = cssText().replace(/--vw-[\w-]+\s*:[^;}]+;?/g, "");
-    expect(rest).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(rest).not.toMatch(/\b(?:rgba?|hsla?)\(/);
+  it("routes/viewer/+page.svelte uses --vw-header-bg / --vw-header-fg for the header (R-1726)", () => {
+    const styles = [...readRaw(VIEWER_PAGE).matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
+    expect(styles).toContain("var(--vw-header-bg)");
+    expect(styles).toContain("var(--vw-header-fg)");
   });
 });
 
 describe("R-913 / m-5 / AC-907: the viewer never carries the main window's --ui-* variables", () => {
-  it("the 19 R-911 names are absent from viewer-theme.css (comments included) and no `--ui-` prefix is used at all", () => {
+  it("the R-911 and R-1723 names are absent from viewer-theme.css (comments included) and no `--ui-` prefix is used at all", () => {
     const raw = readRaw(VIEWER_CSS);
     expect(raw).not.toContain("--ui-");
     for (const n of R911_NAMES) expect(raw).not.toContain(n);
@@ -227,8 +148,7 @@ describe("R-913 / m-5 / AC-907: the viewer never carries the main window's --ui-
 
   it("every custom property declared in viewer-theme.css is named --vw-*", () => {
     const names = [...cssText().matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]);
-    // PHASE 13 UPDATE: was >= 18 (9 light + 9 dark). Now 26 light (24 + the two font variables) + 24 dark = 50.
-    expect(names.length).toBeGreaterThanOrEqual(50);
+    expect(names.length).toBeGreaterThanOrEqual(2);
     expect(names.filter((n) => !n.startsWith("--vw-"))).toEqual([]);
     expect(names.filter((n) => R911_NAMES.includes(n))).toEqual([]);
   });
@@ -243,8 +163,7 @@ describe("R-913 / m-5 / AC-907: the viewer never carries the main window's --ui-
   });
 
   it("the previous `:global(html), :global(body)` background rule is gone from +page.svelte (it lives in viewer-theme.css)", () => {
-    const page = readRaw(VIEWER_PAGE);
-    expect(page).not.toMatch(/:global\(html\)/);
+    expect(readRaw(VIEWER_PAGE)).not.toMatch(/:global\(html\)/);
   });
 });
 

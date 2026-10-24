@@ -15,7 +15,7 @@
 import { MOD, sleep } from "../lib/cdp.mjs";
 import { inspectClipboard, readFileDropForTest } from "../lib/clipboard.mjs";
 import { Skip } from "../lib/report.mjs";
-import { openViewerWindow } from "./_util.mjs";
+import { DEFAULT_FONT_FAMILY, openViewerWindow } from "./_util.mjs";
 import {
   barState, clickItem, clickWith, closeBar, closeDialog, dialogInfo, dropdown, focusedName, focusRowByName, HEADINGS, itemById, items, MENU_NAMES,
   MENU_TABLE, openByClick, openByKeys, outline, prepMenu, row, rowOrder, runByKeys, runHighlighted, selectedNames, selectRows, SHARED, statusFocus,
@@ -896,7 +896,7 @@ export const tests = [
   // ------------------------------------------------------------------------------ look and accessibility
   {
     id: "AC-1360",
-    title: "light theme computed style: bar padding 3px 6px / border / background; heading 12px Segoe UI; dropdown min-width 260, colours, item padding 6px 12px, 13px, shortcut / disabled / reason colours, lit background",
+    title: "nord computed style (AC-1810): bar padding 3px 6px, no frame, status colours; heading 12px [font]; dropdown min-width 260, surface, active frame, item padding 6px 12px, 12px, shortcut / disabled / reason colours, lit background",
     async run(t, ctx) {
       await prepMenu(ctx);
       await focusRowByName(ctx, "d");
@@ -906,20 +906,19 @@ export const tests = [
       await waitDropdown(ctx);
       const s = await ctx.ev(MENU_STYLE_PROBE);
       t.eq(s.bar.padding, "3px 6px", "menu bar padding");
-      t.eq(s.barBorder1px, true, "menu bar border is 1px solid");
-      t.eq(s.bar["border-top-color"], "rgb(208, 208, 208)", "menu bar border colour");
-      t.eq(s.bar["background-color"], "rgb(240, 240, 240)", "menu bar background");
+      t.eq(s.bar["border-top-width"], "0px", "menu bar has no frame (AC-1760 / R-1810)");
+      t.eq(s.bar["background-color"], "rgb(59, 66, 82)", "menu bar background = status_bar_bg (R-1810)");
       t.eq(s.head["font-size"], "12px", "heading font-size");
-      t.ok(s.head["font-family"].startsWith('"Segoe UI"'), "heading font-family starts with Segoe UI", s.head["font-family"]);
+      t.eq(s.head["font-family"], DEFAULT_FONT_FAMILY, "heading font-family is the [font] stack");
       t.eq(s.dropdown["min-width"], "260px", "dropdown min-width");
-      t.eq(s.dropdown["background-color"], "rgb(255, 255, 255)", "dropdown background");
-      t.eq([s.ddBorder1px, s.dropdown["border-top-color"]], [true, "rgb(207, 207, 207)"], "dropdown border 1px solid rgb(207,207,207)");
+      t.eq(s.dropdown["background-color"], "rgb(46, 52, 64)", "dropdown background = surface");
+      t.eq([s.ddBorder1px, s.dropdown["border-top-color"]], [true, "rgb(136, 192, 208)"], "dropdown border 1px solid --ui-border-active (R-1812)");
       t.eq(s.item.padding, "6px 12px", "item padding");
-      t.eq(s.item["font-size"], "13px", "item font-size");
-      t.eq(s.shortcut.color, "rgb(102, 102, 102)", "shortcut colour");
-      t.eq(s.disabledLabel, "rgb(153, 153, 153)", "disabled item name colour");
-      t.eq([s.disabledReason?.["font-size"], s.disabledReason?.color], ["11px", "rgb(102, 102, 102)"], "reason: 11px, rgb(102,102,102)");
-      t.eq(s.highlighted?.["background-color"], "rgb(232, 240, 255)", "lit item background");
+      t.eq(s.item["font-size"], "12px", "item font-size");
+      t.eq(s.shortcut.color, "rgb(46, 52, 64)", "shortcut of the lit first item: cursor_fg");
+      t.eq(s.disabledLabel, "rgb(141, 146, 154)", "disabled item name colour = --ui-muted-2");
+      t.eq([s.disabledReason?.["font-size"], s.disabledReason?.color], ["12px", "rgb(179, 183, 190)"], "reason: 12px, --ui-muted");
+      t.eq(s.highlighted?.["background-color"], "rgb(143, 188, 187)", "lit item background = --ui-hover (cursor_bg)");
       await closeBar(ctx);
     },
   },

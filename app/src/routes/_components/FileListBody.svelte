@@ -7,6 +7,8 @@
   import type { SortKey, SortOrder } from "$lib/features/file-list/sort";
   import type { ListGeometry } from "$lib/features/file-list/list-layout";
   import TreePanel from "$lib/features/file-list/TreePanel.svelte";
+  import { treePanelWidthPx } from "$lib/features/file-list/pane-layout";
+  import { appearanceState } from "$lib/shared/state/appearance-state.svelte";
   import FileListPanel from "./FileListPanel.svelte";
 
   let {
@@ -72,9 +74,13 @@
     sortMenuCurrentOrder: SortOrder;
     onSortMenuClose: () => void;
   } = $props();
+
+  // SPEC-0300-0023 R-1804: the tree's width is a percentage of THIS block's width (tree_width_percent), cut to whole px.
+  let bodyWidth = $state(0);
+  let treeWidth = $derived(treePanelWidthPx(bodyWidth, appearanceState.treeWidthPercent));
 </script>
 
-<div class="body">
+<div class="body" bind:clientWidth={bodyWidth}>
   {#if showTree}
     <TreePanel
       bind:containerEl={treeContainerEl}
@@ -83,6 +89,7 @@
       focusedPath={treeFocusedPath}
       currentDirPath={treeCurrentDirPath}
       hasFocus={treeHasFocus}
+      widthPx={treeWidth}
       onToggleExpand={onTreeToggleExpand}
       onSelectPath={onTreeSelectPath}
       onContainerFocus={onTreeContainerFocus}
@@ -114,7 +121,7 @@
 </div>
 
 <style>
-  /* R-902: fills the height left by the bars; tree (220px) + list side by side, gap 3px. */
+  /* R-902: fills the height left by the bars; tree (tree_width_percent of the width) + list side by side, gap 3px. */
   .body {
     display: flex;
     flex: 1;

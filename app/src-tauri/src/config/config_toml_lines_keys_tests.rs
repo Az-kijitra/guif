@@ -1,4 +1,5 @@
-//! TDD (unit-test-writer, 2026-10-20): `config/config_toml_lines.rs` -- the 1-based line of every key that
+//! TDD (unit-test-writer, 2026-10-20; migrated 2026-10-24 for SPEC-0300-0023 -- this file REPLACES `config_toml_lines_tests.rs`: the marker key
+//! `theme` is now `theme` (a known top-level key whose line is `lines.top["theme"]`); nothing else changed): `config/config_toml_lines.rs` -- the 1-based line of every key that
 //! `config.toml` reading needs to report (SPEC-0300-0022 R-1642; SPEC-0200-0001 §3.17.3 / §3.17.5 "S-L の結果").
 //!
 //! Specs: SPEC-0300-0022 R-1642 (the line of the key; of the `[[external_apps]]` header when no field can be named; the type-error
@@ -13,7 +14,8 @@
 //! // shared/schema/config_lines.rs  (pure data, no logic, no imports other than std)
 //! #[derive(Debug, Clone, PartialEq, Eq, Default)]
 //! pub struct ConfigLines {
-//!     pub ui_theme: Option<u32>,                         // the `ui_theme` key (any value type)
+//!     pub top: BTreeMap<String, u32>,                    // SPEC-0300-0023: the line of each top-level key (`theme` is gone)
+//!     pub tables: BTreeMap<String, BTreeMap<String, u32>>, // theme / colors / font / layout: the line of each key inside
 //!     pub input_keymap_custom: Option<u32>,              // the key, or the first dotted key / the `[input_keymap_custom]` header
 //!     pub keymap_entries: BTreeMap<String, u32>,         // action id -> the line of that key (every key, any value type)
 //!     pub external_apps: ExternalAppsLines,
@@ -40,7 +42,7 @@ use std::collections::BTreeMap;
 use super::config_toml_lines::{index, line_of};
 use crate::shared::schema::config_lines::{AppLines, ConfigLines};
 
-const STD: &str = "ui_theme = \"dark\"\n[input_keymap_custom]\ncopy = \"Ctrl+C\"\npaste = \"Ctrl+V\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"p\"\nargs = [\"{path}\"]\n\n[[external_apps]]\nname = \"b\"\nkey = \"Ctrl+1\"\n";
+const STD: &str = "theme = \"nord\"\n[input_keymap_custom]\ncopy = \"Ctrl+C\"\npaste = \"Ctrl+V\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"p\"\nargs = [\"{path}\"]\n\n[[external_apps]]\nname = \"b\"\nkey = \"Ctrl+1\"\n";
 
 fn idx(text: &str) -> ConfigLines {
     index(text).unwrap_or_else(|| panic!("index must locate the keys of a valid TOML text (R-1642) but returned None for {text:?}"))
@@ -64,7 +66,7 @@ fn crlf(text: &str) -> String {
 #[test]
 fn r1642_standard_tables_and_array_of_tables_get_the_line_of_each_key() {
     let lines = idx(STD);
-    assert_eq!(lines.ui_theme, Some(1));
+    assert_eq!(lines.top.get("theme").copied(), Some(1));
     assert_eq!(lines.input_keymap_custom, Some(2), "the key of a standard table is the line of its header");
     assert_eq!(lines.keymap_entries, entries(&[("copy", 3), ("paste", 4)]));
     assert_eq!(lines.external_apps.line, Some(6), "R-1642: external_apps = the key, or the FIRST header");
@@ -88,7 +90,9 @@ fn r1642_args_for_file_has_its_own_line_and_missing_fields_have_none() {
 
 #[test]
 fn a_text_with_none_of_the_known_keys_has_no_lines_at_all() {
-    assert_eq!(idx("# only a comment\nsome_future_setting = 1\n"), ConfigLines::default());
+    // SPEC-0300-0023: `top` lists every top-level key, so only the KNOWN-key fields stay empty
+    let lines = idx("# only a comment\nsome_future_setting = 1\n");
+    assert_eq!(lines, ConfigLines { top: entries(&[("some_future_setting", 2)]), ..ConfigLines::default() });
     assert_eq!(idx(""), ConfigLines::default());
 }
 
@@ -97,8 +101,8 @@ fn a_text_with_none_of_the_known_keys_has_no_lines_at_all() {
 // Spike 2a: `input_keymap_custom.copy = ...` -- the table itself is never written as `[...]`; its line is the first key's line.
 #[test]
 fn spike_2a_dotted_keys_give_the_first_dotted_line_for_the_table_and_each_key_its_own() {
-    let lines = idx("ui_theme = \"dark\"\ninput_keymap_custom.copy = \"x\"\ninput_keymap_custom.paste = \"y\"\n");
-    assert_eq!(lines.ui_theme, Some(1));
+    let lines = idx("theme = \"nord\"\ninput_keymap_custom.copy = \"x\"\ninput_keymap_custom.paste = \"y\"\n");
+    assert_eq!(lines.top.get("theme").copied(), Some(1));
     assert_eq!(lines.input_keymap_custom, Some(2), "the first line that wrote the key (spike 'findings' 4)");
     assert_eq!(lines.keymap_entries, entries(&[("copy", 2), ("paste", 3)]));
 }
@@ -149,7 +153,7 @@ fn spike_2e_a_child_table_of_an_element_is_not_an_element() {
 fn spike_3a_a_top_level_datetime_value_keeps_every_later_line() {
     let text = format!("x = 1979-05-27T07:32:00Z\n{STD}");
     let lines = idx(&text);
-    assert_eq!(lines.ui_theme, Some(2));
+    assert_eq!(lines.top.get("theme").copied(), Some(2));
     assert_eq!(lines.input_keymap_custom, Some(3));
     assert_eq!(lines.keymap_entries, entries(&[("copy", 4), ("paste", 5)]));
     assert_eq!(lines.external_apps.line, Some(7));
@@ -178,22 +182,22 @@ fn spike_3c_a_datetime_in_an_external_apps_field_still_has_the_field_lines() {
 #[test]
 fn spike_3d_3e_datetimes_in_arrays_inline_tables_and_dotted_keys() {
     for (text, expected_theme_line) in [
-        ("d = [1979-05-27, 1979-05-28T01:02:03]\nui_theme = \"dark\"\n", 2),
-        ("t = { when = 1979-05-27 }\nu.when = 1979-05-27\nui_theme = \"dark\"\n", 3),
-        ("when = 1979-05-27T00:00:00+09:00\nlocal = 1979-05-27T00:32:00.5\nclock = 07:32:00\nui_theme = \"dark\"\n", 4),
+        ("d = [1979-05-27, 1979-05-28T01:02:03]\ntheme = \"nord\"\n", 2),
+        ("t = { when = 1979-05-27 }\nu.when = 1979-05-27\ntheme = \"nord\"\n", 3),
+        ("when = 1979-05-27T00:00:00+09:00\nlocal = 1979-05-27T00:32:00.5\nclock = 07:32:00\ntheme = \"nord\"\n", 4),
     ] {
-        assert_eq!(idx(text).ui_theme, Some(expected_theme_line), "text {text:?}");
+        assert_eq!(idx(text).top.get("theme").copied(), Some(expected_theme_line), "text {text:?}");
     }
 }
 
 // ------------------------------------------------------------------ wrong types, unknown keys, multi-line strings (spike 4 / 4b)
 
-// R-1642: a wrong-typed `ui_theme`, `input_keymap_custom`, `external_apps` still have their lines (the type error is reported WITH a line).
+// R-1642: a wrong-typed `theme`, `input_keymap_custom`, `external_apps` still have their lines (the type error is reported WITH a line).
 #[test]
 fn spike_4_wrong_typed_known_keys_keep_their_lines() {
-    let text = "ui_theme = 3\nui_them = \"dark\"\ninput_keymap_custom = \"x\"\nexternal_apps = \"x\"\nunknown = [1, 2, [3]]\n";
+    let text = "theme = 3\nui_them = \"dark\"\ninput_keymap_custom = \"x\"\nexternal_apps = \"x\"\nunknown = [1, 2, [3]]\n";
     let lines = idx(text);
-    assert_eq!(lines.ui_theme, Some(1), "AC-1640 / W-33: the line of ui_theme even when its value is not a string");
+    assert_eq!(lines.top.get("theme").copied(), Some(1), "AC-1640 / W-33: the line of theme even when its value is not a string");
     assert_eq!(lines.input_keymap_custom, Some(3), "W-30-2: the line of a non-table input_keymap_custom");
     assert!(lines.keymap_entries.is_empty());
     assert_eq!(lines.external_apps.line, Some(4), "W-9B: the line of a non-array external_apps");
@@ -212,8 +216,8 @@ fn spike_4b_an_array_of_scalars_and_non_string_keymap_values() {
 // Spike 4: lines after a multi-line string are not off by the string's length.
 #[test]
 fn spike_4_lines_after_a_multi_line_string_and_a_multi_line_array_are_exact() {
-    let text = "mls = \"\"\"\na\nb\n\"\"\"\nm = [\n  1,\n  2,\n]\nui_theme = \"dark\"\n";
-    assert_eq!(idx(text).ui_theme, Some(9));
+    let text = "mls = \"\"\"\na\nb\n\"\"\"\nm = [\n  1,\n  2,\n]\ntheme = \"nord\"\n";
+    assert_eq!(idx(text).top.get("theme").copied(), Some(9));
 }
 
 // R-1642: the entry order in the file does not matter (the map is keyed by action id; the spike's case 6 had zz before aa).
@@ -237,9 +241,9 @@ fn spike_5_bom_and_crlf_do_not_move_any_line() {
 
 #[test]
 fn spike_5b_crlf_with_comments_multi_line_values_and_a_dotted_key() {
-    let text = crlf("# c\nui_theme = \"dark\"\ninput_keymap_custom.copy = \"x\"\nm = [\n 1,\n 2,\n]\ns = \"\"\"\nl1\nl2\"\"\"\n[[external_apps]]\nname = \"a\"\n");
+    let text = crlf("# c\ntheme = \"nord\"\ninput_keymap_custom.copy = \"x\"\nm = [\n 1,\n 2,\n]\ns = \"\"\"\nl1\nl2\"\"\"\n[[external_apps]]\nname = \"a\"\n");
     let lines = idx(&text);
-    assert_eq!(lines.ui_theme, Some(2));
+    assert_eq!(lines.top.get("theme").copied(), Some(2));
     assert_eq!(lines.input_keymap_custom, Some(3));
     assert_eq!(lines.keymap_entries, entries(&[("copy", 3)]));
     assert_eq!(lines.external_apps.line, Some(11));
@@ -248,14 +252,14 @@ fn spike_5b_crlf_with_comments_multi_line_values_and_a_dotted_key() {
 
 #[test]
 fn spike_5c_a_key_on_the_first_line_after_a_bom_is_line_1() {
-    assert_eq!(idx("\u{feff}ui_theme = \"dark\"\n[input_keymap_custom]\ncopy = \"x\"\n").ui_theme, Some(1));
+    assert_eq!(idx("\u{feff}theme = \"nord\"\n[input_keymap_custom]\ncopy = \"x\"\n").top.get("theme").copied(), Some(1));
 }
 
 // A Japanese comment (multi-byte characters) before the keys must not shift the line or split a character.
 #[test]
 fn multibyte_comments_do_not_confuse_the_lines() {
-    let lines = idx("## 日本語の説明です。\n## もう一行\nui_theme = \"dark\"\n");
-    assert_eq!(lines.ui_theme, Some(3));
+    let lines = idx("## 日本語の説明です。\n## もう一行\ntheme = \"nord\"\n");
+    assert_eq!(lines.top.get("theme").copied(), Some(3));
 }
 
 // ------------------------------------------------------------------ whole-text failure and "never lose the whole file"
@@ -263,7 +267,7 @@ fn multibyte_comments_do_not_confuse_the_lines() {
 // R-1641: a syntax error: `index` has nothing to say (the line of the error itself comes from `line_of` in `load`).
 #[test]
 fn a_syntax_error_yields_none_and_does_not_panic() {
-    assert_eq!(index("ui_theme = \"dark\"\nthis is = = not toml\n"), None);
+    assert_eq!(index("theme = \"nord\"\nthis is = = not toml\n"), None);
     assert_eq!(index("[input_keymap_custom\n"), None);
     assert_eq!(index("a = 1\na = 2\n"), None, "a duplicate key is a TOML error too");
 }
@@ -273,14 +277,14 @@ fn a_syntax_error_yields_none_and_does_not_panic() {
 fn q_c_every_valid_spike_input_is_located_as_a_whole() {
     let inputs = [
         STD.to_string(),
-        "ui_theme = \"dark\"\ninput_keymap_custom.copy = \"x\"\n".to_string(),
+        "theme = \"nord\"\ninput_keymap_custom.copy = \"x\"\n".to_string(),
         "[a.b]\nk = 1\n[a.c]\nj = 2\n".to_string(),
         "input_keymap_custom = { copy = \"x\" }\nexternal_apps = [ { name = \"a\" } ]\n".to_string(),
         "[[external_apps]]\nname = \"a\"\nx.y = 1\n".to_string(),
         "x = 1979-05-27T07:32:00Z\n".to_string(),
         "t = { when = 1979-05-27 }\nu.when = 1979-05-27\n".to_string(),
         "[[external_apps]]\nname = 07:32:00\n".to_string(),
-        "ui_theme = 3\nexternal_apps = \"x\"\nflt = 1.5\nb = true\n".to_string(),
+        "theme = 3\nexternal_apps = \"x\"\nflt = 1.5\nb = true\n".to_string(),
         crlf(STD),
     ];
     for text in inputs {

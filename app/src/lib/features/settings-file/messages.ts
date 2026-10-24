@@ -30,6 +30,8 @@ export const SETTINGS_FILE_MESSAGES = {
   // W-AC: `list` is like `ui_them(2 行目), external_apps の 2 番目の agrs(18 行目)` (cut after 5 items by `limitList`).
   unknownSettings: (n: number, list: string): string => `config.toml の不明な設定 ${n} 件を無視しました: ${list}。`,
   unknownKey: (name: string): string => name,
+  // SPEC-0300-0023 AC-1756 (SPEC-0300-0019 第6版 W-AC): a key inside [theme] / [colors] / [font] / [layout].
+  unknownTableKey: (table: string, name: string): string => `[${table}] の ${name}`,
   unknownAppField: (position: number, name: string): string => `external_apps の ${position} 番目の ${name}`,
   atLine: (line: number): string => `(${line} 行目)`,
   // W-AD

@@ -10,6 +10,18 @@ export const SORT_KEY_LABELS: Record<"name" | "size" | "type" | "modified", stri
   modified: "更新日時",
 };
 
+// SPEC-0300-0019 第6版 W-C0 / W-C1 (SPEC-0300-0023 R-1763 / R-1764 / R-1795): the headings of the two frames.
+export const PANE_MESSAGES = {
+  // W-C0: `ファイル (78 件) [並び: 種類 昇順]`; `key` is a W-06 name.
+  listHeading: (count: number, key: string, order: "asc" | "desc"): string =>
+    `ファイル (${count} 件) [並び: ${key} ${order === "asc" ? "昇順" : "降順"}]`,
+  // R-1795: markers for hidden columns, in the heading (in front of / behind the text).
+  hiddenLeft: "◀ ",
+  hiddenRight: " ▶",
+  // W-C1
+  treeHeading: "ドライブ / ツリー",
+} as const;
+
 // W-11: tree node toggle (aria-label of the caret).
 export const TREE_MESSAGES = {
   collapse: "折りたたみ", // W-11

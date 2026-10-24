@@ -712,7 +712,7 @@ fn should181_shared_references_tauri_only_in_window_theme_rs() {
     let mut offenders = Vec::new();
     for path in all_rust_files_under("shared") {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if name == "window_theme.rs" || name == "window_theme_tests.rs" {
+        if name == "window_theme.rs" || name == "window_theme_tests.rs" || name == "window_paint_tests.rs" {
             continue;
         }
         let code = code_only(&fs::read_to_string(&path).unwrap());
@@ -763,8 +763,10 @@ fn s6_lib_rs_builds_then_sets_the_theme_then_runs() {
     let run = lib.rfind(".run(").expect("lib.rs must call app.run(...)");
     assert!(build < theme && theme < run, "order must be build() -> set_theme() -> run()");
     assert!(!lib.contains(".run(tauri::generate_context!())"), "Builder::run(ctx) is replaced by build() + run()");
-    // The theme is requested only through the pure mapping, and only the start-up snapshot decides it.
-    assert!(lib.contains("requested_theme("), "set_theme must be driven by shared::window_theme::requested_theme");
+    // SPEC-0300-0023 R-1741 (SPEC-0200-0001 §3.18.5): the theme is requested ALWAYS, only through the pure mapping, and only the
+    // start-up snapshot (the resolved brightness of the bg) decides it. The OS-following branch (`requested_theme`) is gone.
+    assert!(lib.contains("theme_for("), "set_theme must be driven by shared::window_theme::theme_for(appearance.dark)");
+    assert!(!lib.contains("requested_theme("), "the OS-following branch is gone (R-1749)");
     // §3.17.15: the start-up config and the registry are made by the ONE shared function `config_bridge::snapshot(`
     // (`StartupConfig::load` is called inside `config_bridge/evaluate.rs`, not by lib.rs; R-1651).
     assert!(!lib.contains("StartupConfig::load("), "lib.rs goes through config_bridge::snapshot(..) now");
@@ -808,13 +810,14 @@ fn should182_apply_background_failure_is_ignored_and_runs_before_show() {
     assert!(bg < show, "the background colour is set before show() (R-919-1)");
 }
 
-// §3.11.5: the main window follows an OS theme change with its background colour; the viewer sets it before show().
+// SPEC-0300-0023 R-1742 / R-1749 (SPEC-0200-0001 §3.18.5): the background is the resolved bg and nothing follows an OS theme change any
+// more; the viewer sets it before show().
 #[test]
-fn r919_1_windows_apply_the_background_and_follow_theme_changed() {
+fn r919_1_windows_apply_the_background_and_follow_no_theme_change() {
     let lib = lib_rs_code();
-    assert!(lib.contains("ThemeChanged"), "lib.rs main window events must handle WindowEvent::ThemeChanged");
+    assert!(!lib.contains("ThemeChanged"), "lib.rs no longer handles WindowEvent::ThemeChanged (the theme is fixed by set_theme(Some(..)), R-1749)");
     let viewer = production_code(&manifest_dir().join("src/viewer/window.rs"));
-    assert!(viewer.contains("ThemeChanged"), "viewer/window.rs handle_viewer_window_event must handle ThemeChanged");
+    assert!(!viewer.contains("ThemeChanged"), "viewer/window.rs no longer handles ThemeChanged");
     // Order on the NEW-window path: `.build()` -> `apply_background(..)` -> `window.show()`. (The reuse branch's
     // `existing.show()` comes earlier in the file and is deliberately not part of this order.)
     let build = viewer.find(".build()").expect("viewer/window.rs must build the viewer window with .build()");

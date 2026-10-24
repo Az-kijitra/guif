@@ -198,17 +198,72 @@ move_down = "ArrowDown,J"
 - `config.toml` が無いときは、既定のキー割り当てで起動します。読み込めないとき(書き方の誤りなど)は、既定のキー割り当てで起動し、その旨がステータスバーに表示されます。
 - 起動時の表示には、誤りのある設定項目と `config.toml` の行番号が入ります(例: `config.toml の不正なキー割り当て 2 件を無視しました: copy(12 行目), undo(13 行目)。`)。読み方は §8.4 を参照してください。
 
-### 6.2 画面のテーマ
+### 6.2 配色・フォント・配置
 
-`config.toml` の最上位に `ui_theme` を書くと、画面のテーマを固定できます。
+画面の配色(`[theme]` / `[colors]`)、メイン画面のフォント(`[font]`)、画面の配置(`[layout]`)を設定できます。
+
+#### 配色([theme] / [colors])
+
+画面全体(メイン画面とビューア)の配色を決めます。Windows のアプリのテーマ設定(ライト / ダーク)には従いません。明るい配色か暗い配色かは、背景色(`bg`)から自動で決まります。タイトルバーの明暗もこれに従います。
+
+`ui_theme` 設定は廃止されました。書いても使われず、不明な設定として通知されます。配色は `[theme]` の `preset` で指定してください。
 
 ```toml
-ui_theme = "dark"
+[theme]
+preset = "nord"
 ```
 
-- 値は `"light"`(明るい)、`"dark"`(暗い)、`"system"` のいずれかです。大文字と小文字は区別します。
-- `ui_theme` が無いとき、または `"system"` のときは、Windows のアプリのテーマ設定に従います。
-- 値が不正なときは、Windows のテーマ設定に従い、その旨が起動時に表示されます。
+- `preset` に指定できる名前: `nord`(既定)、`default`、`monokai`、`catppuccin`(別名 `catppuccinmocha`)、`solarized`(別名 `solarizeddark`)、`light`。
+- 大文字・小文字は区別せず、「`-`」「`_`」と空白は無視して比較します(例: `"Solarized-Dark"` と `"solarized"` は同じです)。
+- `light` だけが明るい配色で、それ以外は暗い配色です。
+- `[colors]` 表で、プリセットの各項目を個別に上書きできます(上書きした項目のみが変わり、未指定の項目はプリセットの値が保たれます)。
+
+```toml
+[colors]
+bg = "#2E3440"
+border = "#88C0D0"
+border_inactive = "#4C566A"
+cursor_fg = "#2E3440"
+cursor_bg = "#8FBCBB"
+folder = "#81A1C1"
+file = "#ECEFF4"
+executable = "#A3BE8C"
+selected = "#EBCB8B"
+status_bar_fg = "#E5E9F0"
+status_bar_bg = "#3B4252"
+menu_bar_active_fg = "#2E3440"
+menu_bar_active_bg = "#88C0D0"
+tree_current = "#88C0D0"
+tree_cursor = "#EBCB8B"
+```
+
+- 色の書式: `"#RRGGBB"`、`"#RGB"`、0〜255 の色番号(例: `"208"`)、色名(例: `"red"`、`"dark_gray"`、`"light_blue"`。大文字小文字は区別しません)、`"reset"`(背景では黒、他は文字色)。
+- キーの別名: `background` は `bg`、`selected_mark` は `selected` と同じです。
+
+#### フォント([font])
+
+メイン画面のすべての文字(メニュー、パス欄、ステータスバー、検索バー、右クリックメニュー、ダイアログ、ファイル一覧、フォルダーツリー)のフォントと大きさを設定します。ビューアのウィンドウには影響しません。
+
+```toml
+[font]
+family = "JetBrains Mono"
+size = 12
+```
+
+- `family`: フォントの家族名を文字列または文字列の配列(例: `["Consolas", "BIZ UDGothic"]`)で指定します。指定した名前から順に試され、利用できない名前はスキップされて次の名前が使われます。末尾には既定の並び(`JetBrains Mono`, `JetBrainsMono NFM`, `JetBrainsMono NF`, `Cascadia Mono`, `Consolas`, `BIZ UDGothic`, `monospace`)が続きます。
+- `size`: 文字の大きさ(px)です。10〜24 の整数で、既定は `12` です。メイン画面のすべての文字がこの大きさになります。行の高さは文字の大きさに合わせて自動決定されます(12 のとき 16px)。
+
+#### 画面の配置([layout])
+
+```toml
+[layout]
+min_col_width = 24
+tree_width_percent = 24
+```
+
+- `min_col_width`: ファイル一覧の1列あたりの最小の幅を文字数(10〜80 の整数、既定 `24`)で指定します。サイズ列表示時は +10文字、更新日時表示時は +20文字が加算されます。
+- `tree_width_percent`: フォルダーツリー表示時のツリーパネルの幅の割合(10〜50 の整数%、既定 `24`)を指定します。
+
 - 変更は再起動で反映されます。
 
 ## 7. 外部アプリで開く
@@ -403,14 +458,13 @@ key = "Ctrl+Alt+V"
 
 ### 8.2 雛形
 
-`config.toml` が無いときに「設定ファイルを開く」を実行すると、雛形の `config.toml` が作られます。雛形には、すべての設定項目(`ui_theme`、`input_keymap_custom`、`external_apps`)の説明、取り得る値、既定の値がコメントで書かれています。
+`config.toml` が無いときに「設定ファイルを開く」を実行すると、雛形の `config.toml` が作られます。雛形には、すべての設定項目(`[theme]`、`[colors]`、`[font]`、`[layout]`、`[input_keymap_custom]`、`[[external_apps]]`)の説明、取り得る値、既定の値がコメントで書かれています。
 
 - 行の書き分けは次のとおりです。
   - `## ` で始まる行は説明です。
   - `# ` で始まる行は設定の行です。右辺の値が、書かないときに使われる既定の値です。
-- 設定を変えるときは、変えたい設定の行の先頭の `# ` を消してから値を書き換えます。表の中の設定(`[input_keymap_custom]`、`[[external_apps]]`)は、その表の見出しの行の `# ` も消します。`# ` を消していない行は、書いていないのと同じです。
+- 設定を変えるときは、変えたい設定の行の先頭の `# ` を消してから値を書き換えます。表の中の設定(`[theme]`、`[colors]`、`[font]`、`[layout]`、`[input_keymap_custom]`、`[[external_apps]]`)は、その表の見出しの行の `# ` も消します。`# ` を消していない行は、書いていないのと同じです。
 - 作った直後の雛形は、すべての設定の行がコメントのため、`config.toml` が無いときと同じ設定になります。
-- `ui_theme` は、最初の表の見出し(`[input_keymap_custom]`)より前に書きます。見出しの後に書くと、その表の中の項目として読まれます。
 - `external_apps` の行の `# ` を消すと、書いた登録だけが使われ、既定の4つは使われません(§7.3)。
 - 雛形は作るだけで、アプリがその後に書き換えることはありません。
 
@@ -427,9 +481,9 @@ key = "Ctrl+Alt+V"
 
 起動時に `config.toml` を読み、書き方を確かめます。誤りのある項目だけが既定の設定になり、正しい項目はそのまま使われます。ファイル全体を TOML として読めないときは、すべて既定の設定で起動します。誤りがあると、ステータスバーに次のように表示されます。
 
-- 誤りのある設定項目と、`config.toml` の中の行番号(1 から数えます)を表示します。例: `config.toml の 3 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`
+- 誤りのある設定項目と、`config.toml` の中の行番号(1 から数えます)を表示します。例: `config.toml の 4 行目の [theme] の preset を解釈できないため、nord を使います(使える値: "default"、"nord"、"monokai"、"catppuccin"、"solarized"、"light")。`
 - 一覧は先頭の 5 件までを表示し、残りは `ほか {件数} 件` と表示します。ステータスバーに収まらない部分は省略されます。マウスのポインターを重ねると全文が表示されます。
-- guif が知らない設定(綴りの誤りなど)は無視し、その旨を表示します。対象は、最上位の `ui_theme`、`input_keymap_custom`、`external_apps` 以外の名前と、`external_apps` の登録の中の `name`、`program`、`args`、`args_for_file`、`key` 以外の名前です。例: `config.toml の不明な設定 2 件を無視しました: ui_them(2 行目), external_apps の 2 番目の agrs(18 行目)。`
+- guif が知らない設定(綴りの誤りや廃止された設定など)は無視し、その旨を表示します。対象は、最上位の `[theme]`、`[colors]`、`[font]`、`[layout]`、`[input_keymap_custom]`、`[[external_apps]]` 以外の名前と、各表の規定外のキーです。例: `config.toml の不明な設定 2 件を無視しました: ui_theme(2 行目), external_apps の 2 番目の agrs(18 行目)。`
 - `config.toml` に誤りか知らない設定があるときは、表示は 15 秒続きます。それ以外の起動時の表示は 6 秒です。
 - `config.toml` が無いときは何も表示しません。起動時に `config.toml` が作られることもありません。
 

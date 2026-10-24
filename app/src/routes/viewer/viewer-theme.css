@@ -1,77 +1,18 @@
 /*
- * SPEC-0300-0017 R-913 / R-913-1 / R-913-1-1 / R-913-2 (Phase 12, dark theme), R-913-3 (6th edition: zero page
- * margin), R-913-4 (fonts); SPEC-0300-0015 R-511; SPEC-0200-0001 §3.11.7, §3.14.
+ * SPEC-0300-0017 R-913 / R-913-2 / R-913-3 (zero page margin) / R-913-4 (fonts); SPEC-0300-0023 R-1721 / R-1726 / R-1727; SPEC-0300-0015 R-511;
+ * SPEC-0200-0001 §3.18.5.
  *
- * Imported ONLY by routes/viewer/+page.svelte. The viewer is its own document and has its own palette:
- * `--vw-*` variables on `html` (light), overridden inside the dark `prefers-color-scheme` media query. The
- * theme itself is decided by the platform (a fixed `ui_theme` or the OS, applied by the Rust side the same way
- * as for the main window); this file only paints it, plus the page margin of R-913-3. Colour literals live here and nowhere else in the viewer
- * (R-910 / AC-905); the Rust-side window background in shared/window_theme.rs must equal `--vw-bg`.
+ * Imported ONLY by routes/viewer/+page.svelte. The viewer is its own document and has its own variables. This file holds NO colour value
+ * (SPEC-0300-0023 AC-1721): the colour variables of the viewer are computed by the back end (Rust `appearance/`) and placed by the window's
+ * initialization script; routes/+layout.ts sets them on the document root before the first paint. This file only paints with them (the
+ * highlight rules below), plus the page margin of R-913-3 and the fonts. The colour scheme comes from a variable; its fallback has no colour.
  */
 
 html {
-  --vw-bg: #fff;
-  --vw-fg: #111;
-  --vw-header-bg: #f0f0f0;
-  --vw-border: #d0d0d0;
-  --vw-banner-bg: #fff4ce;
-  --vw-banner-fg: #5c4400;
-  --vw-muted: #666;
-  --vw-error: #b00020;
-  --vw-lineno: #666;
-  --vw-gutter-bg: #f0f0f0;
-  --vw-gutter-border: #d0d0d0;
-  /* R-913-1-1: highlight colours (GitHub light). Two are adjusted for contrast (>= 4.5:1, R-466-8):
-     built_in, official #e36209; addition text, official #22863a. */
-  --vw-hl-keyword: #d73a49;
-  --vw-hl-title: #6f42c1;
-  --vw-hl-constant: #005cc5;
-  --vw-hl-string: #032f62;
-  --vw-hl-builtin: #c24e00;
-  --vw-hl-comment: #6a737d;
-  --vw-hl-name: #22863a;
-  --vw-hl-section: #005cc5;
-  --vw-hl-bullet: #735c0f;
-  --vw-hl-addition-fg: #1e7f35;
-  --vw-hl-addition-bg: #f0fff4;
-  --vw-hl-deletion-fg: #b31d28;
-  --vw-hl-deletion-bg: #ffeef0;
-  /* R-913-4: the fonts. The values are the same as the main window's base and monospace fonts (kept equal by a
-     static test); they do not change with the theme, so they are not repeated in the dark block. */
+  /* R-913-4: the fonts. The values are the same as the main window's base and monospace fonts (kept equal by a static test). */
   --vw-font: "Segoe UI", "Meiryo", sans-serif;
   --vw-font-mono: ui-monospace, "Cascadia Mono", "Consolas", "Menlo", "Monaco", "Courier New", monospace;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    --vw-bg: #1e1e1e;
-    --vw-fg: #ddd;
-    --vw-header-bg: #2a2a2a;
-    --vw-border: #444;
-    --vw-banner-bg: #4a3b00;
-    --vw-banner-fg: #ffd866;
-    --vw-muted: #999;
-    --vw-error: #ff8080;
-    --vw-lineno: #8c8c8c;
-    --vw-gutter-bg: #252526;
-    --vw-gutter-border: #3a3a3a;
-    /* GitHub dark. One is adjusted for contrast: section, official #1f6feb. */
-    --vw-hl-keyword: #ff7b72;
-    --vw-hl-title: #d2a8ff;
-    --vw-hl-constant: #79c0ff;
-    --vw-hl-string: #a5d6ff;
-    --vw-hl-builtin: #ffa657;
-    --vw-hl-comment: #8b949e;
-    --vw-hl-name: #7ee787;
-    --vw-hl-section: #4a8cf7;
-    --vw-hl-bullet: #f2cc60;
-    --vw-hl-addition-fg: #aff5b4;
-    --vw-hl-addition-bg: #033a16;
-    --vw-hl-deletion-fg: #ffdcd7;
-    --vw-hl-deletion-bg: #67060c;
-    color-scheme: dark;
-  }
+  color-scheme: var(--vw-color-scheme, light dark);
 }
 
 /* R-913-3: no page margin, so the 100vh `.viewer` fits exactly and the document shows no scrollbar. */

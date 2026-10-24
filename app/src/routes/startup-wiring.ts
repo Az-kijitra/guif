@@ -14,6 +14,8 @@
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import { configLoadKeymap } from "$lib/shared/ipc/config";
 import { externalAppsLoad, type ExternalAppsDto } from "$lib/shared/ipc/external-apps";
+import type { AppearanceDto } from "$lib/shared/ipc/appearance";
+import { startAppearanceLoad } from "$lib/shared/state/appearance-state.svelte";
 import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
 import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
 import { NOTICE_MS } from "$lib/features/settings-file/notice";
@@ -46,6 +48,19 @@ export async function runStartupHydrate(deps: StartupHydrateDeps): Promise<void>
 // The EMPTY snapshot below makes W-9A / W-9B / W-9C not appear, which keeps "no notice" (SPEC-0200-0001 §3.17.8).
 const EMPTY_EXTERNAL_APPS: ExternalAppsDto = { apps: [], invalid: [], typeError: false, typeErrorLine: null };
 
+// A failed appearance load: the part is simply empty (no problems to report).
+const NO_APPEARANCE_PROBLEMS: AppearanceDto = {
+  dark: true,
+  bg: "",
+  uiVars: [],
+  fontFamily: "",
+  fontSize: 12,
+  rowHeight: 16,
+  minColWidth: 24,
+  treeWidthPercent: 24,
+  problems: [],
+};
+
 async function loadExternalAppsSnapshot(): Promise<ExternalAppsDto> {
   try {
     return await externalAppsLoad();
@@ -55,13 +70,24 @@ async function loadExternalAppsSnapshot(): Promise<ExternalAppsDto> {
   }
 }
 
+// SPEC-0300-0023 R-1820 / SPEC-0200-0001 §3.18.5: the appearance comes from the SAME Promise +layout.ts awaited (one IPC). A failure was already
+// reported there (console.error); here it only means "no appearance sentence". This module never APPLIES the appearance (only +layout.ts does).
+async function loadAppearanceSnapshot(): Promise<AppearanceDto | null> {
+  try {
+    return await startAppearanceLoad();
+  } catch {
+    return null;
+  }
+}
+
 // Keymap load for `runStartupHydrate`'s `loadKeymap` (SPEC-0200-0001 §3.10.1 S1, §3.17.8): IPC -> `evaluateConfig` (the pure evaluation the check
 // shares, SPEC-0300-0022 R-1651) -> write the keymap and the external-app state (this is the ONLY writer, AC-1652) -> the notice text.
-// The theme itself is applied by the platform and CSS, not here.
+// The appearance itself is applied by +layout.ts, not here.
 export async function loadKeymapForStartup(): Promise<{ notice: string | null }> {
   const keymap = await configLoadKeymap();
   const externalApps = await loadExternalAppsSnapshot();
-  const evaluation = evaluateConfig({ keymap, externalApps });
+  const appearance = (await loadAppearanceSnapshot()) ?? NO_APPEARANCE_PROBLEMS;
+  const evaluation = evaluateConfig({ keymap, externalApps, appearance });
   keymapState.hydrate(evaluation.validated.effective);
   externalAppsState.hydrate(evaluation.registry);
   return { notice: evaluation.notice };

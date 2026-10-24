@@ -17,7 +17,7 @@ import { MOD, sleep } from "../lib/cdp.mjs";
 import { Cdp, listTargets } from "../lib/cdp.mjs";
 import { Skip } from "../lib/report.mjs";
 import { readClipboardText } from "../lib/clipboard.mjs";
-import { RGB } from "./_util.mjs";
+import { DEFAULT_FONT_FAMILY, RGB } from "./_util.mjs";
 
 const row = (name) => `.app-shell .file-list-row[aria-label=${JSON.stringify(name)}]`;
 const MENU = ".ctx-menu";
@@ -40,7 +40,7 @@ async function prep(ctx, { tree = true } = {}) {
 
 const menuOpen = (ctx) => ctx.ev(`!!document.querySelector('${MENU}')`);
 const selectedNames = (ctx) => ctx.ev(`[...document.querySelectorAll('.app-shell .file-list-row[aria-selected=true]')].map((e) => e.getAttribute('aria-label'))`);
-const focusedName = (ctx) => ctx.ev(`document.querySelector('.app-shell .file-list-row.focused')?.getAttribute('aria-label') ?? null`);
+const focusedName = (ctx) => ctx.ev(`document.querySelector('.app-shell .file-list-row:is(.cursor,.idle)')?.getAttribute('aria-label') ?? null`);
 const rowOrder = (ctx) => ctx.ev(`[...document.querySelectorAll('.app-shell .file-list-row')].map((e) => e.getAttribute('aria-label'))`);
 const statusFocus = async (ctx) => (await ctx.m.statusItems())[0];
 const statusText = (ctx) => ctx.ev(`document.querySelector('.status-bar')?.textContent ?? ''`);
@@ -466,7 +466,7 @@ export const tests = [
   },
   {
     id: "AC-1062",
-    title: "menu look: fixed, 160-260px, surface, border, shadow, padding, z-index, font; items 13px; disabled grey + 11px reason; highlight",
+    title: "menu look (AC-1810): fixed, 160-260px, surface, --ui-border-active frame, shadow, padding, z-index, [font] stack; items 12px; disabled muted-2 + 12px reason; highlight",
     async run(t, ctx) {
       await prep(ctx);
       await selectRows(ctx, ["a.txt", "b.txt"]);
@@ -478,24 +478,24 @@ export const tests = [
       t.eq(menu["min-width"], "160px", "min-width");
       t.eq(menu["max-width"], "260px", "max-width");
       t.eq(menu["background-color"], RGB.surface, "background");
-      t.eq([menu["border-top-width"], menu["border-top-style"], menu["border-top-color"], menu["border-left-color"]], ["1px", "solid", RGB.borderStrong, RGB.borderStrong], "border");
-      t.eq(menu["box-shadow"], "rgba(0, 0, 0, 0.14) 0px 8px 20px 0px", "box-shadow");
+      t.eq([menu["border-top-width"], menu["border-top-style"], menu["border-top-color"], menu["border-left-color"]], ["1px", "solid", RGB.borderActive, RGB.borderActive], "border");
+      t.eq(menu["box-shadow"], "rgba(0, 0, 0, 0.45) 0px 8px 20px 0px", "box-shadow (--ui-shadow-2 of nord)");
       t.eq(menu.padding, "4px 0px", "padding");
       t.eq(menu["z-index"], "20", "z-index");
-      t.ok(menu["font-family"].startsWith('"Segoe UI"'), "font-family starts with Segoe UI", menu["font-family"]);
+      t.eq(menu["font-family"], DEFAULT_FONT_FAMILY, "font-family is the [font] stack");
       t.eq(menu["border-radius"], "0px", "no radius");
       const item = await ctx.m.cs("#ctx-item-copy", ["padding", "font-size", "background-color"]);
       t.eq(item.padding, "4px 10px", "item padding");
-      t.eq(item["font-size"], "13px", "item font-size");
+      t.eq(item["font-size"], "12px", "item font-size");
       t.eq(item["background-color"], RGB.hover, "highlighted item background (ArrowDown -> copy)");
-      t.eq((await ctx.m.cs("#ctx-item-open .ctx-label", ["color"])).color, "rgb(153, 153, 153)", "disabled label colour");
+      t.eq((await ctx.m.cs("#ctx-item-open .ctx-label", ["color"])).color, RGB.muted2, "disabled label colour (--ui-muted-2)");
       const reason = await ctx.m.cs("#ctx-item-open .ctx-reason", ["font-size", "color"]);
-      t.eq([reason["font-size"], reason.color], ["11px", "rgb(102, 102, 102)"], "reason size / colour");
+      t.eq([reason["font-size"], reason.color], ["12px", RGB.muted], "reason size / colour");
     },
   },
   {
     id: "AC-1063",
-    title: "separators: 3 in the row menu (1px, #d0d0d0, 4px margins), 1 in the blank menu",
+    title: "separators: 3 in the row menu (1px, --ui-border, 4px margins), 1 in the blank menu",
     async run(t, ctx) {
       await prep(ctx);
       await openRowMenu(ctx, "a.txt");

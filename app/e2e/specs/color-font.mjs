@@ -1,91 +1,115 @@
-// SPEC-0300-0017 §16.2: colours (CSS variables) and fonts (AC-904, AC-906 (i), AC-908). AC-906 (ii) / AC-948 / AC-949 are in theme.mjs.
-import { fixedThemeNote } from "../lib/os-theme.mjs";
-import { openFiles, RGB } from "./_util.mjs";
+// SPEC-0300-0023 AC-1720 / AC-1721 / AC-1750 / AC-1752 (replaces SPEC-0300-0017 §16.2 AC-904 / AC-906 (i) / AC-908, see the table
+// "置き換えた受入基準" of SPEC-0300-0017 第11版 / 第12版). The default preset nord is measured (R-1840). The other presets, [colors], [theme] and [font]
+// are in appearance.mjs; AC-906 (ii) / AC-949 are rewritten in theme.mjs.
+import { DEFAULT_FONT_FAMILY, openFiles, RGB } from "./_util.mjs";
 
-// R-911 + R-924 (strings as in the spec; compared trimmed and lower-cased, §16.0).
-const VARIABLES = {
-  "--ui-bg": "#f5f5f5",
-  "--ui-fg": "#111",
-  "--ui-surface": "#fff",
-  "--ui-surface-2": "#f0f0f0",
-  "--ui-surface-3": "#e8f0ff",
-  "--ui-border": "#d0d0d0",
-  "--ui-border-strong": "#cfcfcf",
-  "--ui-border-muted": "#eee",
-  "--ui-muted": "#666",
-  "--ui-muted-2": "#999",
-  "--ui-hover": "#e8f0ff",
-  "--ui-selected": "#dbe9ff",
-  "--ui-focused": "#7aa7ff",
-  "--ui-row-head": "#f0f0f0",
-  "--ui-link": "#2a6fdb",
-  "--ui-error": "#b00020",
+// R-1722 / R-1724 for nord (strings as Rust `appearance/vars.rs` writes them; compared trimmed and lower-cased, §16.0). The derived ones
+// (muted, muted-2, error) are the values fixed for nord by the Rust tests.
+export const NORD_VARIABLES = {
+  "--ui-bg": "#2e3440",
+  "--ui-fg": "#eceff4",
+  "--ui-surface": "#2e3440",
+  "--ui-surface-2": "#2e3440",
+  "--ui-surface-3": "#3b4252",
+  "--ui-border": "#4c566a",
+  "--ui-border-strong": "#8d929a",
+  "--ui-border-muted": "#4c566a",
+  "--ui-muted": "#b3b7be",
+  "--ui-muted-2": "#8d929a",
+  "--ui-hover": "#8fbcbb",
+  "--ui-selected": "#3b4252",
+  "--ui-focused": "#88c0d0",
+  "--ui-row-head": "#3b4252",
+  "--ui-link": "#88c0d0",
+  "--ui-error": "#ff8a80",
   "--ui-backdrop": "rgba(0,0,0,.35)",
-  "--ui-shadow-1": "rgba(0,0,0,.12)",
-  "--ui-shadow-2": "rgba(0,0,0,.14)",
-  "--list-row-height": "28px",
+  "--ui-shadow-1": "rgba(0,0,0,.4)",
+  "--ui-shadow-2": "rgba(0,0,0,.45)",
+  "--ui-border-active": "#88c0d0",
+  "--ui-cursor-fg": "#2e3440",
+  "--ui-cursor-bg": "#8fbcbb",
+  "--ui-folder": "#81a1c1",
+  "--ui-executable": "#a3be8c",
+  "--ui-selected-fg": "#ebcb8b",
+  "--ui-status-fg": "#e5e9f0",
+  "--ui-status-bg": "#3b4252",
+  "--ui-menu-active-fg": "#2e3440",
+  "--ui-menu-active-bg": "#88c0d0",
+  "--ui-tree-current": "#88c0d0",
+  "--ui-tree-cursor": "#ebcb8b",
+  "--ui-color-scheme": "dark",
+  // R-1754 (second edition): 12px and a row of round(12 x 1.32) = 16px.
+  "--ui-font-size": "12px",
+  "--ui-line-height": "16px",
+  "--list-row-height": "16px",
 };
-
-const SEGOE = '"Segoe UI"';
-const startsWithFont = (value, first) => typeof value === "string" && value.startsWith(first);
 
 export const tests = [
   {
     id: "AC-904",
-    title: "every R-911 variable and --list-row-height is defined on :root with the spec's string",
+    title: "every --ui-* variable of nord (AC-1720 / AC-1721) and the font variables (12px, row 16px) are defined on :root with the Rust string",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100);
-      for (const [name, expected] of Object.entries(VARIABLES)) {
+      for (const [name, expected] of Object.entries(NORD_VARIABLES)) {
         t.eq(await ctx.m.cssVar(name), expected, name);
       }
+      t.eq((await ctx.m.cssVar("--ui-font")).replaceAll('"', ""), DEFAULT_FONT_FAMILY.toLowerCase().replaceAll('"', ""), "--ui-font is the default stack");
     },
   },
   {
     id: "AC-906",
-    title: "light pinned (ui_theme = \"light\", no emulation): body #f5f5f5, container color-scheme light, html normal; the OS is ignored",
+    title: "nord, no emulation (AC-1721 / AC-1741): body = bg, container color-scheme dark, html normal, whatever the OS theme is",
     async run(t, ctx) {
-      // SPEC-0300-0017 AC-906 (i) as rewritten for the 5th edition: the test config pins the light theme (R-995-1).
-      // No Emulation here: only a real OS that is dark would show the pin working (R-995-2 note 2), so the
-      // report says whether this run could tell.
+      // R-1740: the colour scheme comes from the preset (nord = dark) and not from the OS; E2E config.toml has no theme line (R-1840).
       await openFiles(ctx, "many100", 100);
-      t.eq(await ctx.ev(`matchMedia("(prefers-color-scheme: dark)").matches`), false, "prefers-color-scheme: dark does not match (the app pins light)");
-      t.eq((await ctx.configDto()).uiTheme, "light", "DTO uiTheme");
       t.eq((await ctx.m.cs("body", ["background-color"]))["background-color"], RGB.bg, "body background");
-      t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "light", "container color-scheme");
+      t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "dark", "container color-scheme");
       t.eq((await ctx.m.cs("html", ["color-scheme"]))["color-scheme"], "normal", "html color-scheme");
-      const note = fixedThemeNote("light", ctx.osTheme ?? null);
-      if (note !== null) t.note(note);
+      t.eq(await ctx.ev(`matchMedia("(prefers-color-scheme: dark)").matches`), true, "the page is dark (nord is dark; the window theme is set from the colour scheme, R-1741)");
+      if (ctx.osTheme) t.note(`OS app theme: ${ctx.osTheme}; the colour scheme is nord's either way`);
     },
   },
   {
     id: "AC-908",
-    title: "fonts: Segoe UI 13px base; monospace for list/tree/path input/history path; sizes per R-922",
+    title: "fonts (AC-1750 (i) / AC-1752): every place of the main window has the default [font] stack at 12px; the row is 16px",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100, { size: true, time: true });
       const f = (sel, i = 0) => ctx.m.cs(sel, ["font-family", "font-size"], i);
-
-      const shell = await f(".app-shell");
-      t.ok(startsWithFont(shell["font-family"], SEGOE), "container font-family starts with Segoe UI", shell["font-family"]);
-      t.eq(shell["font-size"], "13px", "container font-size");
-
-      const mono = async (label, sel, size, i = 0) => {
+      const same = async (label, sel, i = 0) => {
         const s = await f(sel, i);
-        t.ok(startsWithFont(s["font-family"], "ui-monospace"), `${label} font-family starts with ui-monospace`, s["font-family"]);
-        t.eq(s["font-size"], size, `${label} font-size`);
+        t.ok(s !== null, `${label} exists`);
+        if (s === null) return;
+        t.eq(s["font-family"], DEFAULT_FONT_FAMILY, `${label} font-family`);
+        t.eq(s["font-size"], "12px", `${label} font-size`);
       };
-      await mono("list name", ".file-list-row .name-text", "12px");
-      await mono("tree node", ".tree-node", "12px");
-      await mono("path input", ".path-bar-row input", "12px");
-      t.eq((await f(".file-list-row .size"))["font-size"], "11px", "list size cell font-size");
-      t.eq((await f(".file-list-row .modified"))["font-size"], "11px", "list time cell font-size");
-      t.eq((await f(".status-bar"))["font-size"], "11px", "status bar font-size");
-      t.ok(startsWithFont((await f(".status-bar"))["font-family"], SEGOE), "status bar font-family");
+      await same("container", ".app-shell");
+      await same("menu bar heading", ".menubar .heading");
+      await same("PATH label", ".path-label");
+      await same("path input", ".path-bar-row input");
+      await same("list row", ".file-list-row");
+      await same("list name", ".file-list-row .name");
+      await same("list size cell", ".file-list-row .size");
+      await same("list time cell", ".file-list-row .modified");
+      await same("list heading", ".file-list-frame .pane-title");
+      await same("tree node", ".tree-node");
+      await same("tree heading", ".tree-pane .pane-title");
+      await same("status bar", ".status-bar");
+      t.eq((await ctx.m.cs(".file-list-row", ["height"]))["height"], "16px", "list row height");
+      t.eq((await ctx.m.cs(".tree-node", ["height"]))["height"], "16px", "tree node height");
+
+      // Menu bar dropdown (F10 opens "ファイル").
+      await ctx.focusList();
+      await ctx.press.accessKey("F");
+      await ctx.waitFor(`!!document.querySelector('.menubar .dropdown .item')`, { label: "the File menu" });
+      await same("dropdown item", ".menubar .dropdown .item");
+      await ctx.press.escape();
+      await ctx.waitFor(`!document.querySelector('.menubar .dropdown')`, { label: "the dropdown to close" });
 
       // Sort menu (s).
       await ctx.focusList();
       await ctx.press.sortMenu();
       await ctx.waitFor(`!!document.querySelector('.sort-menu')`, { label: "the sort menu" });
-      t.eq((await f(".sort-menu-item"))["font-size"], "13px", "sort menu item font-size");
+      await same("sort menu item", ".sort-menu-item");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.sort-menu')`, { label: "the sort menu to close" });
 
@@ -93,25 +117,27 @@ export const tests = [
       await ctx.focusList();
       await ctx.press.search();
       await ctx.waitFor(`!!document.querySelector('.search-bar')`, { label: "the search bar" });
-      t.ok(startsWithFont((await f(".search-bar input"))["font-family"], SEGOE), "search input font-family");
-      t.ok(startsWithFont((await f(".search-bar button"))["font-family"], SEGOE), "button font-family");
+      await same("search input", ".search-bar input");
+      await same("search button", ".search-bar button");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.search-bar')`, { label: "the search bar to close" });
 
-      // Visit history (Ctrl+Y): the folders visited so far are listed.
+      // Visit history (Ctrl+Y).
       await ctx.focusList();
       await ctx.press.history();
       await ctx.waitFor(`!!document.querySelector('.nav-history-list .path')`, { label: "the visit history list" });
-      await mono("history path", ".nav-history-list .path", "12px");
+      await same("history path", ".nav-history-list .path");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.nav-history-list')`, { label: "the history list to close" });
 
-      // A dialog (Delete asks for confirmation; nothing is deleted: the command is refused anyway).
+      // A dialog (Delete asks for confirmation; nothing is deleted: the command is refused anyway): every element in it, title and buttons included.
       await ctx.focusList();
       await ctx.press.del();
       await ctx.waitFor(`!!document.querySelector('.ui-dialog')`, { label: "the delete confirmation dialog" });
-      t.ok(startsWithFont((await f(".ui-dialog"))["font-family"], SEGOE), "dialog font-family");
-      t.ok(startsWithFont((await f(".ui-dialog button"))["font-family"], SEGOE), "dialog button font-family");
+      const dialog = await ctx.ev(`[...document.querySelectorAll('.ui-dialog, .ui-dialog *')].map((e) => { const s = getComputedStyle(e); return { tag: e.tagName, family: s.fontFamily, size: s.fontSize }; })`);
+      t.ok(dialog.length >= 3, "the dialog has a title, a body and buttons", String(dialog.length));
+      t.eq([...new Set(dialog.map((x) => x.family))], [DEFAULT_FONT_FAMILY], "every element of the dialog has the default stack");
+      t.eq([...new Set(dialog.map((x) => x.size))], ["12px"], "every element of the dialog is 12px");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.ui-dialog')`, { label: "the dialog to close" });
     },

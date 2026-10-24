@@ -526,11 +526,11 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     if (fallback !== false) throw new AbortRun("refusing to send input: the IPC stubs are not in force");
     const state = await cdp.ev(`(() => {
       const input = document.querySelector('.path-bar-row input');
-      const row = document.querySelector('.file-list-row.focused');
+      const row = document.querySelector('.file-list-row:is(.cursor,.idle)');
       return { editing: !!input && document.activeElement === input,
         overlay: !!document.querySelector('.ui-dialog, [role=dialog], .nav-history-list, .ctx-menu, .sort-menu, .search-bar'),
         listFocused: document.activeElement === document.querySelector('.app-shell [role=listbox]'),
-        focusedIsFolder: !!row && (row.querySelector('.name-text')?.textContent ?? '').startsWith('📁') };
+        focusedIsFolder: !!row && row.classList.contains('dir') };
     })()`);
     if (state.editing || state.overlay || !state.listFocused) throw new AbortRun(`refusing ${key}: the file list is not the plain focus target (${JSON.stringify(state)})`);
     if (key === "Enter" && !state.focusedIsFolder) throw new AbortRun("refusing Enter: the focused row is not a folder");

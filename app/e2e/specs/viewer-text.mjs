@@ -76,7 +76,7 @@ export async function checkTextLook(t, viewer, p) {
 export const tests = [
   {
     id: "AC-522",
-    title: "light: body / number column fonts (ui-monospace 13px, line 20px, tab 4, pre), 72px right-aligned number column, header Segoe UI 13px; Markdown HTML body Segoe UI and code blocks monospace",
+    title: "nord: body / number column fonts (ui-monospace 13px, line 20px, tab 4, pre), 72px right-aligned number column, header Segoe UI 13px; Markdown HTML body Segoe UI and code blocks monospace",
     async run(t, ctx) {
       ctx.fx.mkdir("vt-look");
       fs.writeFileSync(ctx.fx.at("vt-look", "a.txt"), FIFTY);
@@ -84,7 +84,7 @@ export const tests = [
       let viewer = await showInViewer(t, ctx, "vt-look", "a.txt", "text", { contains: "line 1 text" });
       if (viewer === undefined) return;
       try {
-        await checkTextLook(t, viewer, { header: "rgb(240, 240, 240)", border: "rgb(208, 208, 208)" });
+        await checkTextLook(t, viewer, { header: "rgb(46, 52, 64)", border: "rgb(76, 86, 106)" });
       } finally {
         await closeViewerWindow(ctx, viewer);
       }

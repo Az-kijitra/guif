@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Spec: SPEC-0300-0010 R-45; SPEC-0300-0009 R-77.
@@ -35,27 +38,32 @@ describe("configLoadKeymap (SPEC-0300-0010 R-45)", () => {
   });
 });
 
-// SPEC-0300-0017 R-917-4 / R-917-5; SPEC-0200-0001 §3.11.4 (Phase 12): the DTO carries `wholeFile`
-// on parseError and `uiTheme` / `uiThemeInvalid` next to it. The command name is unchanged.
-describe("configLoadKeymap: Phase 12 theme fields (SPEC-0200-0001 §3.11.4)", () => {
-  it("passes wholeFile / uiTheme / uiThemeInvalid through untouched, typed", async () => {
+// SPEC-0300-0023 R-1748 / SPEC-0200-0001 §3.18.4 (replaces the Phase 12 theme fields): the DTO has NO `uiTheme` / `uiThemeInvalid` / `uiThemeLine` any more;
+// `ui_theme` is just an unknown top-level key (W-AC). `UnknownSettingDto.kind` gains "tableKey" with `table` (a key inside [theme] / [colors] / [font] / [layout]).
+describe("configLoadKeymap: SPEC-0300-0023 DTO (no ui_theme fields; tableKey unknown settings)", () => {
+  it("passes wholeFile and the unknown settings (key / appField / tableKey) through untouched, typed", async () => {
     const result: KeymapRawLoadResultDto = {
       entries: [],
       parseError: { message: "bad toml", line: 2, wholeFile: true },
-      uiTheme: "system",
-      uiThemeInvalid: false,
-      uiThemeLine: null,
       present: true,
-      unknownSettings: [],
+      unknownSettings: [
+        { kind: "key", name: "ui_theme", line: 2 },
+        { kind: "tableKey", table: "font", name: "weight", line: 3 },
+      ],
     };
     vi.mocked(invoke).mockResolvedValueOnce(result);
 
     const got = await configLoadKeymap();
     expect(got).toEqual(result);
     expect(got.parseError?.wholeFile).toBe(true);
-    expect(got.uiTheme).toBe("system");
-    expect(got.uiThemeInvalid).toBe(false);
+    expect(got.unknownSettings[1]).toMatchObject({ kind: "tableKey", table: "font" });
     expect(invoke).toHaveBeenCalledWith("config_load_keymap");
+  });
+
+  it("the type has no uiTheme fields (source check)", () => {
+    const src = readFileSync(resolve(__dirname, "config.ts"), "utf-8");
+    expect(src).not.toMatch(/uiTheme|uiThemeInvalid|uiThemeLine/);
+    expect(src).toMatch(/"tableKey"/);
   });
 });
 

@@ -32,15 +32,18 @@ export const tests = [
   },
   {
     id: "AC-901",
-    title: "tree panel 220px, list frame fills the rest (3px gap), tree toggle, wider window",
+    title: "tree pane = floor(body width x 24 / 100) wide (AC-1804, R-1804), list frame fills the rest (3px gap), tree toggle, a wider window changes the tree width in proportion",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100);
       await ctx.setViewport(1000, 700);
-      const tree = await ctx.m.rect(".tree-panel");
+      const treeWidth = (bodyWidth) => Math.floor((bodyWidth * 24) / 100);
+      let body = await ctx.m.rect(".app-shell > .body");
+      const tree = await ctx.m.rect(".tree-pane");
       let frame = await ctx.m.rect(".file-list-frame");
-      const body = await ctx.m.rect(".app-shell > .body");
-      t.approx(tree.width, 220, "tree panel width");
-      t.approx(tree.left, 2, "tree panel left");
+      t.approx(body.width, 996, "body width at 1000");
+      t.approx(tree.width, treeWidth(body.width), "tree pane width = floor(24%) of the body");
+      t.approx(tree.width, 239, "= about 239 px at 1000 (AC-1804)", 1);
+      t.approx(tree.left, 2, "tree pane left");
       t.approx(frame.left, tree.right + 3, "list frame left = tree right + 3");
       t.approx(frame.right, 998, "list frame right");
       t.approx(tree.top, body.top, "tree top = body top");
@@ -51,22 +54,23 @@ export const tests = [
       await ctx.press.toggleTree();
       await ctx.settle();
       frame = await ctx.m.rect(".file-list-frame");
-      t.eq(await ctx.m.count(".tree-panel"), 0, "tree hidden");
+      t.eq(await ctx.m.count(".tree-pane"), 0, "tree hidden");
       t.approx(frame.left, 2, "list frame left without the tree");
       t.approx(frame.right, 998, "list frame right without the tree");
       await ctx.press.toggleTree();
       await ctx.settle();
 
       await ctx.setViewport(1200, 700);
+      body = await ctx.m.rect(".app-shell > .body");
       const wide = await ctx.m.rect(".file-list-frame");
-      const wideTree = await ctx.m.rect(".tree-panel");
+      const wideTree = await ctx.m.rect(".tree-pane");
       t.approx(wide.right, 1198, "list frame right at 1200 wide");
-      t.approx(wideTree.width, 220, "tree panel width stays 220");
+      t.approx(wideTree.width, treeWidth(body.width), "tree pane width follows the body width (24%)");
     },
   },
   {
     id: "AC-902",
-    title: "computed styles: margins, overflow, container flex/padding/gap/height, frames, backgrounds",
+    title: "computed styles: margins, overflow, container flex/padding/gap/height, bands without frames (path bar, status bar), frames of the tree and the list (AC-1760), backgrounds",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100);
       await ctx.setViewport(1000, 700);
@@ -85,17 +89,19 @@ export const tests = [
       t.eq(shell.height, "700px", "container height");
       t.eq(shell["background-color"], RGB.bg, "container background");
 
-      const frames = [
-        [".path-bar-row", RGB.surface2],
-        [".tree-panel", RGB.surface],
-        [".file-list-frame", RGB.surface],
-        [".status-bar", RGB.surface2],
-      ];
-      for (const [sel, bg] of frames) {
+      // AC-1760: the path bar and the status bar are bands without a frame.
+      for (const [sel, bg] of [[".path-bar-row", RGB.surface2], [".status-bar", RGB.statusBg]]) {
         const b = await borders(ctx, sel);
-        const expected = expectedBorders(RGB.border);
-        for (const key of Object.keys(expected)) t.eq(b[key], expected[key], `${sel} ${key}`);
+        for (const side of BORDER_SIDES) t.eq(b[`border-${side}-width`], "0px", `${sel} border-${side}-width`);
         t.eq((await ctx.m.cs(sel, ["background-color"]))["background-color"], bg, `${sel} background`);
+      }
+      // The tree and the list have the frame (drawn by .pane::before, 1px, inactive colour while not focused) and a surface background.
+      await ctx.focusList();
+      for (const [sel, color] of [[".tree-pane", RGB.border], [".file-list-frame", RGB.borderActive]]) {
+        const frame = await ctx.ev(`(() => { const s = getComputedStyle(document.querySelector(${JSON.stringify(sel)}), "::before"); return { w: s.borderTopWidth, st: s.borderTopStyle, c: s.borderTopColor, r: s.borderRightWidth, b: s.borderBottomWidth, l: s.borderLeftWidth }; })()`);
+        t.eq([frame.w, frame.r, frame.b, frame.l, frame.st], ["1px", "1px", "1px", "1px", "solid"], `${sel} frame is 1px solid`);
+        t.eq(frame.c, color, `${sel} frame colour`);
+        t.eq((await ctx.m.cs(sel, ["background-color"]))["background-color"], RGB.surface, `${sel} background`);
       }
     },
   },
@@ -118,10 +124,9 @@ export const tests = [
       await ctx.cdp.key("Enter");
       await ctx.waitFor(`!!document.querySelector('.list-notice')`, { timeout: 5000, label: "the loading notice" });
       const notice = await ctx.m.rect(".list-notice");
-      const frame = await ctx.m.rect(".file-list-frame");
-      const fd = await ctx.m.dims(".file-list-frame");
-      t.approx(notice.left, frame.left + fd.clientLeft + 4, "notice left = frame inner left + 4");
-      t.approx(notice.top, frame.top + fd.clientTop + 4, "notice top = frame inner top + 4");
+      const inner = await ctx.m.rect(".file-list-frame .pane-body");
+      t.approx(notice.left, inner.left + 4, "notice left = inner body left + 4");
+      t.approx(notice.top, inner.top + 4, "notice top = inner body top + 4 (below the heading band)");
       const ns = await ctx.m.cs(".list-notice", ["position", "pointer-events", "font-size"]);
       t.eq(ns.position, "absolute", "notice position");
       t.eq(ns["pointer-events"], "none", "notice pointer-events");

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 //   AC-1607, AC-1650, AC-1653, AC-1655/1656 (the calls), AC-1657 (the check does not change the start-up registrations).
 // Architecture: SPEC-0200-0001 §3.17.8: `routes/settings-file-wiring.ts`:
 //   createSettingsFileWiring({ status: { show(msg); showPriority(msg, ms) }, closeMenus: () => void,
-//                              ipc?: { settingsFileOpen(): Promise<dto>; settingsFileCheck(): Promise<{ keymap; externalApps }> } })
+//                              ipc?: { settingsFileOpen(): Promise<dto>; settingsFileCheck(): Promise<{ keymap; externalApps; appearance }> } })
 //     -> { open(): Promise<void>; check(): Promise<void>; onHardcoded(action: "exit" | "settings", event: { repeat?: boolean }): boolean }
 //   `ipc` defaults to shared/ipc/settings-file. open(): ipc -> buildOpenResult -> status.show. check(): ipc -> evaluateConfig -> buildCheckNotice ->
 //   status.showPriority(text, durationMs). A rejection becomes W-A5 (`config.toml を開けませんでした。 詳細: {message}`) through status (open: show).
@@ -19,7 +19,9 @@ import { createSettingsFileWiring } from "./settings-file-wiring";
 
 const W_A9 = "設定ファイルのチェック(次の起動での扱い): ";
 const keymap = (over: Record<string, unknown> = {}) =>
-  ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over }) as never;
+  ({ entries: [], parseError: null, present: true, unknownSettings: [], ...over }) as never;
+//SPEC-0300-0023: the check snapshot also carries `appearance` (ConfigCheckDto { keymap, externalApps, appearance }).
+const app = (over: Record<string, unknown> = {}) => ({ dark: true, bg: "#2e3440", uiVars: [], fontFamily: "monospace", fontSize: 16, rowHeight: 21, minColWidth: 24, treeWidthPercent: 24, problems: [], ...over }) as never;
 const ext = (over: Record<string, unknown> = {}) => ({ apps: [], invalid: [], typeError: false, typeErrorLine: null, ...over }) as never;
 
 function setup(over: { open?: () => Promise<unknown>; check?: () => Promise<unknown> } = {}) {
@@ -31,7 +33,7 @@ function setup(over: { open?: () => Promise<unknown>; check?: () => Promise<unkn
   const closeMenus = vi.fn(() => void calls.push("closeMenus"));
   const ipc = {
     settingsFileOpen: vi.fn(over.open ?? (async () => ({ templateCreated: false, sampleError: null, result: { kind: "vscode" } }))),
-    settingsFileCheck: vi.fn(over.check ?? (async () => ({ keymap: keymap(), externalApps: ext() }))),
+    settingsFileCheck: vi.fn(over.check ?? (async () => ({ keymap: keymap(), externalApps: ext(), appearance: app() }))),
   };
   const wiring = createSettingsFileWiring({ status, closeMenus, ipc } as never);
   return { wiring, status, closeMenus, ipc, calls };
@@ -83,18 +85,18 @@ describe("check(): evaluate, then REPLACE the shown text (R-1663-1)", () => {
   });
 
   it("AC-1653 (ii): no config.toml (present false) -> W-A9 + W-AB, 2.5 s", async () => {
-    const s = setup({ check: async () => ({ keymap: keymap({ present: false }), externalApps: ext() }) });
+    const s = setup({ check: async () => ({ keymap: keymap({ present: false }), externalApps: ext(), appearance: app() }) });
     await s.wiring.check();
     expect(s.status.showPriority).toHaveBeenCalledWith(`${W_A9}config.toml がないため、既定の設定を使います。`, 2500);
   });
 
   it("AC-1653 (iii): a syntax error -> W-A9 + W-31 with the line, 15 s", async () => {
     const s = setup({
-      check: async () => ({ keymap: keymap({ parseError: { message: "bad", line: 2, wholeFile: true } }), externalApps: ext() }),
+      check: async () => ({ keymap: keymap({ parseError: { message: "bad", line: 2, wholeFile: true } }), externalApps: ext(), appearance: app() }),
     });
     await s.wiring.check();
     expect(s.status.showPriority).toHaveBeenCalledWith(
-      `${W_A9}config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: bad`,
+      `${W_A9}config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、配色(nord)、外部アプリの既定の登録を使います。 詳細: bad`,
       15000,
     );
   });
@@ -102,21 +104,22 @@ describe("check(): evaluate, then REPLACE the shown text (R-1663-1)", () => {
   it("AC-1650: errors -> W-A9 + the same config.toml part as at start-up, 15 s", async () => {
     const s = setup({
       check: async () => ({
-        keymap: keymap({ entries: [{ actionId: "copy", value: "Ctrl+", line: 12 }], uiThemeInvalid: true, uiThemeLine: 3 }),
+        keymap: keymap({ entries: [{ actionId: "copy", value: "Ctrl+", line: 12 }] }),
+        appearance: app({ problems: [{ kind: "presetUnusable", line: 3, value: "dracula", usable: ["default", "nord", "monokai", "catppuccin", "solarized", "light"] }] }),
         externalApps: ext({ invalid: [{ position: 2, name: "bad", reason: "invalid", line: 22 }] }),
       }),
     });
     await s.wiring.check();
     expect(s.status.showPriority).toHaveBeenCalledWith(
       `${W_A9}config.toml の不正なキー割り当て 1 件を無視しました: copy(12 行目)。` +
-        ' config.toml の 3 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。' +
+        ' config.toml の 3 行目の配色 "dracula" は使えないため、nord を使います(使える値: default、nord、monokai、catppuccin、solarized、light)。' +
         " config.toml の外部アプリの登録 1 件を使いません: 2(bad、22 行目)。",
       15000,
     );
   });
 
   it("unknown settings alone count as a problem: 15 s", async () => {
-    const s = setup({ check: async () => ({ keymap: keymap({ unknownSettings: [{ kind: "key", name: "ui_them", line: 2 }] }), externalApps: ext() }) });
+    const s = setup({ check: async () => ({ keymap: keymap({ unknownSettings: [{ kind: "key", name: "ui_them", line: 2 }] }), externalApps: ext(), appearance: app() }) });
     await s.wiring.check();
     expect(s.status.showPriority.mock.calls[0][1]).toBe(15000);
   });

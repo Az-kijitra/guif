@@ -23,9 +23,9 @@ export function moveFocusRow(visible: readonly unknown[], index: number, directi
   return Math.max(index - 1, 0);
 }
 
-// R-58: move_left / move_right jump to the same row position in the
-// previous/next column, using rowsPerColumn to convert between row/col and
-// the flat visual index.
+// R-58 (SPEC-0300-0009 第20版 / SPEC-0300-0023 R-1796 / R-1797, tuif): move_right goes to the same row position in the next column, or to the
+// LAST item when the next column is shorter; it does not move from the last column. move_left goes back by one column and does not move
+// from the first one. `rowsPerColumn` converts between row/col and the flat visual index.
 export function moveFocusColumn(
   index: number,
   direction: ColumnDirection,
@@ -35,19 +35,15 @@ export function moveFocusColumn(
   if (rowsPerColumn <= 0 || totalCount <= 0) {
     return index;
   }
-  const row = index % rowsPerColumn;
+  if (direction === "left") {
+    return index >= rowsPerColumn ? index - rowsPerColumn : index;
+  }
   const col = Math.floor(index / rowsPerColumn);
   const totalCols = Math.ceil(totalCount / rowsPerColumn);
-  const newCol = direction === "right" ? col + 1 : col - 1;
-
-  if (newCol < 0 || newCol >= totalCols) {
+  if (col + 1 >= totalCols) {
     return index;
   }
-  const newIndex = newCol * rowsPerColumn + row;
-  if (newIndex >= totalCount) {
-    return index;
-  }
-  return newIndex;
+  return Math.min(index + rowsPerColumn, totalCount - 1);
 }
 
 // R-59: page_up / page_down move the focus by one page (rows) worth of

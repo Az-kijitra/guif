@@ -5,10 +5,10 @@
 //! ```ignore
 //! /// What `lib.rs` and `check.rs` call. `StartupConfig::load(app)` (which goes through `config::startup_config::locate`) and
 //! /// `Registry::from_raw(&loaded.external_apps, &loaded.lines.external_apps, &env::lookup, env::path_var())`.
-//! pub fn snapshot(app: &AppHandle) -> (StartupConfig, Registry);
+//! pub fn snapshot(app: &AppHandle) -> (StartupConfig, Registry, Appearance);   // SPEC-0300-0023: the third element; see appearance_snapshot_tests.rs
 //! /// The AppHandle-free seam of `snapshot` (a unit test cannot build an AppHandle): `snapshot(app)` is `snapshot_at(&locate(app)?,
 //! /// &env::lookup, env::path_var())` (a path-resolution failure => `StartupConfig::unreadable` and a registry of the default four).
-//! pub fn snapshot_at(path: &Path, env: &dyn Fn(&str) -> Option<OsString>, path_var: Option<OsString>) -> (StartupConfig, Registry);
+//! pub fn snapshot_at(path: &Path, env: &dyn Fn(&str) -> Option<OsString>, path_var: Option<OsString>) -> (StartupConfig, Registry, Appearance);
 //! ```
 //! The environment is an argument here, so no test touches the real one.
 
@@ -54,7 +54,8 @@ fn file(body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn r1651_snapshot_is_the_composition_of_the_shared_functions() {
     let (_d, path) = file(&ac1640());
-    let (startup, registry) = snapshot_at(&path, &env, Some(OsString::from(r"C:\bin")));
+    let snap = snapshot_at(&path, &env, Some(OsString::from(r"C:\bin")));
+    let (startup, registry) = (snap.0, snap.1);
     let expected_startup = StartupConfig::from_path(&path);
     let expected_registry = Registry::from_raw(
         &expected_startup.loaded.external_apps,
@@ -71,12 +72,14 @@ fn r1651_snapshot_is_the_composition_of_the_shared_functions() {
 #[test]
 fn ac1640_the_registry_knows_the_line_of_the_failing_field() {
     let (_d, path) = file(&ac1640());
-    let (startup, registry) = snapshot_at(&path, &env, None);
+    let snap = snapshot_at(&path, &env, None);
+    let (startup, registry) = (snap.0, snap.1);
     assert_eq!(registry.apps.len(), 1, "【確定 #3】only the bad element is dropped");
     assert_eq!((registry.invalid[0].position, registry.invalid[0].reason, registry.invalid[0].line), (2, InvalidReason::Invalid, Some(22)));
     let dto = startup.to_dto();
-    assert!(dto.ui_theme_invalid);
-    assert_eq!(dto.ui_theme_line, Some(3));
+    // SPEC-0300-0023: `ui_theme` is no longer read, so line 3 is an UNKNOWN setting (W-AC) like any other key
+    assert_eq!(dto.unknown_settings.len(), 1);
+    assert_eq!((dto.unknown_settings[0].name.as_str(), dto.unknown_settings[0].line), ("ui_theme", Some(3)));
     assert_eq!(dto.entries[0].line, Some(12));
 }
 
@@ -84,7 +87,8 @@ fn ac1640_the_registry_knows_the_line_of_the_failing_field() {
 #[test]
 fn r1644_a_missing_file_gives_the_default_four_and_present_false() {
     let dir = tempfile::tempdir().unwrap();
-    let (startup, registry) = snapshot_at(&dir.path().join("config.toml"), &env, None);
+    let snap = snapshot_at(&dir.path().join("config.toml"), &env, None);
+    let (startup, registry) = (snap.0, snap.1);
     assert!(!startup.to_dto().present);
     assert_eq!(registry.apps.len(), 4);
     assert!(registry.invalid.is_empty() && !registry.type_error);
@@ -95,12 +99,15 @@ fn r1644_a_missing_file_gives_the_default_four_and_present_false() {
 #[test]
 fn ac1657_expansion_and_validation_use_the_environment_given_to_this_call() {
     let (_d, path) = file("[[external_apps]]\nname = \"tool\"\nprogram = \"%MY_TOOL_DIR%\\\\t.exe\"\n");
-    let (_, defined) = snapshot_at(&path, &env, None);
+    let snap = snapshot_at(&path, &env, None);
+    let (_, defined) = (snap.0, snap.1);
     assert_eq!(defined.apps[0].program, r"C:\tools\t.exe");
-    let (_, undefined) = snapshot_at(&path, &|_| None, None);
+    let snap = snapshot_at(&path, &|_| None, None);
+    let (_, undefined) = (snap.0, snap.1);
     assert!(undefined.apps.is_empty());
     assert_eq!(undefined.invalid[0].line, Some(3), "W-9A '1(tool、3 行目)'");
-    let (_, again) = snapshot_at(&path, &env, None);
+    let snap = snapshot_at(&path, &env, None);
+    let (_, again) = (snap.0, snap.1);
     assert_eq!(again, defined, "the same file and environment give the same registry every time");
 }
 

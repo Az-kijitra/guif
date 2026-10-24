@@ -14,13 +14,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::config::config_toml::{load, ConfigTomlLoadResult};
-use crate::config::startup_config::StartupConfig;
 use crate::external_apps::defaults::DEFAULT_APPS;
 use crate::external_apps::registry::Registry;
 use crate::settings_file::editor::{vscode_candidate, VSCODE_RELATIVE};
 use crate::settings_file::source::{render, Kind};
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawValue};
-use crate::shared::schema::ui_theme::{ThemeSetting, UiThemeRaw};
 
 const DEFAULT_NAMES: [&str; 4] = ["ターミナルで開く", "VS Codeで開く", "エクスプローラーで開く", "GitHub Desktopで開く"];
 
@@ -72,8 +70,7 @@ fn ac1630_the_uncommented_scaffold_and_sample_are_valid_and_complete() {
         assert!(r.present, "{what}");
         assert!(r.keymap.parse_error.is_none(), "{what}: valid TOML");
         assert!(r.unknown.is_empty(), "{what}: no unknown setting (R-1638 1): {:?}", r.unknown);
-        assert_eq!(r.ui_theme, UiThemeRaw::Str("system".into()), "{what}: R-1632 the documented default");
-        assert_eq!(StartupConfig::from_loaded(r).theme.setting, ThemeSetting::System);
+        // SPEC-0300-0023: the `ui_theme` default is gone; the appearance defaults are checked in `template_appearance_tests.rs`
     }
 }
 
@@ -130,7 +127,6 @@ fn ac1631_the_scaffold_and_the_sample_read_as_if_there_were_no_settings() {
         let (_d, r) = load_text(&render(kind, version()));
         assert!(r.present && r.keymap.parse_error.is_none());
         assert!(r.keymap.entries.is_empty(), "no keymap override (not a single operation overridden)");
-        assert_eq!(r.ui_theme, UiThemeRaw::Missing, "the theme follows the OS");
         assert_eq!(r.external_apps, ExternalAppsRaw::Missing, "the default four are used");
         assert!(r.unknown.is_empty(), "AC-1631: zero unknown settings");
         let env = |_: &str| None::<OsString>;

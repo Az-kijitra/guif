@@ -17,15 +17,9 @@ pub mod viewer_window;
 #[cfg(test)]
 mod paths_tests;
 
-// Phase 12 (SPEC-0300-0017 R-917): tests for `config_toml` (renamed from `keymap`) and `StartupConfig`.
-#[cfg(test)]
-mod config_toml_tests;
-#[cfg(test)]
-mod startup_config_tests;
-
 // SPEC-0300-0021 (TDD, unit-test-writer, 2026-10-17): the raw top-level `external_apps` of `config.toml`.
 #[cfg(test)]
-mod config_toml_external_apps_tests;
+mod config_toml_external_apps_raw_tests;
 
 // SPEC-0200-0001 §3.17.13 (S-7): the former inline tests of `config_toml.rs`, moved unchanged.
 #[cfg(test)]
@@ -33,11 +27,16 @@ mod config_toml_inline_tests;
 
 // SPEC-0300-0022 (TDD, unit-test-writer, 2026-10-20; SPEC-0200-0001 §3.17.3 / §3.17.5): line numbers and unknown settings.
 #[cfg(test)]
-mod config_toml_lines_tests;
+mod config_toml_lines_keys_tests;
 #[cfg(test)]
-mod config_toml_load_lines_tests;
+mod config_toml_load_keys_tests;
 #[cfg(test)]
-mod startup_config_lines_tests;
+mod config_toml_appearance_tests;
+#[cfg(test)]
+mod config_toml_appearance_lines_tests;
+#[cfg(test)]
+mod startup_config_snapshot_tests;
+pub mod appearance_raw;
 
 // SPEC-0200-0001 §3.17.13: the former inline tests of `commands.rs`, moved unchanged (the DTO tests with the new fields).
 #[cfg(test)]

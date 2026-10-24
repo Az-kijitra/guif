@@ -105,10 +105,11 @@
     overflow: auto;
     padding: 4px 0;
     background: var(--ui-surface);
-    border: 1px solid var(--ui-border-strong);
+    border: 1px solid var(--ui-border-active); /* SPEC-0300-0023 R-1812 */
+    color: var(--ui-fg);
     box-shadow: 0 8px 20px var(--ui-shadow-2);
     z-index: 20;
-    font-size: 13px;
+    font-size: var(--ui-font-size);
     outline: none;
   }
   .ctx-item {
@@ -118,13 +119,18 @@
   }
   .ctx-item.highlighted {
     background: var(--ui-hover);
+    color: var(--ui-cursor-fg);
+    font-weight: bold;
+  }
+  .ctx-item.highlighted .ctx-reason {
+    color: inherit;
   }
   .ctx-item[aria-disabled="true"] .ctx-label {
     color: var(--ui-muted-2);
   }
   .ctx-reason {
     display: block;
-    font-size: 11px;
+    font-size: var(--ui-font-size);
     color: var(--ui-muted);
     overflow-wrap: anywhere;
   }

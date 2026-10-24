@@ -81,8 +81,9 @@ fn rel(path: &Path) -> String {
 // another feature module (config included -- the DI fn-value pattern).
 #[test]
 fn viewer_does_not_use_other_feature_modules_directly() {
-    // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list.
-    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "external_apps"];
+    // SPEC-0200-0001 §3.16.15 MUST-142 (b): `external_apps` joins the list. SPEC-0200-0001 §3.18.10: so does `appearance` (the viewer gets
+    // the paint through `shared::window_paint::WindowPaint`, never through the appearance feature).
+    let forbidden = ["fs_ops", "fs", "config", "keymap", "archive", "external_apps", "appearance"];
     let mut offenders = Vec::new();
     for path in viewer_rust_files() {
         let code = code_only(&fs::read_to_string(&path).unwrap());

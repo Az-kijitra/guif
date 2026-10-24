@@ -48,10 +48,11 @@
     left: 0;
     z-index: 11;
     background: var(--ui-surface);
-    border: 1px solid var(--ui-border);
+    border: 1px solid var(--ui-border-active); /* SPEC-0300-0023 R-1812 */
+    color: var(--ui-fg);
     box-shadow: 0 8px 20px var(--ui-shadow-1);
     min-width: 140px;
-    font-size: 13px;
+    font-size: var(--ui-font-size);
   }
   .sort-menu-item {
     display: flex;
@@ -60,6 +61,8 @@
   }
   .sort-menu-item.highlighted {
     background: var(--ui-hover);
+    color: var(--ui-cursor-fg);
+    font-weight: bold;
   }
   .check {
     width: 1em;

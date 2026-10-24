@@ -508,7 +508,7 @@ describe("Phase 9 visual-design boundaries (SPEC-0300-0017 R-913, SPEC-0200-0001
   });
 
   it("(1) the pure file-list modules import no other feature (search / navigation-history / path-bar / keyboard)", () => {
-    const pure = ["name-ellipsis", "column-scroll", "list-layout"].map((n) => `lib/features/file-list/${n}.ts`);
+    const pure = ["name-ellipsis", "pane-layout", "list-layout"].map((n) => `lib/features/file-list/${n}.ts`);
     const present = pure.filter(exists);
     expect(present).toContain("lib/features/file-list/list-layout.ts");
     expect(present).toContain("lib/features/file-list/name-ellipsis.ts");
@@ -606,6 +606,7 @@ describe("Phase 11 OS clipboard boundaries (SPEC-0200-0001 §3.10.12 / §3.10.15
 //   of them are pure data / template functions (no runes, no DOM). SPEC-0300-0019 R-1201.
 describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, SPEC-0300-0019 R-1201)", () => {
   const FEATURES_WITH_MESSAGES = [
+    "appearance", // APPEARANCE (SPEC-0300-0023 / SPEC-0200-0001 §3.18.4): the 13th feature with a messages.ts (total 15)
     "archive",
     "context-menu",
     "external-apps", // EXTERNAL-APPS (SPEC-0300-0021 / SPEC-0200-0001 §3.16.6, §3.16.14): the 11th feature with a messages.ts
@@ -625,7 +626,7 @@ describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, S
   const ALL_MESSAGES = [SHARED_MESSAGES, ...FEATURE_MESSAGES, ROUTES_MESSAGES];
   const abs = (rel: string) => join(SRC, rel);
 
-  it("the planned modules exist: shared (1) + feature (12) + routes (1) = 14, and no other messages.ts is hiding elsewhere", () => {
+  it("the planned modules exist: shared (1) + feature (13) + routes (1) = 15, and no other messages.ts is hiding elsewhere", () => {
     for (const rel of ALL_MESSAGES) expect(() => statSync(abs(rel)), rel).not.toThrow();
     const found = walk(SRC)
       .filter((f) => /(^|[\\/])messages\.ts$/.test(f))

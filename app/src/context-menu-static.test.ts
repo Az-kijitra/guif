@@ -184,11 +184,11 @@ describe("Svelte files: size and colours (§3.9.11, R-1071, R-1074)", () => {
     }
   });
 
-  it("ContextMenu.svelte uses the reserved variables and has no border radius (R-1071, R-1072)", () => {
+  it("ContextMenu.svelte uses the variables of SPEC-0300-0023 R-1812 (frame --ui-border-active, emphasis --ui-hover + --ui-cursor-fg) and has no border radius (R-1071, R-1072 第7版)", () => {
     const f = join(CM, "ContextMenu.svelte");
     expect(existsSync(f)).toBe(true);
     const code = read(f);
-    for (const v of ["--ui-surface", "--ui-border-strong", "--ui-shadow-2", "--ui-muted-2", "--ui-muted", "--ui-hover", "--ui-border"]) {
+    for (const v of ["--ui-surface", "--ui-border-active", "--ui-shadow-2", "--ui-muted-2", "--ui-muted", "--ui-hover", "--ui-cursor-fg"]) {
       expect(code, v).toContain(`var(${v})`);
     }
     expect(code).not.toMatch(/border-radius/);

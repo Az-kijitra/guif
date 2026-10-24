@@ -30,6 +30,7 @@
 // archive/win_fs.rs, fs/win_drives.rs and fs_ops/clipboard/clipboard_win.rs.
 #![deny(unsafe_code)]
 
+pub mod appearance;
 pub mod archive;
 pub mod config;
 pub mod fs;
@@ -69,6 +70,10 @@ mod external_apps_structure_tests;
 mod settings_file_structure_tests;
 #[cfg(test)]
 mod acl_consistency_bridge_tests;
+#[cfg(test)]
+mod appearance_structure_tests;
+#[cfg(test)]
+mod appearance_wiring_tests;
 #[cfg(test)]
 mod settings_file_structure_tail_tests;
 
@@ -137,7 +142,8 @@ pub fn run() {
             let main = app.get_webview_window("main").expect("the main window is created from tauri.conf.json");
             // R-919-1: the pre-paint background in the window's theme colour. A failure is ignored so that the
             // window is shown below regardless.
-            let _ = shared::window_theme::apply_background(&main, shared::window_theme::WindowKind::Main);
+            let paint = app.state::<shared::window_paint::WindowPaint>();
+            let _ = shared::window_theme::apply_background(&main, paint.bg);
             // R-428: closing the MAIN window also closes the viewer window,
             // so it never outlives the app (best-effort; does not block the
             // main window's own close).
@@ -149,12 +155,6 @@ pub fn run() {
                 }
                 if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
                     viewer::window::close_viewer_on_main_exit(&handle);
-                }
-                // R-919-1: an OS theme switch (following the OS) also moves the background that a resize exposes.
-                if matches!(event, tauri::WindowEvent::ThemeChanged(_)) {
-                    if let Some(window) = handle.get_webview_window("main") {
-                        let _ = shared::window_theme::apply_background(&window, shared::window_theme::WindowKind::Main);
-                    }
                 }
             });
             // R-919-1: the window is created hidden and shown from here, after the background colour is set.
@@ -201,6 +201,7 @@ pub fn run() {
             // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): "設定ファイルを開く" / "設定ファイルのチェック", main window only.
             config_bridge::open::settings_file_open,
             config_bridge::check::settings_file_check,
+            appearance::commands::appearance_load,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -211,14 +212,12 @@ pub fn run() {
     // SPEC-0300-0022 R-1651 / SPEC-0200-0001 §3.17.3 (H-2): start-up and "設定ファイルのチェック" take the snapshot through the SAME
     // function, `config_bridge::snapshot`, which also reads the environment for the external apps (`config_bridge/env.rs`; `lib.rs`
     // reads none any more, MUST-142 as rewritten) and keeps `config/` and `external_apps/` from importing each other.
-    let (startup, external_apps_registry) = config_bridge::snapshot(app.handle());
-    // R-917 / R-918: a fixed theme becomes the event loop's preferred theme, so tao creates the title bar
-    // and the WebView (main and viewer alike) in it and ignores OS switches. Following the OS requests
-    // nothing (never `set_theme(None)`), so the platform keeps tracking the OS.
-    if let Some(theme) = shared::window_theme::requested_theme(startup.theme.setting) {
-        app.set_theme(Some(theme));
-    }
+    let (startup, external_apps_registry, appearance) = config_bridge::snapshot(app.handle());
+    app.set_theme(Some(shared::window_theme::theme_for(appearance.dark)));
+    let paint = appearance::paint::window_paint(&appearance);
     app.manage(startup);
     app.manage(external_apps_registry);
+    app.manage(appearance);
+    app.manage(paint);
     app.run(|_app, _event| {});
 }

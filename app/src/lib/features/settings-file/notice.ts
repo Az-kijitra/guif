@@ -10,7 +10,12 @@ import { SETTINGS_FILE_MESSAGES as M } from "./messages";
 export const NOTICE_MS = { quiet: 2500, startup: 6000, problem: 15000 } as const;
 
 function itemOf(u: UnknownSettingDto): string {
-  const base = u.kind === "appField" ? M.unknownAppField(u.position ?? 0, u.name) : M.unknownKey(u.name);
+  const base =
+    u.kind === "appField"
+      ? M.unknownAppField(u.position ?? 0, u.name)
+      : u.kind === "tableKey"
+        ? M.unknownTableKey(u.table ?? "", u.name)
+        : M.unknownKey(u.name);
   return u.line === null ? base : base + M.atLine(u.line);
 }
 

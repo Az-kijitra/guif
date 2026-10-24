@@ -1,14 +1,15 @@
-//! TDD (unit-test-writer, 2026-10-20): what `config_toml::load` now also returns -- `present`, `lines` and `unknown` -- and the
+//! TDD (unit-test-writer, 2026-10-20; migrated 2026-10-24 for SPEC-0300-0023 -- this file REPLACES `config_toml_load_lines_tests.rs`: the marker
+//! key `theme` is now the top-level `theme`, and `r.theme` is `r.appearance.theme`): what `config_toml::load` now also returns -- `present`, `lines` and `unknown` -- and the
 //! line of the W-30-2 / W-31 errors (SPEC-0300-0022 R-1641 / R-1642 / R-1643 / R-1643-1 / R-1644 / R-1645 / R-1640 table,
 //! AC-1640 / AC-1641 / AC-1642; SPEC-0200-0001 §3.17.3 `config/config_toml.rs`, §3.17.5).
 //!
 //! Contract the implementer must satisfy (module `config::config_toml`; the data types are in `shared::schema::config_lines`,
-//! see `config_toml_lines_tests.rs`):
+//! see `config_toml_lines_keys_tests.rs`):
 //!
 //! ```ignore
 //! pub struct ConfigTomlLoadResult {
 //!     pub keymap: KeymapRawLoadResult,
-//!     pub ui_theme: UiThemeRaw,
+//!     pub appearance: RawAppearance,      // SPEC-0300-0023 (`theme` is gone)
 //!     pub external_apps: ExternalAppsRaw,
 //!     pub present: bool,                  // the file was there: everything except `NotFound` (an unreadable file IS present)
 //!     pub lines: ConfigLines,             // all-None / empty when the file is absent, unreadable or has a syntax error
@@ -27,7 +28,7 @@ use std::path::PathBuf;
 use super::config_toml::load;
 use crate::shared::schema::config_lines::{AppLines, ConfigLines, UnknownSetting};
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawValue};
-use crate::shared::schema::ui_theme::UiThemeRaw;
+use crate::shared::schema::appearance_raw::{RawAppearance, RawThemeSection};
 
 fn write(bytes: &[u8]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
@@ -44,12 +45,12 @@ fn field(position: usize, name: &str, line: u32) -> UnknownSetting {
     UnknownSetting::AppField { position, name: name.to_string(), line: Some(line) }
 }
 
-/// AC-1640's file: line 3 `ui_theme = "Dark"`, line 10 `[input_keymap_custom]`, line 12 `copy = "Ctrl+"`, line 13 `toggle_time`,
+/// AC-1640's file: line 3 `theme = "Dark"`, line 10 `[input_keymap_custom]`, line 12 `copy = "Ctrl+"`, line 13 `toggle_time`,
 /// a valid first `[[external_apps]]` (line 5), a second one from line 20 with `program = "bin\\x.exe"` on line 22.
 fn ac1640_text() -> String {
     let mut lines: Vec<String> = vec![String::new(); 22];
     lines[0] = "# config.toml".into();
-    lines[2] = "ui_theme = \"Dark\"".into();
+    lines[2] = "theme = \"Dark\"".into();
     lines[4] = "[[external_apps]]".into();
     lines[5] = "name = \"テスト用\"".into();
     lines[6] = "program = \"C:\\\\test\\\\t.exe\"".into();
@@ -101,12 +102,12 @@ fn the_default_result_is_not_present() {
 // An existing file is present whatever it holds: a 0-byte file and a comment-only file (the scaffold) are valid, empty settings.
 #[test]
 fn an_existing_empty_or_comment_only_file_is_present_with_nothing_reported() {
-    for body in ["", "# only comments\n## a description\n# ui_theme = \"system\"\n"] {
+    for body in ["", "# only comments\n## a description\n# theme = \"nord\"\n"] {
         let (_d, path) = write(body.as_bytes());
         let r = load(&path);
         assert!(r.present, "body {body:?}");
         assert!(r.keymap.parse_error.is_none() && r.keymap.entries.is_empty(), "body {body:?}");
-        assert_eq!(r.ui_theme, UiThemeRaw::Missing);
+        assert_eq!(r.appearance, RawAppearance::default());
         assert_eq!(r.external_apps, ExternalAppsRaw::Missing);
         assert_eq!(r.lines, ConfigLines::default(), "body {body:?}");
         assert!(r.unknown.is_empty(), "AC-1631: the scaffold has no unknown settings, body {body:?}");
@@ -116,7 +117,7 @@ fn an_existing_empty_or_comment_only_file_is_present_with_nothing_reported() {
 // R-1654: an UNREADABLE file (syntax error, non-UTF-8, a folder in its place) is present: it is "W-31", not "config.toml がない".
 #[test]
 fn an_unreadable_file_is_still_present_and_reports_no_settings() {
-    let (_d1, p1) = write(b"ui_theme = \"dark\"\nthis is = = not toml\n");
+    let (_d1, p1) = write(b"theme = \"nord\"\nthis is = = not toml\n");
     let (_d2, p2) = write(&[0xff, 0xfe, 0x00, 0xc3, 0x28, 0xa0, 0xa1]);
     let d3 = tempfile::tempdir().unwrap();
     let p3 = d3.path().join("config.toml");
@@ -135,7 +136,7 @@ fn an_unreadable_file_is_still_present_and_reports_no_settings() {
 // AC-1641 (the content of `theme.mjs` S8): the error is on line 2 and no setting is named.
 #[test]
 fn ac1641_the_syntax_error_of_theme_mjs_s8_is_on_line_2() {
-    let (_d, path) = write(b"ui_theme = \"dark\"\nthis is = = not toml\n");
+    let (_d, path) = write(b"theme = \"nord\"\nthis is = = not toml\n");
     let err = load(&path).keymap.parse_error.expect("W-31");
     assert_eq!(err.line, Some(2));
     assert!(err.whole_file);
@@ -145,8 +146,8 @@ fn ac1641_the_syntax_error_of_theme_mjs_s8_is_on_line_2() {
 #[test]
 fn the_syntax_error_line_survives_bom_crlf_and_multibyte_text() {
     let mut bom_crlf = vec![0xEF, 0xBB, 0xBF];
-    bom_crlf.extend_from_slice(b"ui_theme = \"dark\"\r\nthis is = = not toml\r\n");
-    let japanese = "## 日本語の説明\n## もう一行\nui_theme = \"dark\"\nthis is = = not toml\n".as_bytes().to_vec();
+    bom_crlf.extend_from_slice(b"theme = \"nord\"\r\nthis is = = not toml\r\n");
+    let japanese = "## 日本語の説明\n## もう一行\ntheme = \"nord\"\nthis is = = not toml\n".as_bytes().to_vec();
     for (what, bytes, line) in [("BOM + CRLF", bom_crlf, 2), ("Japanese comments", japanese, 4)] {
         let (_d, path) = write(&bytes);
         assert_eq!(load(&path).keymap.parse_error.expect("error").line, Some(line), "{what}");
@@ -159,9 +160,9 @@ fn the_syntax_error_line_survives_bom_crlf_and_multibyte_text() {
 #[test]
 fn w_30_2_a_non_table_input_keymap_custom_carries_its_line() {
     for (what, body, line) in [
-        ("string", "# c\nui_theme = \"dark\"\ninput_keymap_custom = \"x\"\n", 3),
+        ("string", "# c\ntheme = \"nord\"\ninput_keymap_custom = \"x\"\n", 3),
         ("array", "input_keymap_custom = [1, 2]\n", 1),
-        ("array of tables", "ui_theme = \"dark\"\n\n[[input_keymap_custom]]\ncopy = \"x\"\n", 3),
+        ("array of tables", "theme = \"nord\"\n\n[[input_keymap_custom]]\ncopy = \"x\"\n", 3),
     ] {
         let (_d, path) = write(body.as_bytes());
         let r = load(&path);
@@ -181,8 +182,8 @@ fn ac1640_load_returns_the_line_of_every_known_key_and_still_the_raw_values() {
     let r = load(&path);
 
     assert!(r.present && r.keymap.parse_error.is_none());
-    assert_eq!(r.ui_theme, UiThemeRaw::Str("Dark".into()), "raw, unjudged (the judgement is interpret_ui_theme's)");
-    assert_eq!(r.lines.ui_theme, Some(3));
+    assert_eq!(r.appearance.theme, RawThemeSection::Str { value: "Dark".into(), line: Some(3) }, "raw, unjudged (the judgement is appearance::resolve's)");
+    assert_eq!(r.lines.top.get("theme").copied(), Some(3));
     assert_eq!(r.lines.input_keymap_custom, Some(10));
     assert_eq!(r.lines.keymap_entries.get("copy"), Some(&12));
     assert_eq!(r.lines.keymap_entries.get("toggle_time"), Some(&13));
@@ -201,13 +202,13 @@ fn ac1640_load_returns_the_line_of_every_known_key_and_still_the_raw_values() {
     assert_eq!(apps[1].program, RawValue::Value("bin\\x.exe".into()));
 }
 
-// R-1642: a wrong-typed `ui_theme` / `external_apps` and non-string keymap values carry their lines too (W-33, W-9B).
+// R-1642: a wrong-typed `theme` / `external_apps` and non-string keymap values carry their lines too (W-33, W-9B).
 #[test]
 fn wrong_typed_known_keys_carry_their_lines() {
-    let (_d, path) = write(b"# c\nui_theme = 3\nexternal_apps = \"wt.exe\"\n[input_keymap_custom]\nsort_menu = 123\n");
+    let (_d, path) = write(b"# c\ntheme = 3\nexternal_apps = \"wt.exe\"\n[input_keymap_custom]\nsort_menu = 123\n");
     let r = load(&path);
-    assert_eq!(r.ui_theme, UiThemeRaw::WrongType);
-    assert_eq!(r.lines.ui_theme, Some(2));
+    assert_eq!(r.appearance.theme, RawThemeSection::WrongType { line: Some(2) });
+    assert_eq!(r.lines.top.get("theme").copied(), Some(2));
     assert_eq!(r.external_apps, ExternalAppsRaw::WrongType);
     assert_eq!(r.lines.external_apps.line, Some(3));
     assert_eq!(r.lines.keymap_entries.get("sort_menu"), Some(&5));
@@ -217,7 +218,7 @@ fn wrong_typed_known_keys_carry_their_lines() {
 // SHOULD-121 + spike 5: BOM and CRLF in a real file give the same lines as plain LF.
 #[test]
 fn a_bom_and_crlf_file_has_the_same_lines_as_the_plain_one() {
-    let plain = "ui_theme = \"dark\"\n[input_keymap_custom]\ncopy = \"x\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"p.exe\"\n";
+    let plain = "theme = \"nord\"\n[input_keymap_custom]\ncopy = \"x\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"p.exe\"\n";
     let (_d1, p1) = write(plain.as_bytes());
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
     bytes.extend_from_slice(plain.replace('\n', "\r\n").as_bytes());
@@ -253,7 +254,7 @@ fn ac1642_unknown_settings_are_listed_with_their_lines_in_document_order() {
 fn ac1642_unknown_settings_change_no_behaviour() {
     let (_d, path) = write(ac1642_text().as_bytes());
     let r = load(&path);
-    assert_eq!(r.ui_theme, UiThemeRaw::Missing, "`ui_them` is not `ui_theme`");
+    assert_eq!(r.appearance.theme, RawThemeSection::Missing, "`ui_them` is not a known key");
     assert!(r.keymap.entries.is_empty() && r.keymap.parse_error.is_none());
     let ExternalAppsRaw::Array(apps) = r.external_apps else { panic!("two elements expected") };
     assert_eq!(apps.len(), 2);
@@ -293,16 +294,16 @@ fn r1643_the_five_known_fields_are_never_unknown_and_other_fields_carry_the_elem
 // R-1643: W-32 owns the unknown action ids; they are NOT reported as unknown settings.
 #[test]
 fn r1643_unknown_action_ids_inside_input_keymap_custom_are_not_unknown_settings() {
-    let (_d, path) = write(b"[input_keymap_custom]\nundo = \"Ctrl+Z\"\nui_theme = \"dark\"\n");
+    let (_d, path) = write(b"[input_keymap_custom]\nundo = \"Ctrl+Z\"\ntheme = \"nord\"\n");
     let r = load(&path);
-    assert!(r.unknown.is_empty(), "undo / the misplaced ui_theme are W-32 entries, not W-AC: {:?}", r.unknown);
+    assert!(r.unknown.is_empty(), "undo / the misplaced theme are W-32 entries, not W-AC: {:?}", r.unknown);
     assert_eq!(r.keymap.entries.len(), 2);
 }
 
 // The known keys with the wrong TYPE are not unknown (they are reported as type errors).
 #[test]
 fn known_keys_of_the_wrong_type_are_not_unknown_settings() {
-    let (_d, path) = write(b"ui_theme = 1\ninput_keymap_custom = \"x\"\nexternal_apps = \"x\"\n");
+    let (_d, path) = write(b"theme = 1\ninput_keymap_custom = \"x\"\nexternal_apps = \"x\"\n");
     assert!(load(&path).unknown.is_empty());
     let (_d, path) = write(b"external_apps = [1, 2]\n");
     assert!(load(&path).unknown.is_empty(), "a non-table element has no fields to be unknown");

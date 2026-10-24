@@ -4,11 +4,14 @@
 
 import { computeFilteredEntries, type SearchMatchEntry } from "$lib/features/search/matching";
 import { readRowHeightPx } from "$lib/features/file-list/text-measure";
+import { appearanceState } from "$lib/shared/state/appearance-state.svelte";
 
 export interface ListViewDeps<T extends SearchMatchEntry, G extends { rows: number }> {
   fileList: {
     readonly entries: readonly T[];
-    layout(frameWidth: number, frameHeight: number, entryCount: number, rowHeight: number | undefined): G;
+    // SPEC-0300-0023 SHOULD-2: the cursor's position in the FILTERED array and the appearance numbers are passed as values.
+    readonly focusedPath: string;
+    layout(frameWidth: number, frameHeight: number, entryCount: number, rowHeight: number | undefined, focusIndex: number, minColWidth: number, ch: number): G;
     setPageRows(rows: number): void;
   };
   search: { readonly active: boolean; readonly query: string; readonly regexMode: boolean };
@@ -24,10 +27,12 @@ export function createListView<T extends SearchMatchEntry, G extends { rows: num
     }),
   );
   const filteredEntries = $derived(filterResult.filteredEntries);
-  // R-956: geometry from the list FRAME's size and the displayed (filtered) count.
+  // SPEC-0300-0023 R-1792: geometry from the list body's INNER size, the displayed (filtered) count and the cursor's position among them.
   const layout = $derived.by(() => {
     const { width, height } = deps.size();
-    return deps.fileList.layout(width || 800, height || 400, filteredEntries.length, readRowHeightPx());
+    const focusPath = deps.fileList.focusedPath;
+    const focusIndex = filteredEntries.findIndex((e) => e.path === focusPath);
+    return deps.fileList.layout(width || 800, height || 400, filteredEntries.length, readRowHeightPx(), focusIndex, appearanceState.minColWidth, appearanceState.ch);
   });
   // R-59-1: page_up/page_down move by the SAME "R-16-1 rows" as rowsPerColumn.
   $effect(() => {

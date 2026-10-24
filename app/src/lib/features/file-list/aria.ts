@@ -27,10 +27,6 @@ export const INITIAL_UI_STATE: InitialUiState = {
   showHidden: false,
 };
 
-// R-12/AC-55 (8th ed., SPEC-0200-0001 §3.6.11.4 MUST-87(e)): the tree panel
-// is a fixed 220px with no resize range (min === max === default).
-export const TREE_PANEL_WIDTH = { default: 220, min: 220, max: 220 } as const;
-
 export interface TreeFocusReassignmentInput {
   focusRegion: "tree" | "file-list";
   treeNowVisible: boolean;

@@ -139,16 +139,16 @@ describe("R-1380~R-1385 / AC-1364: the look", () => {
     for (const v of [...styles.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1])) expect(v.startsWith("--ui-"), v).toBe(true);
   });
 
-  it("the measured sizes: bar padding 3px 6px, heading 12px, dropdown min-width 260px / padding 4px 0 / max-height 70vh / z-index 20, item padding 6px 12px / 13px", () => {
+  it("the measured sizes: bar padding 3px 6px, heading var(--ui-font-size), dropdown min-width 260px / padding 4px 0 / max-height 70vh / z-index 20, item padding 6px 12px; sizes from --ui-font-size (SPEC-0300-0023 R-1752)", () => {
     const styles = [...svelteSources().matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n").replace(/\s+/g, " ");
     expect(styles).toMatch(/padding:\s*3px 6px/);
-    expect(styles).toMatch(/font-size:\s*12px/);
+    expect(styles).toMatch(/font-size:\s*var\(--ui-font-size\)/);
+    expect(styles).not.toMatch(/font-size:\s*\d+px/);
     expect(styles).toMatch(/min-width:\s*260px/);
     expect(styles).toMatch(/padding:\s*4px 0/);
     expect(styles).toMatch(/max-height:\s*70vh/);
     expect(styles).toMatch(/z-index:\s*20\b/);
     expect(styles).toMatch(/padding:\s*6px 12px/);
-    expect(styles).toMatch(/font-size:\s*13px/);
   });
 
   it("the dropdown does not get clipped by the scrolling body: position fixed (or absolute) is declared", () => {

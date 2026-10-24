@@ -20,6 +20,10 @@ pub use evaluate::snapshot;
 #[cfg(test)]
 mod check_tests;
 #[cfg(test)]
+mod appearance_snapshot_tests;
+#[cfg(test)]
+mod template_appearance_tests;
+#[cfg(test)]
 mod env_tests;
 #[cfg(test)]
 mod evaluate_tests;

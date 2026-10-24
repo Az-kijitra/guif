@@ -219,12 +219,12 @@ export const tests = [
   },
   {
     id: "AC-937",
-    title: "status bar style (flex, padding 3px 6px, gap 12px, 11px, nowrap); a 300-char message neither changes the height nor the rows",
+    title: "status bar style (flex, padding 3px 6px, gap 12px, 12px, nowrap); a 300-char message neither changes the height nor the rows",
     async run(t, ctx) {
       await openFiles(ctx, "many100", 100, { size: true, time: false, hidden: false });
       await ctx.setViewport(1000, 700);
       const s = await ctx.m.cs(".status-bar", ["display", "padding", "column-gap", "font-size", "flex-wrap"]);
-      t.eq([s.display, s.padding, s["column-gap"], s["font-size"], s["flex-wrap"]], ["flex", "3px 6px", "12px", "11px", "nowrap"], "status bar style");
+      t.eq([s.display, s.padding, s["column-gap"], s["font-size"], s["flex-wrap"]], ["flex", "3px 6px", "12px", "12px", "nowrap"], "status bar style");
       const heightBefore = (await ctx.m.rect(".status-bar")).height;
       const rowsBefore = (await ctx.m.cs(".file-list", ["grid-template-rows"]))["grid-template-rows"].split(" ").length;
       // A 300-character message through a failing navigation (the stub supplies the text).

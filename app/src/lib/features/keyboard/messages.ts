@@ -10,7 +10,7 @@ export const KEYMAP_MESSAGES = {
   readFailed: (target: string, closing: string, message: string): string =>
     `${target}読み込めなかったため、${closing} ${COMMON.detailPrefix}${message}`,
   closingKeymapOnly: "既定のキー割り当てを使います。",
-  closingKeymapAndTheme: "既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。", // W-31 (SPEC-0300-0019 第3版)
+  closingKeymapAndAppearance: "既定のキー割り当て、配色(nord)、外部アプリの既定の登録を使います。", // W-31 (SPEC-0300-0019 第6版, SPEC-0300-0023 R-1823)
   // W-30-2: input_keymap_custom is not a table (no detail, the theme is not touched)
   customKeymapUnreadable: "config.toml の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。",
   // W-30-2 with the line (SPEC-0300-0019 第5版)

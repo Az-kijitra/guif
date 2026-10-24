@@ -175,7 +175,7 @@ async function clickBarItem(ctx, label) {
   await ctx.click(c.x, c.y);
 }
 
-const rowIcons = (ctx) => ctx.ev(`Object.fromEntries([...document.querySelectorAll('.app-shell .file-list-row')].map((e) => [e.getAttribute('aria-label'), (e.querySelector('.name-text')?.textContent ?? '').startsWith('📁')]))`);
+const rowIcons = (ctx) => ctx.ev(`Object.fromEntries([...document.querySelectorAll('.app-shell .file-list-row')].map((e) => [e.getAttribute('aria-label'), e.classList.contains('dir')]))`);
 
 /** The E1 body runs with external_app_launch passed through (inside the test folder only). */
 const e1 = (fn) => (t, ctx) => ctx.withExternalAppLaunch(() => fn(t, ctx));
@@ -547,7 +547,7 @@ const e1Tests = [
       const started = Date.now();
       await hit(ctx, "slow");
       await ctx.press.down();
-      await ctx.waitFor(`document.querySelector('.app-shell .file-list-row.focused')?.getAttribute('aria-label') !== 'a.txt'`, { timeout: 2500, label: "the focus to move" });
+      await ctx.waitFor(`document.querySelector('.app-shell .file-list-row:is(.cursor,.idle)')?.getAttribute('aria-label') !== 'a.txt'`, { timeout: 2500, label: "the focus to move" });
       const moved = Date.now() - started;
       t.ok(moved < 2500, "the focus moved long before the 3 s of the probe are over", `${moved} ms`);
       t.eq(readRecords(p.slow).done, 0, "the probe is still waiting (no end mark yet) when the focus has moved");
@@ -766,13 +766,13 @@ export const scenarios = [
   {
     id: "E0",
     title: "external_apps = [] (AC-1501) + junctions (AC-653)",
-    configToml: 'ui_theme = "light"\nexternal_apps = []\n',
+    configToml: '# no ui_theme (R-1840)\nexternal_apps = []\n',
     tests: e0Tests,
   },
   {
     id: "E1",
     title: "probe registrations only: keys, menus, targets, arguments, messages",
-    configToml: (fx) => `ui_theme = "light"\n${externalAppsToml(registrations(fx))}`,
+    configToml: (fx) => `# no ui_theme (R-1840)\n${externalAppsToml(registrations(fx))}`,
     prepare: prepareProbe,
     cleanup: async () => {
       await disposeOutsideProbes();
@@ -782,7 +782,7 @@ export const scenarios = [
   {
     id: "E2",
     title: "clashing / invalid registrations: start-up notice and the usable keys",
-    configToml: (fx) => `ui_theme = "light"\n${E2_KEYMAP}${externalAppsToml(e2Registrations(fx))}`,
+    configToml: (fx) => `# no ui_theme (R-1840)\n${E2_KEYMAP}${externalAppsToml(e2Registrations(fx))}`,
     prepare: prepareProbe,
     cleanup: async () => {
       await disposeOutsideProbes();

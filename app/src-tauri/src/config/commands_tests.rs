@@ -10,7 +10,6 @@ use super::startup_config::{KeymapLoadResultDto, KeymapParseErrorDto, KeymapRawE
 use crate::shared::schema::external_apps::ExternalAppsRaw;
 use crate::shared::schema::navigation::NavigationData;
 use crate::shared::schema::ui_state::UiStateData;
-use crate::shared::schema::ui_theme::UiThemeRaw;
 use std::sync::Arc;
 use std::thread;
 
@@ -120,7 +119,7 @@ fn keymap_dto_conversion_preserves_entries_and_maps_non_string_values_to_none() 
         ],
         parse_error: None,
     };
-    let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing, external_apps: ExternalAppsRaw::Missing, ..ConfigTomlLoadResult::default() }).to_dto();
+    let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, external_apps: ExternalAppsRaw::Missing, ..ConfigTomlLoadResult::default() }).to_dto();
     assert_eq!(dto.entries.len(), 2);
     assert_eq!(dto.entries[0], KeymapRawEntryDto { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()), line: None });
     assert_eq!(dto.entries[1], KeymapRawEntryDto { action_id: "sort_menu".into(), value: None, line: None });
@@ -130,22 +129,23 @@ fn keymap_dto_conversion_preserves_entries_and_maps_non_string_values_to_none() 
 #[test]
 fn keymap_dto_carries_the_parse_error_with_its_line_number() {
     let r = KeymapRawLoadResult { entries: vec![], parse_error: Some(KeymapParseError { message: "bad toml".into(), line: Some(3), whole_file: true }) };
-    let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, ui_theme: UiThemeRaw::Missing, external_apps: ExternalAppsRaw::Missing, ..ConfigTomlLoadResult::default() }).to_dto();
+    let dto = StartupConfig::from_loaded(ConfigTomlLoadResult { keymap: r, external_apps: ExternalAppsRaw::Missing, ..ConfigTomlLoadResult::default() }).to_dto();
     assert_eq!(dto.parse_error, Some(KeymapParseErrorDto { message: "bad toml".into(), line: Some(3), whole_file: true }));
 }
 
 // Wire format is camelCase (shared/ipc/config.ts's configLoadKeymap()).
 #[test]
 fn keymap_dto_serializes_with_camel_case_keys() {
-    let dto = KeymapLoadResultDto {
-        entries: vec![KeymapRawEntryDto { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()), line: None }],
-        parse_error: Some(KeymapParseErrorDto { message: "x".into(), line: None, whole_file: false }),
-        ui_theme: "system".into(),
-        ui_theme_invalid: false,
-        ui_theme_line: None,
+    // (SPEC-0300-0023: the DTO has no `ui_theme*` fields; it is built through the snapshot so the literal does not name the removed ones)
+    let dto: KeymapLoadResultDto = StartupConfig::from_loaded(ConfigTomlLoadResult {
+        keymap: KeymapRawLoadResult {
+            entries: vec![crate::config::config_toml::RawKeymapEntry { action_id: "toggle_hidden".into(), value: Some("Ctrl+Alt+H".into()) }],
+            parse_error: Some(KeymapParseError { message: "x".into(), line: None, whole_file: false }),
+        },
         present: true,
-        unknown_settings: vec![],
-    };
+        ..ConfigTomlLoadResult::default()
+    })
+    .to_dto();
     let s = toml::to_string(&dto).expect("serialize");
     assert!(s.contains("actionId"));
     assert!(s.contains("parseError"));

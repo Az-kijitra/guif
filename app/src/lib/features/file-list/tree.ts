@@ -293,9 +293,9 @@ export function isSingleNodePath(path: string): boolean {
   return /^Volume\{[0-9a-fA-F-]+\}/i.test(normalized) || normalized.startsWith("\\\\.\\");
 }
 
-// R-936: left padding of a node (`aria-level - 1 = level`).
-export function treeIndentPx(level: number): number {
-  return 8 + 14 * level;
+// SPEC-0300-0023 R-1801: the indent of a node is 2 characters per depth (written in CSS `ch`; the mark column is separate).
+export function treeIndentCh(level: number): number {
+  return 2 * level;
 }
 
 const SINGLE_NODE_ROOT = /^\\\\\?\\Volume\{[0-9a-fA-F-]+\}|^Volume\{[0-9a-fA-F-]+\}|^\\\\\.\\[^\\]+/i;

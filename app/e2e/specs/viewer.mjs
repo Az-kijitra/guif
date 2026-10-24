@@ -2,7 +2,6 @@
 // viewer window, and the viewer paints its own palette (R-913-1 / R-913-2). This file is the light-pinned
 // (ui_theme = "light") run; the dark side is in theme.mjs. Also: the viewer must really show the file's content.
 import fs from "node:fs";
-import { fixedThemeNote } from "../lib/os-theme.mjs";
 import { openViewerWindow, waitViewerShows } from "./_util.mjs";
 
 /** The computed look of a viewer document (shared with theme.mjs through the same expression). */
@@ -34,7 +33,7 @@ export const unquoteFonts = (value) => String(value).replace(/["']/g, "").replac
 export const tests = [
   {
     id: "AC-907",
-    title: "viewer (light pinned): html/body #fff, text #111, html color-scheme light, margin 0 and no document scrollbar, overflow visible, no --ui-* variables; the file's content is shown",
+    title: "viewer (nord, AC-1724 / R-1726): html/body = bg, text = file colour, html color-scheme dark, margin 0 and no document scrollbar, overflow visible, no --ui-* variables; the file's content is shown",
     async run(t, ctx) {
       const dir = ctx.fx.mkdir("viewer");
       const file = ctx.fx.file("viewer", "note.txt");
@@ -51,22 +50,20 @@ export const tests = [
         t.eq(await viewer.ev(`!!document.querySelector('.viewer-body .placeholder')`), false, "no placeholder is left in the body");
 
         const s = await viewer.ev(VIEWER_LOOK);
-        t.eq(s.htmlBg, "rgb(255, 255, 255)", "html background");
-        t.eq(s.bodyBg, "rgb(255, 255, 255)", "body background");
+        t.eq(s.htmlBg, "rgb(46, 52, 64)", "html background (nord bg)");
+        t.eq(s.bodyBg, "rgb(46, 52, 64)", "body background");
         t.eq(s.margins, ["0px", "0px"], "html / body margin (R-913-3)");
         t.eq(s.fits.slice(0, 2), [true, true], "the document has no scrollbar (scrollHeight/Width = clientHeight/Width)", JSON.stringify(s.fits));
         t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
-        t.eq(s.htmlScheme, "light", "html color-scheme (R-913-2)");
-        t.eq(s.rootColor, "rgb(17, 17, 17)", "viewer text colour");
+        t.eq(s.htmlScheme, "dark", "html color-scheme (--vw-color-scheme)");
+        t.eq(s.rootColor, "rgb(236, 239, 244)", "viewer text colour (nord file colour)");
         t.eq(unquoteFonts(s.rootFont), VIEWER_FONT, "viewer root font-family is --vw-font (R-913-4)");
         t.ok(unquoteFonts(s.vwFont) === VIEWER_FONT, "--vw-font is defined in the viewer", s.vwFont);
         t.ok(s.vwFontMono.startsWith("ui-monospace"), "--vw-font-mono is defined in the viewer and starts with ui-monospace", s.vwFontMono);
         t.eq(s.uiBg, "", "--ui-bg is not defined in the viewer (app.css is not loaded)");
         t.eq(s.rowHeight, "", "--list-row-height is not defined in the viewer");
         t.eq(s.uiVars, [], "none of the R-911 variables is defined in the viewer");
-        t.eq(s.prefersDark, false, "the viewer follows the pinned light theme (prefers-color-scheme: dark does not match)");
-        const note = fixedThemeNote("light", ctx.osTheme ?? null);
-        if (note !== null) t.note(note);
+        t.eq(s.prefersDark, true, "the viewer window theme is set from the colour scheme (nord is dark, R-1741)");
       } finally {
         viewer.close();
       }
@@ -78,8 +75,8 @@ export const tests = [
 
 /** R-913-1 as getComputedStyle prints it. */
 export const VIEWER_PALETTE = {
-  light: { header: "rgb(240, 240, 240)", border: "rgb(208, 208, 208)", bannerBg: "rgb(255, 244, 206)", bannerFg: "rgb(92, 68, 0)", error: "rgb(176, 0, 32)", lineno: "rgb(102, 102, 102)" },
-  dark: { header: "rgb(42, 42, 42)", border: "rgb(68, 68, 68)", bannerBg: "rgb(74, 59, 0)", bannerFg: "rgb(255, 216, 102)", error: "rgb(255, 128, 128)", lineno: "rgb(140, 140, 140)" },
+  // nord (R-1726): header = status_bar_bg / status_bar_fg, border = border, banner and error as vars.rs, line numbers = --ui-muted.
+  nord: { header: "rgb(59, 66, 82)", border: "rgb(136, 192, 208)", bannerBg: "rgb(74, 59, 0)", bannerFg: "rgb(255, 216, 102)", error: "rgb(255, 138, 128)", lineno: "rgb(179, 183, 190)" },
 };
 
 const SIZE_OVER_LIMIT = 2.5 * 1024 * 1024; // "2 MiB を超える" -> the truncation banner
@@ -127,8 +124,8 @@ export async function checkViewerPalette(t, ctx, p) {
 
 tests.push({
   id: "AC-955",
-  title: "viewer palette (light pinned): header, truncation banner, error and line numbers use the R-913-1 light values",
+  title: "viewer palette (nord, AC-1724): header, truncation banner, error and line numbers use the R-1726 values",
   async run(t, ctx) {
-    await checkViewerPalette(t, ctx, VIEWER_PALETTE.light);
+    await checkViewerPalette(t, ctx, VIEWER_PALETTE.nord);
   },
 });

@@ -12,9 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("$lib/shared/ipc/config", () => ({ configLoadKeymap: vi.fn() }));
 vi.mock("$lib/shared/ipc/external-apps", () => ({ externalAppsLoad: vi.fn() }));
+vi.mock("$lib/shared/state/appearance-state.svelte", () => ({ startAppearanceLoad: vi.fn() }));
 
 import { configLoadKeymap } from "$lib/shared/ipc/config";
 import { externalAppsLoad, type ExternalAppsDto } from "$lib/shared/ipc/external-apps";
+import { startAppearanceLoad } from "$lib/shared/state/appearance-state.svelte";
 import { keymapState } from "$lib/features/keyboard/keymap-state.svelte";
 import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
@@ -22,7 +24,11 @@ import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
 
 type KeymapDto = Awaited<ReturnType<typeof configLoadKeymap>>;
 const keymap = (over: Partial<KeymapDto> = {}): KeymapDto =>
-  ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over }) as KeymapDto;
+  ({ entries: [], parseError: null, present: true, unknownSettings: [], ...over }) as KeymapDto;
+// SPEC-0300-0023 R-1820: the appearance part comes from startAppearanceLoad() (mocked); W-33 is abolished.
+const app = (problems: unknown[] = []) => ({ dark: true, bg: "#2e3440", uiVars: [], fontFamily: "monospace", fontSize: 16, rowHeight: 21, minColWidth: 24, treeWidthPercent: 24, problems }) as never;
+const P_B0 = { kind: "presetUnusable", line: 3, value: "dracula", usable: ["default", "nord", "monokai", "catppuccin", "solarized", "light"] };
+const WB0 = 'config.toml の 3 行目の配色 "dracula" は使えないため、nord を使います(使える値: default、nord、monokai、catppuccin、solarized、light)。';
 const ext = (over: Partial<ExternalAppsDto> = {}): ExternalAppsDto =>
   ({ apps: [], invalid: [], typeError: false, typeErrorLine: null, ...over }) as ExternalAppsDto;
 
@@ -30,6 +36,8 @@ beforeEach(() => {
   vi.mocked(configLoadKeymap).mockReset();
   vi.mocked(externalAppsLoad).mockReset();
   vi.mocked(externalAppsLoad).mockResolvedValue(ext());
+  vi.mocked(startAppearanceLoad).mockReset();
+  vi.mocked(startAppearanceLoad).mockResolvedValue(app());
   statusMessage.clear();
 });
 afterEach(() => {
@@ -38,18 +46,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AC-1640: lines in the config.toml part, in the order keymap -> theme -> external apps", () => {
-  it("copy on line 12, ui_theme on line 3, the 2nd registration invalid on line 22; toggle_time stays effective", async () => {
+describe("AC-1640: lines in the config.toml part, in the order keymap -> appearance -> external apps", () => {
+  it("copy on line 12, an unusable preset on line 3, the 2nd registration invalid on line 22; toggle_time stays effective", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValue(
       keymap({
         entries: [
           { actionId: "copy", value: "Ctrl+", line: 12 },
           { actionId: "toggle_time", value: "Ctrl+Alt+T", line: 13 },
         ],
-        uiThemeInvalid: true,
-        uiThemeLine: 3,
       }),
     );
+    vi.mocked(startAppearanceLoad).mockResolvedValue(app([P_B0]));
     vi.mocked(externalAppsLoad).mockResolvedValue(
       ext({
         apps: [{ index: 0, defaultNo: null, name: "ok", key: null, keyInvalid: false, keyLine: null }],
@@ -59,7 +66,7 @@ describe("AC-1640: lines in the config.toml part, in the order keymap -> theme -
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(
       "config.toml の不正なキー割り当て 1 件を無視しました: copy(12 行目)。" +
-        ' config.toml の 3 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。' +
+        ` ${WB0}` +
         " config.toml の外部アプリの登録 1 件を使いません: 2(bad、22 行目)。",
     );
     expect(keymapState.customOverrides["toggle_time"]).toBe("Ctrl+Alt+T");
@@ -71,8 +78,6 @@ describe("AC-1642: W-AC comes last in the config.toml part", () => {
   it("unknown settings (given in the reading side's key order) are listed by line after the other sentences", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValue(
       keymap({
-        uiThemeInvalid: true,
-        uiThemeLine: 4,
         unknownSettings: [
           { kind: "appField", name: "agrs", position: 2, line: 18 },
           { kind: "key", name: "ui_show_hidden", line: 3 },
@@ -80,9 +85,10 @@ describe("AC-1642: W-AC comes last in the config.toml part", () => {
         ],
       } as never),
     );
+    vi.mocked(startAppearanceLoad).mockResolvedValue(app([{ ...P_B0, line: 4 }]));
     const { notice } = await loadKeymapForStartup();
     expect(notice?.endsWith(" config.toml の不明な設定 3 件を無視しました: ui_them(2 行目), ui_show_hidden(3 行目), external_apps の 2 番目の agrs(18 行目)。")).toBe(true);
-    expect(notice?.indexOf("ui_theme")).toBeLessThan(notice?.indexOf("不明な設定") ?? -1);
+    expect(notice?.indexOf("の配色")).toBeLessThan(notice?.indexOf("不明な設定") ?? -1);
   });
 
   it("unknown settings alone are a notice (the behaviour is unchanged: nothing is applied)", async () => {

@@ -149,12 +149,11 @@ function removeDir(dir) {
 
 // ------------------------------------------------------------------- launch
 
-// R-995-1 / SPEC-0200-0001 §3.11.9: the default test config pins the light theme so the existing
-// assertions hold on a PC whose OS is dark. `configToml: null` writes no config.toml at all; a string is
-// written as is (callers that add `input_keymap_custom` keep the `ui_theme` line themselves).
+// SPEC-0300-0023 R-1840: the default test config writes no colour (the default preset nord is measured; a `ui_theme` line is an unknown key now
+// and would raise W-AC in every scenario). `configToml: null` writes no config.toml at all; a string is written as is.
 // SPEC-0300-0021 R-1585 2: every config.toml the E2E writes declares `external_apps` (without it the default four are active and a key press
 // could start the USER's apps). `configToml: null` (no file) is not allowed.
-export const DEFAULT_CONFIG_TOML = 'ui_theme = "light"\nexternal_apps = []\n';
+export const DEFAULT_CONFIG_TOML = 'external_apps = []\n';
 
 // MUST-143 (a): there is a `[[external_apps]]` heading, or an `external_apps =` line BEFORE the first table header (a line after
 // `[input_keymap_custom]` belongs to that table). The same rule as src/e2e-external-apps-static.test.ts.

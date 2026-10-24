@@ -213,11 +213,11 @@ describe("AC-1506: the scan sees the E2E tree (an empty scan must not pass)", ()
 describe("AC-1506: every config.toml the E2E writes declares external_apps (R-1585 2)", () => {
   const configs = collectConfigs();
 
-  it("DEFAULT_CONFIG_TOML is the safe default: ui_theme light and external_apps = []", () => {
+  it("DEFAULT_CONFIG_TOML is the safe default: external_apps = [] and NO ui_theme (SPEC-0300-0023 R-1840: the E2E measures with the default nord; a ui_theme line would raise W-AC in every scenario)", () => {
     const d = configs.find((c) => c.what === "DEFAULT_CONFIG_TOML")!;
     expect(d.text).not.toBeNull();
     expect(declaresExternalApps(d.text!), `DEFAULT_CONFIG_TOML = ${JSON.stringify(d.text)}`).toBe(true);
-    expect(d.text).toContain('ui_theme = "light"');
+    expect(d.text).not.toContain("ui_theme");
   });
 
   it("no scenario asks for 'no config.toml' (`configToml: null`) -- without a file the default four would be active -- except the allow-listed F0 (AC-1645)", () => {
@@ -374,7 +374,7 @@ describe("AC-1506: the harness itself refuses a config without external_apps (th
   it("DEFAULT_CONFIG_TOML (imported) is the safe default", async () => {
     // @ts-ignore -- plain JS module without declarations
     const { DEFAULT_CONFIG_TOML } = (await import("../e2e/lib/launch.mjs")) as { DEFAULT_CONFIG_TOML: string };
-    expect(DEFAULT_CONFIG_TOML).toBe('ui_theme = "light"\nexternal_apps = []\n');
+    expect(DEFAULT_CONFIG_TOML).toBe("external_apps = []\n");
   });
 });
 

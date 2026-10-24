@@ -58,8 +58,9 @@
     align-items: stretch;
     box-sizing: border-box;
     padding: 3px 6px;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-surface-2);
+    /* SPEC-0300-0023 R-1760 / R-1810: a band without a frame. */
+    background: var(--ui-status-bg);
+    color: var(--ui-status-fg);
   }
   .slot {
     display: flex;
@@ -70,14 +71,16 @@
     border: 1px solid transparent;
     background: transparent;
     color: inherit;
-    font-size: 12px;
-    line-height: 1.2;
+    font-size: var(--ui-font-size);
+    line-height: var(--ui-line-height);
     cursor: default;
     outline: none;
   }
+  /* R-1810: the open (or key-highlighted) heading. */
   .heading.current {
-    background: var(--ui-hover);
-    border-radius: 4px;
+    background: var(--ui-menu-active-bg);
+    color: var(--ui-menu-active-fg);
+    font-weight: bold;
   }
   .heading.keyfocus {
     border-color: var(--ui-focused);

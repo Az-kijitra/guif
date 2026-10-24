@@ -24,10 +24,11 @@
     gap: 12px;
     box-sizing: border-box;
     padding: 3px 6px;
-    font-size: 11px;
+    font-size: var(--ui-font-size);
     white-space: nowrap;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-surface-2);
+    /* SPEC-0300-0023 R-1811: a band without a frame. */
+    background: var(--ui-status-bg);
+    color: var(--ui-status-fg);
   }
   .status-item {
     flex: none;

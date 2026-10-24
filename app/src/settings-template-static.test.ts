@@ -74,20 +74,44 @@ describe("AC-1636 / R-1631: the comment forms", () => {
     expect(allLines.filter((l) => l.trim() !== "" && !l.startsWith("#"))).toEqual([]);
   });
 
-  it("R-1631-1: `# ui_theme = \"system\"` is before the first `# [input_keymap_custom]`", () => {
-    const theme = body.indexOf('# ui_theme = "system"');
-    const heading = body.indexOf("# [input_keymap_custom]");
-    expect(theme).toBeGreaterThanOrEqual(0);
-    expect(heading).toBeGreaterThan(theme);
-    expect(body.findIndex((l) => /^# \[/.test(l))).toBeGreaterThan(theme);
+  // SPEC-0300-0023 R-1830 / AC-1830 / SPEC-0200-0001 §3.18.9: the sections are [theme] -> [colors] -> [font] -> [layout] -> [input_keymap_custom] -> [[external_apps]];
+  // `ui_theme` is abolished (no setting line, only an explanation). The values are checked against the Rust reader in config_bridge/template_consistency_tests.rs.
+  const NORD: [string, string][] = "bg #2E3440|border #88C0D0|border_inactive #4C566A|cursor_fg #2E3440|cursor_bg #8FBCBB|folder #81A1C1|file #ECEFF4|symlink #B48EAD|executable #A3BE8C|selected #EBCB8B|status_bar_fg #E5E9F0|status_bar_bg #3B4252|menu_bar_active_fg #2E3440|menu_bar_active_bg #88C0D0|tree_current #88C0D0|tree_cursor #EBCB8B".split("|").map((x) => x.split(" ") as [string, string]);
+
+  it("AC-1830 (1): there is no `ui_theme` setting line, and the explanation says it is abolished and that `[theme]` replaces it", () => {
+    expect(settingLines.filter((l) => /ui_theme/.test(l))).toEqual([]);
+    const text = explanation.join("\n");
+    expect(text).toContain("ui_theme");
+    expect(text).toContain("廃止");
+    expect(text).toContain("[theme]");
   });
 
-  it("R-1631-1: the order is ui_theme -> input_keymap_custom -> external_apps", () => {
-    const a = body.indexOf('# ui_theme = "system"');
-    const b = body.indexOf("# [input_keymap_custom]");
-    const c = body.indexOf("# [[external_apps]]");
-    expect(a).toBeLessThan(b);
-    expect(b).toBeLessThan(c);
+  it("AC-1830 (2): the setting lines `# [theme]`, `# preset = \"nord\"`, `# [colors]`, `# [font]`, `# size = 12`, `# [layout]`, `# min_col_width = 24`, `# tree_width_percent = 24` exist as whole lines", () => {
+    for (const l of ["# [theme]", '# preset = "nord"', "# [colors]", "# [font]", "# size = 12", "# [layout]", "# min_col_width = 24", "# tree_width_percent = 24"]) {
+      expect(body, l).toContain(l);
+    }
+    expect(body.some((l) => /^# family = ".+"$/.test(l))).toBe(true);
+  });
+
+  it("AC-1830 / R-1830: [colors] has the 16 items, one line each, in nord's values (#rrggbb), in the reader's item order", () => {
+    const start = body.indexOf("# [colors]");
+    const end = body.indexOf("# [font]");
+    const lines = body.slice(start + 1, end).filter((l) => l.startsWith("# ") && !l.startsWith("## "));
+    expect(lines.map((l) => l.slice(2).toLowerCase())).toEqual(NORD.map(([k, v]) => `${k} = "${v.toLowerCase()}"`));
+  });
+
+  it("R-1830: the section order is [theme] -> [colors] -> [font] -> [layout] -> [input_keymap_custom] -> [[external_apps]]", () => {
+    const at = ["# [theme]", "# [colors]", "# [font]", "# [layout]", "# [input_keymap_custom]", "# [[external_apps]]"].map((h) => body.indexOf(h));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+  });
+
+  it("MINOR-8 / R-1830: the top-level `theme = \"nord\"` is explained by a `## ` line BEFORE the first table heading and is never a `# ` setting line", () => {
+    const first = body.findIndex((l) => /^# \[/.test(l));
+    const note = body.findIndex((l) => l.startsWith("## ") && l.includes('theme = "nord"'));
+    expect(note).toBeGreaterThanOrEqual(0);
+    expect(note).toBeLessThan(first);
+    expect(settingLines.filter((l) => /^# theme = /.test(l))).toEqual([]);
   });
 
   it("R-1631 3 / R-1635: the opening explains the `# ` / `## ` rule, the restart, the check, and carries the version mark `guif @VERSION@`", () => {
@@ -117,15 +141,12 @@ describe("AC-1630 / R-1638 1: un-commenting the `# ` lines (the keymap part)", (
     expect(validated.effective).toEqual(expected);
   });
 
-  it("`ui_theme` is the default `\"system\"`", () => {
-    expect(uncommented).toContain('ui_theme = "system"');
+  it("the appearance settings un-commented are the defaults: preset nord, size 12, min_col_width 24, tree_width_percent 24", () => {
+    for (const l of ['preset = "nord"', "size = 12", "min_col_width = 24", "tree_width_percent = 24"]) expect(uncommented, l).toContain(l);
   });
 
-  it("ui_theme only (AC-1636): with that one line un-commented and the headings left commented it is a top-level key, as no heading comes before it", () => {
-    const i = allLines.indexOf('# ui_theme = "system"');
-    const firstHeading = allLines.findIndex((l) => /^# \[/.test(l));
-    expect(i).toBeGreaterThanOrEqual(0);
-    expect(i).toBeLessThan(firstHeading);
+  it("no un-commented line is `ui_theme = ...` (it would be an unknown setting)", () => {
+    expect(uncommented.filter((l) => /^ui_theme\b/.test(l))).toEqual([]);
   });
 });
 
@@ -157,10 +178,12 @@ describe("AC-1632 / R-1638 2: the operation ids and the fixed keys", () => {
     for (const w of ["Comma", "Plus", "Space"]) expect(text, w).toContain(w);
   });
 
-  it("explains ui_theme: the three values, case-sensitive, the default", () => {
+  it("explains the appearance settings: the six preset names, the colour formats, the font stack, the range of size / min_col_width / tree_width_percent", () => {
     const text = explanation.join("\n");
-    for (const v of ['"light"', '"dark"', '"system"']) expect(text, v).toContain(v);
-    expect(text).toContain("大文字小文字");
+    for (const v of ["default", "nord", "monokai", "catppuccin", "solarized", "light"]) expect(text, v).toContain(v);
+    for (const v of ["#RRGGBB", "10", "24", "80", "50"]) expect(text, v).toContain(v);
+    expect(text).toContain("symlink");
+    expect(text).toContain("JetBrains Mono");
   });
 
   it("explains external_apps: the five fields, {path} / {dir} / {{ / }}, the 20-item limit, and that only what is written is used", () => {

@@ -9,7 +9,7 @@ import {
   barState, clickItem, closeBar, closeDialog, dialogInfo, dropdown, focusRowByName, itemById, openByClick, openByKeys, prepMenu, waitDialog, waitDropdown,
 } from "./_menu.mjs";
 
-const CONFIG = `ui_theme = "light"\nexternal_apps = []\ninput_keymap_custom = { copy = "Ctrl+Shift+C,Ctrl+C", rename = "", search = "Ctrl+F", exit = "Q" }\n`;
+const CONFIG = `external_apps = []\ninput_keymap_custom = { copy = "Ctrl+Shift+C,Ctrl+C", rename = "", search = "Ctrl+F", exit = "Q" }\n`;
 
 const scenarioTests = [
   {

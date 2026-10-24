@@ -316,6 +316,7 @@
     gap: 0.5rem;
     padding: 0.25rem 0.5rem;
     background: var(--vw-header-bg);
+    color: var(--vw-header-fg);
     border-bottom: 1px solid var(--vw-border);
     font-size: 13px;
     user-select: none;

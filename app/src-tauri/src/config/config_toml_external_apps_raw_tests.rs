@@ -1,5 +1,7 @@
-//! TDD (unit-test-writer, 2026-10-17): `config/config_toml.rs` reads the top-level `external_apps` in the SAME single read /
-//! single TOML parse as `input_keymap_custom` and `ui_theme`, and hands it back RAW (no per-element validation).
+//! TDD (unit-test-writer, 2026-10-17; migrated 2026-10-24 for SPEC-0300-0023 -- this file REPLACES `config_toml_external_apps_tests.rs`, whose
+//! only change is that `ui_theme` is no longer read: the filler `theme = "dark"` is the top-level `theme = "dark"` and `r.ui_theme` is
+//! `r.appearance.theme`): `config/config_toml.rs` reads the top-level `external_apps` in the SAME single read /
+//! single TOML parse as `input_keymap_custom` and the appearance tables, and hands it back RAW (no per-element validation).
 //! Specs: SPEC-0300-0021 R-1500 (the fields; `[[external_apps]]` = an array of tables), R-1501 (read once; the app never writes
 //! `config.toml`), R-1502 (absent -> `Missing`; `external_apps = []` is a real empty list), R-1503 (unknown fields are ignored; the
 //! values are NOT judged here), R-1504 (a value that is not an array of tables -> the WHOLE value is `WrongType`, including the case of
@@ -8,10 +10,10 @@
 //! SPEC-0300-0010 R-45; SPEC-0200-0001 §3.16.1 / §3.16.2 (`config/` never imports `external_apps/`; the raw types live in
 //! `shared/schema/external_apps.rs`), §3.16.3, §3.16.15.
 //!
-//! Contract the implementer must satisfy (declared in `config/mod.rs` as `#[cfg(test)] mod config_toml_external_apps_tests;`):
+//! Contract the implementer must satisfy (declared in `config/mod.rs` as `#[cfg(test)] mod config_toml_external_apps_raw_tests;`):
 //!
 //! ```ignore
-//! pub struct ConfigTomlLoadResult { pub keymap: KeymapRawLoadResult, pub ui_theme: UiThemeRaw, pub external_apps: ExternalAppsRaw }
+//! pub struct ConfigTomlLoadResult { pub keymap: KeymapRawLoadResult, pub appearance: RawAppearance, pub external_apps: ExternalAppsRaw }
 //! // Default / missing file / whole-file failure => external_apps: ExternalAppsRaw::Missing
 //! // `ExternalAppsRaw`, `RawExternalApp`, `RawValue<T>`: see external_apps/registry_tests.rs (all derive Debug, Clone, PartialEq, Eq).
 //! ```
@@ -22,7 +24,7 @@ use std::path::PathBuf;
 
 use super::config_toml::load;
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
-use crate::shared::schema::ui_theme::UiThemeRaw;
+use crate::shared::schema::appearance_raw::{RawAppearance, RawThemeSection};
 
 fn write_config(contents: impl AsRef<[u8]>) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
@@ -56,7 +58,7 @@ fn a_missing_file_has_external_apps_missing_and_nothing_is_created() {
 
 #[test]
 fn a_file_without_external_apps_is_missing() {
-    assert_eq!(external("ui_theme = \"dark\"\n[input_keymap_custom]\nsort_menu = \"D\"\n"), ExternalAppsRaw::Missing);
+    assert_eq!(external("theme = \"dark\"\n[input_keymap_custom]\nsort_menu = \"D\"\n"), ExternalAppsRaw::Missing);
     assert_eq!(external(""), ExternalAppsRaw::Missing);
 }
 
@@ -211,12 +213,12 @@ fn q1_an_array_with_a_non_table_element_is_wrong_type_as_a_whole() {
 // ------------------------------------------------------------------ the rest of config.toml is unaffected
 
 #[test]
-fn external_apps_does_not_disturb_the_keymap_or_the_theme() {
+fn external_apps_does_not_disturb_the_keymap_or_the_appearance() {
     let (_d, path) = write_config(
-        "ui_theme = \"dark\"\nexternal_apps = []\n\n[input_keymap_custom]\nsort_menu = \"D\"\n",
+        "theme = \"dark\"\nexternal_apps = []\n\n[input_keymap_custom]\nsort_menu = \"D\"\n",
     );
     let r = load(&path);
-    assert_eq!(r.ui_theme, UiThemeRaw::Str("dark".into()));
+    assert_eq!(r.appearance.theme, RawThemeSection::Str { value: "dark".into(), line: Some(1) });
     assert_eq!(r.keymap.entries.len(), 1);
     assert!(r.keymap.parse_error.is_none());
     assert_eq!(r.external_apps, ExternalAppsRaw::Array(vec![]));
@@ -224,11 +226,11 @@ fn external_apps_does_not_disturb_the_keymap_or_the_theme() {
 
 #[test]
 fn a_wrong_typed_external_apps_does_not_fail_the_whole_file() {
-    let (_d, path) = write_config("ui_theme = \"dark\"\nexternal_apps = \"nope\"\n[input_keymap_custom]\nsort_menu = \"D\"\n");
+    let (_d, path) = write_config("theme = \"dark\"\nexternal_apps = \"nope\"\n[input_keymap_custom]\nsort_menu = \"D\"\n");
     let r = load(&path);
     assert_eq!(r.external_apps, ExternalAppsRaw::WrongType);
     assert!(r.keymap.parse_error.is_none(), "only the default four are used; the keymap and theme are read as usual");
-    assert_eq!(r.ui_theme, UiThemeRaw::Str("dark".into()));
+    assert_eq!(r.appearance.theme, RawThemeSection::Str { value: "dark".into(), line: Some(1) });
     assert_eq!(r.keymap.entries.len(), 1);
 }
 
@@ -245,12 +247,12 @@ fn a_registration_written_after_a_table_header_is_part_of_that_table_not_a_top_l
 
 #[test]
 fn a_toml_syntax_error_makes_the_whole_file_unreadable_and_external_apps_missing() {
-    let (_d, path) = write_config("ui_theme = \"dark\"\nexternal_apps = []\nthis is = = not toml\n");
+    let (_d, path) = write_config("theme = \"dark\"\nexternal_apps = []\nthis is = = not toml\n");
     let r = load(&path);
     assert_eq!(r.external_apps, ExternalAppsRaw::Missing, "the default four apply");
     let err = r.keymap.parse_error.expect("the single R-45-2 error");
     assert!(err.whole_file);
-    assert_eq!(r.ui_theme, UiThemeRaw::Missing);
+    assert_eq!(r.appearance, RawAppearance::default());
 }
 
 #[test]
@@ -275,7 +277,7 @@ fn a_leading_bom_does_not_hide_external_apps() {
 
 #[test]
 fn load_never_modifies_config_toml_or_creates_a_sibling() {
-    let original = "# hand edited\nui_theme = \"light\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"a.exe\"\n";
+    let original = "# hand edited\ntheme = \"light\"\n\n[[external_apps]]\nname = \"a\"\nprogram = \"a.exe\"\n";
     let (dir, path) = write_config(original);
     let mtime = fs::metadata(&path).unwrap().modified().unwrap();
     load(&path);

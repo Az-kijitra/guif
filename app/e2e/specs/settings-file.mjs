@@ -33,8 +33,7 @@ const W_A9 = "設定ファイルのチェック(次の起動での扱い): ";
 const W_AA = "問題はありません。変更は再起動で反映されます";
 const W_AB = "config.toml がないため、既定の設定を使います。";
 const W_A8_HEAD = "config.sample.toml を書き出せませんでした。 詳細: ";
-const THEME_VALUES = '(使える値: "light"、"dark"、"system")';
-const wTheme = (line) => `config.toml の ${line} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います${THEME_VALUES}。`;
+// SPEC-0300-0023 R-1748: ui_theme is an unknown key now (W-AC, with its line); the old W-33 sentence is gone.
 
 // ------------------------------------------------------------------------------------------- helpers
 
@@ -132,7 +131,7 @@ const f0Tests = [
       await ctx.reload(); // the startup notice is shown again from the (snapshot) DTO
       t.eq(await statusText(ctx), "", "no startup notice (R-1644: a missing config.toml is not reported)");
       const dto = await ctx.configDto();
-      t.eq([dto.present, dto.parseError, dto.uiTheme, dto.uiThemeInvalid, dto.entries.length, dto.unknownSettings.length], [false, null, "system", false, 0, 0], "the DTO is the no-file result");
+      t.eq([dto.present, dto.parseError, dto.entries.length, dto.unknownSettings.length], [false, null, 0, 0], "the DTO is the no-file result");
       const end = Date.now() + 15000;
       while (!fs.existsSync(samplePath(ctx)) && Date.now() < end) await sleep(100);
       t.ok(fs.existsSync(samplePath(ctx)), "config.sample.toml was written after the start (R-1621)");
@@ -231,17 +230,16 @@ const f1Tests = [
   },
   {
     id: "AC-1610",
-    title: "after opening, ui_theme = dark and an input_keymap_custom override are written by the test: theme, keys, menu shortcuts and external app items stay as started (also after a page reload)",
+    title: "after opening, [theme] preset = light and an input_keymap_custom override are written by the test: theme, keys, menu shortcuts and external app items stay as started (also after a page reload)",
     async run(t, ctx) {
       await prepMenu(ctx, "f1");
       const { launched } = await openSettings(ctx, "menu");
       t.eq(launched, ["refused"], "opened (refused by the scope)");
-      fs.writeFileSync(configPath(ctx), 'ui_theme = "dark"\nexternal_apps = []\n\n[input_keymap_custom]\ncopy = "F9"\n', "utf8");
+      fs.writeFileSync(configPath(ctx), 'external_apps = []\n\n[theme]\npreset = "light"\n\n[input_keymap_custom]\ncopy = "F9"\n', "utf8");
       await sleep(1500);
       await ctx.reload(); // the DTO is a snapshot (SHOULD-184): a reload does not read config.toml again
-      t.eq((await ctx.configDto()).uiTheme, "light", "the DTO still says light (the start's ui_theme)");
-      t.eq(await ctx.m.cssVar("--ui-bg"), "#f5f5f5", "the screen is still light");
-      t.eq(await ctx.ev(`matchMedia("(prefers-color-scheme: dark)").matches`), false, "prefers-color-scheme: dark is not set (the theme was not pinned to dark)");
+      t.eq((await ctx.configDto()).entries.length, 0, "the DTO still has no key override (the start's config.toml)");
+      t.eq(await ctx.m.cssVar("--ui-bg"), "#2e3440", "the screen is still nord (the light preset was not applied)");
       await prepMenu(ctx, "f1");
       await openByKeys(ctx, 1);
       const edit = await dropdown(ctx);
@@ -254,7 +252,7 @@ const f1Tests = [
       // the check reads the new file and says what the NEXT start would do, without applying it
       const message = await checkSettings(ctx);
       t.eq(message, W_A9 + W_AA, "the check of the rewritten (valid) file: W-A9 + W-AA");
-      t.eq(await ctx.m.cssVar("--ui-bg"), "#f5f5f5", "the check did not change the theme");
+      t.eq(await ctx.m.cssVar("--ui-bg"), "#2e3440", "the check did not change the colours");
     },
   },
   {
@@ -277,7 +275,7 @@ const f1Tests = [
       t.ok(rows > 0, "the list is still there");
       await ctx.press.down();
       await ctx.settle(100);
-      t.ok((await ctx.ev(`document.querySelector('.app-shell .file-list-row.focused')?.getAttribute('aria-label') ?? ''`)) !== "", "a list key (Down) still works afterwards");
+      t.ok((await ctx.ev(`document.querySelector('.app-shell .file-list-row:is(.cursor,.idle)')?.getAttribute('aria-label') ?? ''`)) !== "", "a list key (Down) still works afterwards");
     },
   },
   {
@@ -372,7 +370,7 @@ const f2Tests = [
     id: "AC-1600-i",
     title: "existing config.toml with comments and valid settings: unchanged by 「設定ファイルを開く」",
     run: (t, ctx) =>
-      expectUntouchedByOpen(t, ctx, "(i)", '# user comment\nui_theme = "light"   # trailing comment\nexternal_apps = []\n\n[input_keymap_custom]\n# copy = "Ctrl+C"\n'),
+      expectUntouchedByOpen(t, ctx, "(i)", '# user comment\n# no ui_theme (R-1840)   # trailing comment\nexternal_apps = []\n\n[input_keymap_custom]\n# copy = "Ctrl+C"\n'),
   },
   {
     id: "AC-1600-ii",
@@ -382,12 +380,12 @@ const f2Tests = [
   {
     id: "AC-1600-iv",
     title: "existing config.toml with a BOM: unchanged by 「設定ファイルを開く」",
-    run: (t, ctx) => expectUntouchedByOpen(t, ctx, "(iv)", Buffer.concat([BOM, Buffer.from('external_apps = []\nui_theme = "light"\n', "utf8")])),
+    run: (t, ctx) => expectUntouchedByOpen(t, ctx, "(iv)", Buffer.concat([BOM, Buffer.from('external_apps = []\n# no ui_theme (R-1840)\n', "utf8")])),
   },
   {
     id: "AC-1600-v",
     title: "existing read-only config.toml: unchanged (content, time, attribute) by 「設定ファイルを開く」",
-    run: (t, ctx) => expectUntouchedByOpen(t, ctx, "(v)", 'external_apps = []\nui_theme = "light"\n', { readOnly: true }),
+    run: (t, ctx) => expectUntouchedByOpen(t, ctx, "(v)", 'external_apps = []\n# no ui_theme (R-1840)\n', { readOnly: true }),
   },
   {
     id: "AC-1600-end",
@@ -407,8 +405,7 @@ const ERROR_CONFIG = 'external_apps = []\nui_theme = "Dark"\nui_them = "dark"\n\
 // Lines: 1 external_apps, 2 ui_theme, 3 ui_them (unknown), 4 blank, 5 header, 6 copy (wrong), 7 toggle_time (right).
 const ERROR_NOTICE =
   "config.toml の不正なキー割り当て 1 件を無視しました: copy(6 行目)。 " +
-  wTheme(2) +
-  " config.toml の不明な設定 1 件を無視しました: ui_them(3 行目)。";
+  "config.toml の不明な設定 2 件を無視しました: ui_theme(2 行目), ui_them(3 行目)。";
 
 /** Writes `content` (or deletes the file for null), checks through the menu and returns { message, same: config and sample were not changed by the check }. */
 async function writeAndCheck(ctx, content) {
@@ -429,13 +426,13 @@ const f3Tests = [
       await prepMenu(ctx, "f3");
       const dto0 = await ctx.configDto();
       const { message, before, after } = await writeAndCheck(ctx, ERROR_CONFIG);
-      t.eq(message, W_A9 + ERROR_NOTICE, "W-A9 + W-32 (copy, line 6) + W-33 (line 2) + W-AC (ui_them, line 3), in that order");
+      t.eq(message, W_A9 + ERROR_NOTICE, "W-A9 + W-32 (copy, line 6) + W-AC (ui_theme line 2, ui_them line 3), in that order");
       t.eq(after, before, "AC-1654: config.toml and config.sample.toml are unchanged by the check (content and modification time)");
       t.eq(strayFiles(ctx), [], "no stray file");
       t.eq(await ctx.configDto(), dto0, "the start-up snapshot (keymap entries, theme) did not change");
       await expectFixedFileMenu(t, ctx, "after the check");
       t.eq((await ctx.externalAppsDto()).apps.length, 0, "the external app items are still 0");
-      t.eq(await ctx.m.cssVar("--ui-bg"), "#f5f5f5", "the theme did not change");
+      t.eq(await ctx.m.cssVar("--ui-bg"), "#2e3440", "the colours did not change");
     },
   },
   {
@@ -443,7 +440,7 @@ const f3Tests = [
     title: "check of a problem-free config.toml: W-A9 + W-AA, external apps stay 0",
     async run(t, ctx) {
       await prepMenu(ctx, "f3");
-      const { message, before, after } = await writeAndCheck(ctx, '# nothing to report\nui_theme = "light"\nexternal_apps = []\n');
+      const { message, before, after } = await writeAndCheck(ctx, '# nothing to report\n# no ui_theme (R-1840)\nexternal_apps = []\n');
       t.eq(message, W_A9 + W_AA, "W-A9 + W-AA");
       t.eq(after, before, "AC-1654: nothing was written");
       t.eq((await ctx.externalAppsDto()).apps.length, 0, "the external app items are still 0");
@@ -468,7 +465,7 @@ const f3Tests = [
       await prepMenu(ctx, "f3");
       const { message, before, after } = await writeAndCheck(ctx, 'external_apps = []\nui_theme = "dark"\nthis is = = not toml\n');
       t.ok(
-        message.startsWith(W_A9 + "config.toml の 3 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: "),
+        message.startsWith(W_A9 + "config.toml の 3 行目を読み込めなかったため、既定のキー割り当て、配色(nord)、外部アプリの既定の登録を使います。 詳細: "),
         "W-A9 + W-31 naming line 3",
         JSON.stringify(message),
       );
@@ -485,7 +482,7 @@ const f3Tests = [
       const first = await writeAndCheck(ctx, ERROR_CONFIG);
       t.eq(first.message, W_A9 + ERROR_NOTICE, "the error result is shown");
       // no waiting for it to go: the next check comes while the 15 s display is running
-      fs.writeFileSync(configPath(ctx), 'external_apps = []\nui_theme = "light"\n', "utf8");
+      fs.writeFileSync(configPath(ctx), 'external_apps = []\n# no ui_theme (R-1840)\n', "utf8");
       await runByKeys(ctx, 0, "設定ファイルのチェック");
       const second = await waitText(ctx, (s) => s === W_A9 + W_AA);
       t.eq(second, W_A9 + W_AA, "only the new result is on screen (replaced, not appended with ' / ')");
@@ -505,7 +502,7 @@ const f3Tests = [
         await waitText(ctx, (s) => s === "", 25000);
         return Date.now() - started;
       };
-      const quiet = await measure('external_apps = []\nui_theme = "light"\n', W_A9 + W_AA);
+      const quiet = await measure('external_apps = []\n# no ui_theme (R-1840)\n', W_A9 + W_AA);
       t.ok(quiet >= 1500 && quiet <= 4500, "a problem-free result disappears after about 2.5 s", `${quiet} ms`);
       const problem = await measure(ERROR_CONFIG, W_A9 + ERROR_NOTICE);
       t.ok(problem >= 13500 && problem <= 17500, "a result with a problem disappears after about 15 s", `${problem} ms`);
@@ -516,7 +513,7 @@ const f3Tests = [
     title: "focus on the tree, F10 -> ファイル -> 設定ファイルのチェック: the menu closes, the focus is back on the tree, then the result appears",
     async run(t, ctx) {
       await prepMenu(ctx, "f3");
-      fs.writeFileSync(configPath(ctx), 'external_apps = []\nui_theme = "light"\n', "utf8");
+      fs.writeFileSync(configPath(ctx), 'external_apps = []\n# no ui_theme (R-1840)\n', "utf8");
       await ctx.press.tab();
       await ctx.settle(150);
       t.eq(await statusFocus(ctx), "フォーカス: ツリー", "the tree has the focus");
@@ -723,19 +720,19 @@ const f4Tests = [
 // The probe is the only program this scenario registers (the usable one); it is never started: no key is bound to it and no launch is made.
 const F5_NOTICE =
   "config.toml の不正なキー割り当て 1 件を無視しました: copy(13 行目)。 " +
-  wTheme(2) +
-  " config.toml の外部アプリの登録 1 件を使いません: 2(壊れたB、10 行目)。";
+  "config.toml の外部アプリの登録 1 件を使いません: 2(壊れたB、10 行目)。 " +
+  "config.toml の不明な設定 1 件を無視しました: ui_theme(2 行目)。";
 
 const f5Tests = [
   {
     id: "AC-1640",
-    title: "start with errors on known lines (copy = Ctrl+ on 13, ui_theme = Dark on 2, a relative program on 10): W-32 -> W-33 -> W-9A with their lines, in that order; the right items are still used",
+    title: "start with errors on known lines (copy = Ctrl+ on 13, ui_theme = Dark on 2 [an unknown key now], a relative program on 10): W-32 -> W-9A -> W-AC with their lines, in that order; the right items are still used",
     async run(t, ctx) {
       const before = fileState(configPath(ctx));
       await ctx.reload();
-      t.eq(await statusText(ctx), F5_NOTICE, "the start-up notice is exactly the three sentences with their lines");
+      t.eq(await statusText(ctx), F5_NOTICE, "the start-up notice is exactly the three sentences with their lines (W-32, W-9A, W-AC)");
       const dto = await ctx.configDto();
-      t.eq([dto.uiThemeInvalid, dto.uiThemeLine], [true, 2], "DTO: ui_theme invalid, on line 2");
+      t.eq(dto.unknownSettings.map((u) => [u.name, u.line]), [["ui_theme", 2]], "DTO: ui_theme is an unknown setting, on line 2");
       t.eq((await ctx.externalAppsDto()).apps.map((a) => a.name), ["使えるA"], "the first registration is used, the broken second one is not");
       // toggle_time = Ctrl+Alt+T works (only the wrong entry falls back to its default)
       const dir = ctx.fx.files("f5-keys", 6);
@@ -782,7 +779,7 @@ const f5bTests = [
       await ctx.reload();
       t.eq(await statusText(ctx), F5B_NOTICE, "the start-up notice is exactly W-AC with the three items in line order");
       const dto = await ctx.configDto();
-      t.eq([dto.uiTheme, dto.uiThemeInvalid, dto.entries.length], ["system", false, 0], "theme follows the OS (ui_them is not ui_theme), no key override");
+      t.eq(dto.entries.length, 0, "no key override");
       const apps = (await ctx.externalAppsDto()).apps;
       t.eq(apps.map((a) => a.name), ["使えるA", "使えるB"], "both registrations are used (the unknown field is ignored)");
       t.eq(apps.map((a) => a.index), [0, 1], "the two registrations are used in file order (the DTO does not carry args: the unknown field was only reported)");
@@ -869,7 +866,8 @@ const f8Tests = [
       await ctx.reload();
       t.eq(await statusText(ctx), "", "no start-up notice (the sample is not read)");
       const dto = await ctx.configDto();
-      t.eq([dto.uiTheme, dto.uiThemeInvalid, dto.entries.length, dto.parseError], ["system", false, 0, null], "theme and keys are the defaults");
+      t.eq([dto.entries.length, dto.parseError], [0, null], "the keys are the defaults");
+      t.eq(await ctx.m.cssVar("--ui-bg"), "#2e3440", "the colours are nord's (the sample is not read)");
       const end = Date.now() + 15000;
       while (!describeAgainst(fs.readFileSync(samplePath(ctx)), "sample").equal && Date.now() < end) await sleep(150);
       const d = describeAgainst(fs.readFileSync(samplePath(ctx)), "sample");
@@ -934,7 +932,7 @@ const f10Tests = [
 
 // ------------------------------------------------------------------------------------------- scenarios
 
-const DEFAULT_CONFIG = 'ui_theme = "light"\nexternal_apps = []\n';
+const DEFAULT_CONFIG = '# no ui_theme (R-1840)\nexternal_apps = []\n';
 const SAMPLE_SEED_OLD = 'ui_theme = "dark"\n[input_keymap_custom]\ncopy = 1\nthis is = = not toml\n';
 
 export const scenarios = [
@@ -998,7 +996,7 @@ agrs = ["{dir}"]
   {
     id: "F6",
     title: "eight wrong keys: the first five and ほか 3 件; the notice stays 15 s",
-    configToml: `ui_theme = "light"
+    configToml: `# no ui_theme (R-1840)
 external_apps = []
 
 [input_keymap_custom]
@@ -1031,13 +1029,13 @@ bad_h = "Ctrl+Alt+Z"
   {
     id: "F9",
     title: "settings = Ctrl+Shift+O",
-    configToml: 'ui_theme = "light"\nexternal_apps = []\ninput_keymap_custom = { settings = "Ctrl+Shift+O" }\n',
+    configToml: '# no ui_theme (R-1840)\nexternal_apps = []\ninput_keymap_custom = { settings = "Ctrl+Shift+O" }\n',
     tests: f9Tests,
   },
   {
     id: "F10",
     title: 'settings = ""',
-    configToml: 'ui_theme = "light"\nexternal_apps = []\ninput_keymap_custom = { settings = "" }\n',
+    configToml: '# no ui_theme (R-1840)\nexternal_apps = []\ninput_keymap_custom = { settings = "" }\n',
     tests: f10Tests,
   },
 ];

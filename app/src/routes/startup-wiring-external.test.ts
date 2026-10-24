@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // [単体] Spec: SPEC-0300-0021 R-1501 (the registrations are read ONCE at start-up), R-1574 (the notice: invalid registrations, type error, unusable keys; part
 //   of the `config.toml` part of the start-up message, AFTER the keymap and theme notices, joined by one half-width space; not erased by the later notices),
-//   AC-1508 (keymap -> theme -> external (registrations -> keys), ONE message, kept in front of the `ui-state.toml` / `navigation.toml` notices),
+//   AC-1508 (keymap -> appearance -> external (registrations -> keys), ONE message, kept in front of the `ui-state.toml` / `navigation.toml` notices),
 //   AC-1532 (a default key that the user's keymap took is dropped and reported), AC-1535 (a plain install: no notice), R-1510-1 (default names from the screen's
 //   wording), R-1551 (the effective keymap, i.e. with `input_keymap_custom` applied, is what collides), R-1504 / SPEC-0300-0019 W-31 (the unreadable file case).
 // Architecture: SPEC-0200-0001 §3.16.6 (`loadKeymapForStartup` calls `externalAppsLoad()`, then `buildRegistry(dto, keyRules(validated.effective))`,
@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Module under test: ./startup-wiring.ts
 
 vi.mock("$lib/shared/ipc/config", () => ({ configLoadKeymap: vi.fn() }));
+vi.mock("$lib/shared/state/appearance-state.svelte", () => ({ startAppearanceLoad: vi.fn() }));
 vi.mock("$lib/shared/ipc/external-apps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("$lib/shared/ipc/external-apps")>()),
   externalAppsLoad: vi.fn(),
@@ -26,9 +27,11 @@ import { externalAppsLoad, type ExternalAppsDto } from "$lib/shared/ipc/external
 import { externalAppsState } from "$lib/features/external-apps/external-apps-state.svelte";
 import { statusMessage } from "$lib/shared/state/status-message.svelte";
 import { loadKeymapForStartup, runStartupHydrate } from "./startup-wiring";
+import { startAppearanceLoad } from "$lib/shared/state/appearance-state.svelte";
+
 
 type KeymapDto = Awaited<ReturnType<typeof configLoadKeymap>>;
-const keymap = (over: Partial<KeymapDto> = {}): KeymapDto => ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over }) as KeymapDto;
+const keymap = (over: Partial<KeymapDto> = {}): KeymapDto => ({ entries: [], parseError: null, present: true, unknownSettings: [], ...over }) as KeymapDto;
 
 const DEFAULT_FOUR: ExternalAppsDto["apps"] = [
   { index: 0, defaultNo: 1, name: null, key: "Ctrl+Alt+C", keyInvalid: false, keyLine: null },
@@ -38,7 +41,11 @@ const DEFAULT_FOUR: ExternalAppsDto["apps"] = [
 ];
 const ext = (over: Partial<ExternalAppsDto> = {}): ExternalAppsDto => ({ apps: DEFAULT_FOUR, invalid: [], typeError: false, typeErrorLine: null, ...over }) as ExternalAppsDto;
 
-const THEME_NOTICE = 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。';
+// SPEC-0300-0023 R-1820: the appearance part comes from startAppearanceLoad() (mocked); W-33 is abolished.
+const app = (problems: unknown[] = []) => ({ dark: true, bg: "#2e3440", uiVars: [], fontFamily: "monospace", fontSize: 16, rowHeight: 21, minColWidth: 24, treeWidthPercent: 24, problems }) as never;
+const P_B0 = { kind: "presetUnusable", line: 3, value: "dracula", usable: ["default", "nord", "monokai", "catppuccin", "solarized", "light"] };
+const WB0 = 'config.toml の 3 行目の配色 "dracula" は使えないため、nord を使います(使える値: default、nord、monokai、catppuccin、solarized、light)。';
+const THEME_NOTICE = WB0; // the appearance sentence takes the place of the old W-33 in the order
 const W32 = "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action。";
 const W9A_2 = "config.toml の外部アプリの登録 1 件を使いません: 2(bad)。";
 const W9B = "config.toml の external_apps が正しくないため、外部アプリは既定の登録を使います。";
@@ -47,6 +54,8 @@ const W9C_TERMINAL = "外部アプリのキー 1 件は使いません(正しく
 beforeEach(() => {
   vi.mocked(configLoadKeymap).mockReset();
   vi.mocked(externalAppsLoad).mockReset();
+  vi.mocked(startAppearanceLoad).mockReset();
+  vi.mocked(startAppearanceLoad).mockResolvedValue(app());
   externalAppsState.hydrate({ entries: [], invalid: [], typeError: false, typeErrorLine: null, rejectedKeys: [] }); // the singleton is shared by the tests of this file
 });
 
@@ -118,10 +127,11 @@ describe("the notice parts and their order (R-1574, AC-1508)", () => {
     expect(externalAppsState.entries[0].keys).toEqual(["Ctrl+Alt+Z"]);
   });
 
-  it("AC-1508: keymap -> theme -> external registrations -> external keys, ONE message, one half-width space between the sentences", async () => {
+  it("AC-1508: keymap -> appearance -> external registrations -> external keys, ONE message, one half-width space between the sentences", async () => {
     vi.mocked(configLoadKeymap).mockResolvedValueOnce(
-      keymap({ entries: [{ actionId: "no_such_action", value: "Ctrl+X", line: null }, { actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }], uiThemeInvalid: true }),
+      keymap({ entries: [{ actionId: "no_such_action", value: "Ctrl+X", line: null }, { actionId: "sort_menu", value: "Ctrl+Alt+C", line: null }] }),
     );
+    vi.mocked(startAppearanceLoad).mockResolvedValueOnce(app([P_B0]));
     vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext({ invalid: [{ position: 2, name: "bad", reason: "invalid", line: null }] }));
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(`${W32} ${THEME_NOTICE} ${W9A_2} ${W9C_TERMINAL}`);
@@ -134,7 +144,8 @@ describe("the notice parts and their order (R-1574, AC-1508)", () => {
   });
 
   it("the keymap part is unchanged when there is nothing external to say", async () => {
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ uiThemeInvalid: true }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap());
+    vi.mocked(startAppearanceLoad).mockResolvedValueOnce(app([P_B0]));
     vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext());
     expect((await loadKeymapForStartup()).notice).toBe(THEME_NOTICE);
   });
@@ -146,7 +157,7 @@ describe("when the whole config.toml is unreadable (R-1504, W-31)", () => {
     vi.mocked(externalAppsLoad).mockResolvedValueOnce(ext());
     const { notice } = await loadKeymapForStartup();
     expect(notice).toBe(
-      "config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: bad toml",
+      "config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、配色(nord)、外部アプリの既定の登録を使います。 詳細: bad toml",
     );
     expect(notice).not.toContain("外部アプリのキー");
     expect(externalAppsState.entries).toHaveLength(4);
@@ -156,7 +167,8 @@ describe("when the whole config.toml is unreadable (R-1504, W-31)", () => {
 describe("a failure of the external-apps load itself (§3.16.6, MINOR-33)", () => {
   it("the start goes on: zero registrations, no notice of ours, the keymap notice stays, one console.error line", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap({ uiThemeInvalid: true }));
+    vi.mocked(configLoadKeymap).mockResolvedValueOnce(keymap());
+    vi.mocked(startAppearanceLoad).mockResolvedValueOnce(app([P_B0]));
     vi.mocked(externalAppsLoad).mockRejectedValueOnce(new Error("ipc down"));
     await expect(loadKeymapForStartup()).resolves.toEqual({ notice: THEME_NOTICE });
     expect(externalAppsState.entries).toEqual([]);

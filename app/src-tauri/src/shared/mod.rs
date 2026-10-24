@@ -15,6 +15,9 @@ pub(crate) mod identity;
 pub mod product;
 pub mod schema;
 pub mod window_theme;
+pub mod window_paint;
+#[cfg(test)]
+mod window_paint_tests;
 
 // TDD (unit-test-writer, 2026-09-27): Phase 5 tests for the moved parts.
 #[cfg(test)]
@@ -26,9 +29,6 @@ mod identity_tests;
 #[cfg(test)]
 mod e2e_scope_tests;
 
-// Phase 12 (SPEC-0300-0017): `window_theme` tests (pure mapping, background colour drift against the CSS).
-#[cfg(test)]
-mod window_theme_tests;
 
 // SPEC-0200-0001 §3.12 (Rust-side absolute-path check, SPEC-0300-0011 R-89): the one judgement.
 pub mod abs_path;

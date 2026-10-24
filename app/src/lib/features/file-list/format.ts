@@ -28,6 +28,23 @@ export function formatSize(bytes: number): string {
   return `${rounded.toFixed(1)} ${SIZE_UNITS[unitIndex]}`;
 }
 
+// SPEC-0300-0023 R-1781 (tuif): a folder shows `<DIR>` in the size cell, a file its R-20-11 size.
+export function formatSizeCell(isDir: boolean, bytes: number): string {
+  return isDir ? "<DIR>" : formatSize(bytes);
+}
+
+// SPEC-0300-0023 R-1785 4 (T-25): the names tuif colours as executables (ends-with, case-insensitive). The caller applies it to files only.
+const EXECUTABLE_SUFFIXES = [".exe", ".bat", ".cmd", ".ps1"] as const;
+export function isExecutableName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return EXECUTABLE_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
+
+// SPEC-0300-0023 R-1780 / R-1783: the 2-character mark column (`* ` when selected).
+export function selectionMark(selected: boolean): string {
+  return selected ? "* " : "  ";
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }

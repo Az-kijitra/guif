@@ -12,10 +12,11 @@ import { createStatusMessageState } from "$lib/shared/state/status-message.svelt
 import { createSettingsFileWiring } from "./settings-file-wiring";
 
 const keymap = (over: Record<string, unknown> = {}) =>
-  ({ entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [], ...over }) as never;
+  ({ entries: [], parseError: null, present: true, unknownSettings: [], ...over }) as never;
+const app = (over: Record<string, unknown> = {}) => ({ dark: true, bg: "#2e3440", uiVars: [], fontFamily: "monospace", fontSize: 16, rowHeight: 21, minColWidth: 24, treeWidthPercent: 24, problems: [], ...over }) as never;
 const ext = () => ({ apps: [], invalid: [], typeError: false, typeErrorLine: null }) as never;
-const BAD = () => ({ keymap: keymap({ entries: [{ actionId: "copy", value: "Ctrl+", line: 12 }] }), externalApps: ext() });
-const GOOD = () => ({ keymap: keymap(), externalApps: ext() });
+const BAD = () => ({ keymap: keymap({ entries: [{ actionId: "copy", value: "Ctrl+", line: 12 }] }), externalApps: ext(), appearance: app() });
+const GOOD = () => ({ keymap: keymap(), externalApps: ext(), appearance: app() });
 const BAD_TEXT = "設定ファイルのチェック(次の起動での扱い): config.toml の不正なキー割り当て 1 件を無視しました: copy(12 行目)。";
 const GOOD_TEXT = "設定ファイルのチェック(次の起動での扱い): 問題はありません。変更は再起動で反映されます";
 const OPENED = "config.toml を VS Code で開きました";
@@ -54,7 +55,7 @@ describe("AC-1656: how long each result stays", () => {
   });
 
   it("no config.toml: 2.5 s", async () => {
-    const s = setup({ check: () => ({ keymap: keymap({ present: false }), externalApps: ext() }) });
+    const s = setup({ check: () => ({ keymap: keymap({ present: false }), externalApps: ext(), appearance: app() }) });
     await s.wiring.check();
     await vi.advanceTimersByTimeAsync(2500);
     expect(s.status.text).toBeNull();

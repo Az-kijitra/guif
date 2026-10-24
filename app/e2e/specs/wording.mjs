@@ -154,23 +154,23 @@ export const tests = [
   },
   {
     id: "AC-651",
-    title: "項目なし look: muted colour, surface background, 1px border, padding 2px 6px, 12px, pointer-events none, same place as the loading notice; list body size unchanged",
+    title: "項目なし look (AC-1783): --ui-border colour, plain text (no background, no frame), 12px, pointer-events none, on the first row after the 2ch mark column; list body size unchanged",
     async run(t, ctx) {
       await showFolder(ctx, "w-empty");
       await ctx.setViewport(1000, 700);
       await ctx.waitFor(`document.querySelectorAll('.list-empty').length === 1`, { label: "項目なし" });
       const s = await ctx.m.cs(".list-empty", ["color", "background-color", "border-top-width", "border-top-style", "border-top-color", "padding", "font-size", "pointer-events", "position"]);
-      t.eq(s.color, RGB.muted, "colour = --ui-muted");
-      t.eq(s["background-color"], RGB.surface, "background = --ui-surface");
-      t.eq([s["border-top-width"], s["border-top-style"], s["border-top-color"]], ["1px", "solid", RGB.border], "border");
-      t.eq(s.padding, "2px 6px", "padding");
+      t.eq(s.color, RGB.border, "colour = --ui-border (border_inactive)");
+      t.eq(s["background-color"], "rgba(0, 0, 0, 0)", "no background");
+      t.eq([s["border-top-width"], s["border-top-style"], s["border-top-color"]], ["0px", "none", RGB.border], "no frame");
+      t.eq(s.padding, "0px", "padding");
       t.eq(s["font-size"], "12px", "font-size");
       t.eq(s["pointer-events"], "none", "pointer-events");
       const e = await ctx.m.rect(".list-empty");
-      const frame = await ctx.m.rect(".file-list-frame");
-      const fd = await ctx.m.dims(".file-list-frame");
-      t.approx(e.left, frame.left + fd.clientLeft + 4, "left = frame inner left + 4");
-      t.approx(e.top, frame.top + fd.clientTop + 4, "top = frame inner top + 4");
+      const inner = await ctx.m.rect(".file-list-frame .pane-body");
+      const ch = await ctx.ev(`(() => { const c = document.createElement("canvas").getContext("2d"); c.font = getComputedStyle(document.querySelector(".file-list")).font; return c.measureText("0").width; })()`);
+      t.approx(e.left, inner.left + 2 * ch, "left = inner body left + 2ch (after the mark column)", 0.6);
+      t.approx(e.top, inner.top, "top = the first row");
       const emptyBody = await ctx.m.dims(".file-list");
       await showFolder(ctx, "w-many", (d) => {
         for (let i = 1; i <= 5; i++) fs.writeFileSync(`${d}\\f${i}.txt`, "x");

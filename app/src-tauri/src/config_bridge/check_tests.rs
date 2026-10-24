@@ -38,21 +38,23 @@ fn r1651_the_check_returns_what_start_up_would_return_for_the_same_file() {
     let body = "ui_them = 1\nui_theme = \"Dark\"\n[input_keymap_custom]\ncopy = \"Ctrl+\"\n[[external_apps]]\nname = \"bad\"\nprogram = \"bin\\\\x.exe\"\n";
     let (_d, path) = file(body);
     let dto = check_at(&path, &env, None);
-    let (startup, registry) = snapshot_at(&path, &env, None);
+    let snap = snapshot_at(&path, &env, None);
+    let (startup, registry) = (snap.0, snap.1);
     assert_eq!(dto.keymap, startup.to_dto());
     assert_eq!(dto.external_apps, registry_dto(&registry));
-    assert_eq!(dto.keymap.unknown_settings.len(), 1);
+    assert_eq!(dto.keymap.unknown_settings.len(), 2, "ui_them and (SPEC-0300-0023: no longer read) ui_theme");
     assert_eq!(dto.external_apps.invalid[0].line, Some(7));
 }
 
 // R-1650: each call reads the file as it is NOW.
 #[test]
 fn r1650_each_check_reads_the_file_again() {
-    let (_d, path) = file("ui_theme = \"dark\"\n");
-    assert!(!check_at(&path, &env, None).keymap.ui_theme_invalid);
+    // SPEC-0300-0023: `theme` is a known key, `ui_theme` an unknown one (a different file gives a different check)
+    let (_d, path) = file("theme = \"dark\"\n");
+    assert!(check_at(&path, &env, None).keymap.unknown_settings.is_empty());
     fs::write(&path, "ui_theme = \"Dark\"\n").unwrap();
     let dto = check_at(&path, &env, None);
-    assert!(dto.keymap.ui_theme_invalid && dto.keymap.ui_theme_line == Some(1));
+    assert!(dto.keymap.unknown_settings.len() == 1 && dto.keymap.unknown_settings[0].line == Some(1));
     fs::remove_file(&path).unwrap();
     assert!(!check_at(&path, &env, None).keymap.present, "R-1654 W-AB: the file is gone");
 }
@@ -110,5 +112,5 @@ fn ac1657_the_check_expands_program_with_the_environment_of_the_check() {
 fn the_check_dto_serializes_in_camel_case() {
     let (_d, path) = file("ui_theme = \"dark\"\n");
     let s = toml::to_string(&check_at(&path, &env, None)).expect("serialize");
-    assert!(s.contains("[keymap]") && s.contains("[externalApps]") && !s.contains("external_apps"), "{s}");
+    assert!(s.contains("[keymap]") && s.contains("[externalApps]") && s.contains("[appearance]") && !s.contains("external_apps"), "{s}");
 }

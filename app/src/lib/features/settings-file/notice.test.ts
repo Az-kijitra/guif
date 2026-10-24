@@ -100,3 +100,28 @@ describe("buildCheckNotice (R-1654, R-1663-1, AC-1653, AC-1656)", () => {
     expect(buildCheckNotice({ present: true, configNotice: "x" }).durationMs).toBe(NOTICE_MS.problem);
   });
 });
+
+// SPEC-0300-0023 AC-1756 / SPEC-0200-0001 §3.18.4: `UnknownSettingDto.kind` gains "tableKey" with `table`: a key inside [theme] / [colors] / [font] / [layout].
+// The item reads `[font] の weight(3 行目)` and sorts by line like the others.
+describe("buildUnknownSettingsNotice: tableKey items (SPEC-0300-0023 AC-1756)", () => {
+  const tk = (table: string, name: string, line: number | null) => ({ kind: "tableKey" as const, table, name, line });
+
+  it("AC-1756: `[font] の weight(3 行目)`", () => {
+    expect(buildUnknownSettingsNotice([tk("font", "weight", 3)] as never)).toBe("config.toml の不明な設定 1 件を無視しました: [font] の weight(3 行目)。");
+  });
+
+  it("without a line: no parentheses", () => {
+    expect(buildUnknownSettingsNotice([tk("layout", "time_format", null)] as never)).toBe("config.toml の不明な設定 1 件を無視しました: [layout] の time_format。");
+  });
+
+  it("AC-1748 / AC-1709: ui_theme (a top-level key) and [theme] mode sort by line together", () => {
+    expect(buildUnknownSettingsNotice([tk("theme", "mode", 4), key("ui_theme", 2)] as never)).toBe(
+      "config.toml の不明な設定 2 件を無視しました: ui_theme(2 行目), [theme] の mode(4 行目)。",
+    );
+  });
+
+  it("the five-item limit applies to them as well", () => {
+    const items = [1, 2, 3, 4, 5, 6].map((n) => tk("colors", `k${n}`, n));
+    expect(buildUnknownSettingsNotice(items as never)).toContain("[colors] の k5(5 行目), ほか 1 件。");
+  });
+});

@@ -55,12 +55,50 @@ describe("moveFocusColumn (SPEC-0300-0009 R-58 / SPEC-0300-0010 AC-07)", () => {
     expect(moveFocusColumn(4, "left", rowsPerColumn, totalCount)).toBe(1);
   });
 
-  it("does not move past the last column", () => {
+  it("does not move past the last column (index 5 is in the last column: stays)", () => {
     expect(moveFocusColumn(5, "right", rowsPerColumn, totalCount)).toBe(5);
   });
 
   it("does not move before the first column", () => {
     expect(moveFocusColumn(0, "left", rowsPerColumn, totalCount)).toBe(0);
+  });
+});
+
+describe("moveFocusColumn: SPEC-0300-0023 R-1796 / R-1797 / AC-1796 (20 rows, 45 items; the 3rd column holds items 41..45)", () => {
+  // 0-based indexes: the Nth item is index N - 1.
+  it("(i) 15th item, right -> 35th (same row position)", () => {
+    expect(moveFocusColumn(14, "right", 20, 45)).toBe(34);
+  });
+
+  it("(ii) 30th item, right: the 3rd column has no 10th row -> the LAST item (45th), not a no-op (replaces SPEC-0300-0009 R-58 up to the 19th edition)", () => {
+    expect(moveFocusColumn(29, "right", 20, 45)).toBe(44);
+  });
+
+  it("(iii) 45th item (last column), right -> does not move", () => {
+    expect(moveFocusColumn(44, "right", 20, 45)).toBe(44);
+  });
+
+  it("(iv) 25th item, left -> 5th", () => {
+    expect(moveFocusColumn(24, "left", 20, 45)).toBe(4);
+  });
+
+  it("(v) 5th item (first column), left -> does not move", () => {
+    expect(moveFocusColumn(4, "left", 20, 45)).toBe(4);
+  });
+
+  it("right from the 2nd column into a short 3rd column lands on the last item even for the first row of the missing part", () => {
+    expect(moveFocusColumn(25, "right", 20, 45)).toBe(44); // 26th item (row 5) -> row 5 does not exist in column 3 (5 items: rows 0..4)
+    expect(moveFocusColumn(24, "right", 20, 45)).toBe(44); // 25th item (row 4) -> 45th (exists, same position)
+  });
+
+  it("the left move from the last (short) column goes to the same row position, or does not move at the first column", () => {
+    expect(moveFocusColumn(44, "left", 20, 45)).toBe(24);
+    expect(moveFocusColumn(3, "left", 20, 45)).toBe(3);
+  });
+
+  it("an empty list or no rows does not move", () => {
+    expect(moveFocusColumn(0, "right", 20, 0)).toBe(0);
+    expect(moveFocusColumn(0, "right", 0, 5)).toBe(0);
   });
 });
 

@@ -96,10 +96,11 @@
     box-sizing: border-box;
     padding: 4px 0;
     background: var(--ui-surface);
-    border: 1px solid var(--ui-border-strong);
+    border: 1px solid var(--ui-border-active); /* SPEC-0300-0023 R-1812 */
+    color: var(--ui-fg);
     box-shadow: 0 8px 20px var(--ui-shadow-2);
     z-index: 20;
-    font-size: 13px;
+    font-size: var(--ui-font-size);
     outline: none;
   }
   .item {
@@ -109,8 +110,15 @@
     padding: 6px 12px;
     cursor: default;
   }
+  /* R-1812: the emphasised item takes the cursor colours and bold. */
   .item.highlighted {
     background: var(--ui-hover);
+    color: var(--ui-cursor-fg);
+    font-weight: bold;
+  }
+  .item.highlighted .reason,
+  .item.highlighted .shortcut {
+    color: inherit;
   }
   .check {
     flex: none;
@@ -125,7 +133,7 @@
   }
   .reason {
     display: block;
-    font-size: 11px;
+    font-size: var(--ui-font-size);
     color: var(--ui-muted);
     overflow-wrap: anywhere;
   }

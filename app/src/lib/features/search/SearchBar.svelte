@@ -85,7 +85,7 @@
     gap: 6px;
     box-sizing: border-box;
     padding: 6px 8px;
-    border: 1px solid var(--ui-border);
+    /* SPEC-0300-0023 R-1760 / R-1815: a band without a frame. */
     background: var(--ui-surface-2);
   }
   .search-input {
@@ -97,7 +97,7 @@
     border-radius: 4px;
     background: var(--ui-surface);
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--ui-font-size);
   }
   .regex-toggle[aria-pressed="true"] {
     background: var(--ui-surface-3);
@@ -105,6 +105,6 @@
   .search-error {
     margin-left: auto;
     color: var(--ui-error);
-    font-size: 12px;
+    font-size: var(--ui-font-size);
   }
 </style>

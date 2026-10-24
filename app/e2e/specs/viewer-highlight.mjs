@@ -12,8 +12,8 @@ import { bodyState, clickButton, closeViewerWindow, press, showInViewer } from "
 
 /** R-913-1-1 as getComputedStyle prints it: the colours of the highlight classes. */
 export const HL = {
-  light: { keyword: "rgb(215, 58, 73)", title: "rgb(111, 66, 193)", constant: "rgb(0, 92, 197)", string: "rgb(3, 47, 98)", builtin: "rgb(194, 78, 0)", comment: "rgb(106, 115, 125)", section: "rgb(0, 92, 197)" },
-  dark: { keyword: "rgb(255, 123, 114)", title: "rgb(210, 168, 255)", constant: "rgb(121, 192, 255)", string: "rgb(165, 214, 255)", builtin: "rgb(255, 166, 87)", comment: "rgb(139, 148, 158)", section: "rgb(74, 140, 247)" },
+  // nord (SPEC-0300-0023 R-1727; Rust highlight_tests.rs): the dark column, with comment (#969ea7) and section (#629cf8) pulled to 4.5:1 on the nord bg.
+  nord: { keyword: "rgb(255, 123, 114)", title: "rgb(210, 168, 255)", constant: "rgb(121, 192, 255)", string: "rgb(165, 214, 255)", builtin: "rgb(255, 166, 87)", comment: "rgb(150, 158, 167)", section: "rgb(98, 156, 248)" },
 };
 
 const SOURCES = {
@@ -32,7 +32,7 @@ const CLASS_OF = {
   keyword: ["hljs-keyword", "keyword"], comment: ["hljs-comment", "comment"], string: ["hljs-string", "string"], number: ["hljs-number", "constant"],
   builtin: ["hljs-built_in", "builtin"], title: ["hljs-title", "title"], attr: ["hljs-attr", "constant"], section: ["hljs-section", "section"], bullet: ["hljs-bullet", "bullet"],
 };
-const BULLET = { light: "rgb(115, 92, 15)", dark: "rgb(242, 204, 96)" };
+const BULLET = { nord: "rgb(242, 204, 96)" };
 
 const colorOf = (viewer, cls) => viewer.ev(`(() => { const e = document.querySelector('.viewer-body pre.code .${cls}'); return e ? getComputedStyle(e).color : null; })()`);
 const waitColoured = async (viewer, timeoutMs = 30000) => {
@@ -83,7 +83,10 @@ export async function checkRustColours(t, ctx, mode) {
   }
 }
 
-/** AC-528 (OS theme switch, emulated): the colours change without a reload and the scroll position stays. Used by theme.mjs (no config.toml). */
+/**
+ * AC-1742 (replaces AC-528's OS theme switch): the colours do NOT follow the OS. Emulating prefers-color-scheme light and dark in the open viewer
+ * changes neither the keyword colour nor the comment colour, and nothing reloads (the marker and the scroll position stay).
+ */
 export async function checkHighlightFollowsOs(t, ctx) {
   ctx.fx.mkdir("vh-os");
   const text = Array.from({ length: 200 }, (_, i) => `fn f${i}() { let s = "x"; } // c`).join("\n") + "\n";
@@ -94,20 +97,13 @@ export async function checkHighlightFollowsOs(t, ctx) {
     t.ok(await waitColoured(viewer), "the sample was coloured");
     await viewer.ev(`window.__hlMarker = "kept"; document.querySelector('.viewer-body').scrollTop = 300; true`);
     await sleep(200);
-    const look = async (want) => {
-      for (let i = 0; i < 20; i++) {
-        const c = await colorOf(viewer, "hljs-keyword");
-        if (c === want) return c;
-        await sleep(100);
-      }
-      return colorOf(viewer, "hljs-keyword");
-    };
-    await ctx.emulateColorScheme("light", viewer);
-    t.eq(await look(HL.light.keyword), HL.light.keyword, "light: the keyword colour");
     const top = (await bodyState(viewer)).top;
-    await ctx.emulateColorScheme("dark", viewer);
-    t.eq(await look(HL.dark.keyword), HL.dark.keyword, "dark: the keyword colour changed without a reload");
-    t.eq(await colorOf(viewer, "hljs-comment"), HL.dark.comment, "dark: the comment colour");
+    for (const scheme of ["light", "dark"]) {
+      await ctx.emulateColorScheme(scheme, viewer);
+      await sleep(400);
+      t.eq(await colorOf(viewer, "hljs-keyword"), HL.nord.keyword, `OS emulated ${scheme}: the keyword colour is still nord's`);
+      t.eq(await colorOf(viewer, "hljs-comment"), HL.nord.comment, `OS emulated ${scheme}: the comment colour is still nord's`);
+    }
     t.eq(await viewer.ev(`window.__hlMarker ?? null`), "kept", "no reload (the marker is kept)");
     t.eq((await bodyState(viewer)).top, top, "the scroll position is unchanged");
   } finally {
@@ -172,7 +168,7 @@ export const tests = [
   },
   {
     id: "AC-528",
-    title: "light: the 8 languages are coloured with the R-913-1-1 palette (keyword / string / comment / number / built-in / title / attr / section / bullet as each sample has them)",
+    title: "nord: the 8 languages are coloured with the R-913-1-1 palette (keyword / string / comment / number / built-in / title / attr / section / bullet as each sample has them)",
     async run(t, ctx) {
       fixtureSources(ctx);
       await ctx.reload();
@@ -192,7 +188,7 @@ export const tests = [
             t.eq(await clickButton(viewer, "Text"), true, "markdown: the Text button exists");
             await sleep(300);
           }
-          const problems = await checkLanguage(viewer, language, HL.light, "light");
+          const problems = await checkLanguage(viewer, language, HL.nord, "nord");
           t.eq(problems, [], `${language}: token colours`);
         }
       } finally {
@@ -202,9 +198,9 @@ export const tests = [
   },
   {
     id: "AC-528-rust",
-    title: "light Rust sample: fn / \"x\" / // c / println! are the keyword, string, comment and built-in colours (the built-in class must really exist)",
+    title: "nord Rust sample: fn / \"x\" / // c / println! are the keyword, string, comment and built-in colours (the built-in class must really exist)",
     async run(t, ctx) {
-      await checkRustColours(t, ctx, "light");
+      await checkRustColours(t, ctx, "nord");
     },
   },
   {

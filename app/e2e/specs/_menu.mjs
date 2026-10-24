@@ -57,7 +57,7 @@ export async function prepMenu(ctx, name = "mb", { tree = true, empty = false } 
 
 export const rowOrder = (ctx) => ctx.ev(`[...document.querySelectorAll('.app-shell .file-list-row')].map((e) => e.getAttribute('aria-label'))`);
 export const selectedNames = (ctx) => ctx.ev(`[...document.querySelectorAll('.app-shell .file-list-row[aria-selected=true]')].map((e) => e.getAttribute('aria-label'))`);
-export const focusedName = (ctx) => ctx.ev(`document.querySelector('.app-shell .file-list-row.focused')?.getAttribute('aria-label') ?? null`);
+export const focusedName = (ctx) => ctx.ev(`document.querySelector('.app-shell .file-list-row:is(.cursor,.idle)')?.getAttribute('aria-label') ?? null`);
 export const statusFocus = async (ctx) => (await ctx.m.statusItems())[0];
 export const statusText = (ctx) => ctx.ev(`document.querySelector('.status-bar')?.textContent ?? ''`);
 
@@ -215,7 +215,8 @@ export const MENU_STYLE_PROBE = `(() => {
   const sides = ['top', 'right', 'bottom', 'left'];
   const border = (s, color) => s && sides.every((x) => s.getPropertyValue('border-' + x + '-width') === '1px' && s.getPropertyValue('border-' + x + '-style') === 'solid' && (color === undefined || s.getPropertyValue('border-' + x + '-color') === color));
   return {
-    bar: pick(bar, ['padding', 'background-color', 'border-top-color', 'border-left-color']), barBorder1px: border(bar),
+    bar: pick(bar, ['padding', 'background-color', 'border-top-color', 'border-left-color', 'border-top-width']), barBorder1px: border(bar),
+    headLook: pick(head, ['color']),
     head: pick(head, ['font-size', 'font-family']),
     dropdown: pick(dd, ['min-width', 'background-color', 'border-top-color']), ddBorder1px: border(dd),
     item: pick(item, ['padding', 'font-size']),

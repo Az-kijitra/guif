@@ -174,7 +174,8 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
         let app_for_events = app.clone();
         // R-434: the dev server origin (debug builds only) counts as the app.
         let dev_url = if cfg!(debug_assertions) { app.config().build.dev_url.clone() } else { None };
-        let build_result = WebviewWindowBuilder::new(&app, VIEWER_WINDOW_LABEL, WebviewUrl::App("viewer".into()))
+        let paint = app.try_state::<crate::shared::window_paint::WindowPaint>().map(|p| (*p).clone());
+        let mut builder = WebviewWindowBuilder::new(&app, VIEWER_WINDOW_LABEL, WebviewUrl::App("viewer".into()))
             .title(title)
             // R-424-2: default 1024x768 (logical) centered; a saved geometry
             // is applied below in PHYSICAL pixels before the first show.
@@ -189,12 +190,17 @@ pub fn open_or_focus_viewer_window(app: AppHandle, title: String, generation: u6
             .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
             // R-502: the WebView's own Ctrl+wheel/accelerator zoom is not used
             // (R-471/R-481-1 implement zoom in-app instead).
-            .zoom_hotkeys_enabled(false)
-            .build();
+            .zoom_hotkeys_enabled(false);
+        if let Some(p) = &paint {
+            builder = builder.initialization_script(p.viewer_init_script.clone());
+        }
+        let build_result = builder.build();
 
         let Ok(window) = build_result else { return };
         // R-919-1: the pre-paint background in the viewer's theme colour, before anything is shown.
-        let _ = window_theme::apply_background(&window, window_theme::WindowKind::Viewer);
+        if let Some(p) = &paint {
+            let _ = window_theme::apply_background(&window, p.bg);
+        }
         if has_saved {
             let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
             let _ = window.set_size(tauri::PhysicalSize::new(rect.width, rect.height));
@@ -227,13 +233,6 @@ fn current_session_title(app: &AppHandle) -> String {
 
 fn handle_viewer_window_event(app: &AppHandle, generation: u64, event: &WindowEvent) {
     match event {
-        // R-919-1: an OS theme switch (following the OS) also moves the base colour a resize exposes.
-        // A fixed theme never sends this event.
-        WindowEvent::ThemeChanged(_) => {
-            if let Some(window) = app.get_webview_window(VIEWER_WINDOW_LABEL) {
-                let _ = window_theme::apply_background(&window, window_theme::WindowKind::Viewer);
-            }
-        }
         WindowEvent::CloseRequested { .. } => {
             if let Some(window) = app.get_webview_window(VIEWER_WINDOW_LABEL) {
                 persist_current_geometry(&window, app);

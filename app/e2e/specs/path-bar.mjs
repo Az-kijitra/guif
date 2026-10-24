@@ -10,13 +10,14 @@ export const tests = [
       const first = await ctx.ev(`(() => { const b = document.querySelector('.path-bar-row'); return { text: b.children[0].textContent.trim(), tag: b.children[0].tagName }; })()`);
       t.eq(first.text, "PATH", "the first child is the PATH label");
       const label = await ctx.m.cs(".path-bar-row > :first-child", ["font-weight", "font-size"]);
-      t.eq(label["font-weight"], "600", "label font-weight");
+      t.eq(label["font-weight"], "700", "label font-weight (bold, AC-1810)");
+      t.eq((await ctx.m.cs(".path-bar-row > :first-child", ["color"])).color, RGB.treeCurrent, "label colour = tree_current");
       t.eq(label["font-size"], "12px", "label font-size");
       const bar = await ctx.m.rect(".path-bar-row");
       const input = await ctx.m.rect(".path-bar-row input");
       const labelRect = await ctx.m.rect(".path-bar-row > :first-child");
       t.ok(input.left > labelRect.right, "input is to the right of the label");
-      t.approx(input.right, bar.right - 7, "input right = path bar right - 7 (border 1 + padding 6)");
+      t.approx(input.right, bar.right - 6, "input right = path bar right - 6 (the bar padding)");
       const barStyle = await ctx.m.cs(".path-bar-row", ["padding", "column-gap"]);
       t.eq(barStyle.padding, "4px 6px", "path bar padding");
       t.eq(barStyle["column-gap"], "8px", "path bar column-gap");
@@ -46,7 +47,7 @@ export const tests = [
       t.eq((await ctx.m.outline(".path-bar-row input")).style, "none", "no outline before editing");
       await ctx.press.ctrlL();
       await ctx.waitFor(`document.activeElement === document.querySelector('.path-bar-row input')`, { label: "the path input to take focus" });
-      t.eq((await ctx.m.cs(".path-bar-row input", ["background-color"]))["background-color"], RGB.surface, "editing background");
+      t.eq((await ctx.m.cs(".path-bar-row input", ["background-color"]))["background-color"], RGB.surface, "editing background (surface = bg in nord)");
       const o = await ctx.m.outline(".path-bar-row input");
       t.eq(o.width, FRAME_FOCUS.width, "outline-width");
       t.eq(o.style, FRAME_FOCUS.style, "outline-style");

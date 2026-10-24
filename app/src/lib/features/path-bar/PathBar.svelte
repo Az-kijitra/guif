@@ -43,12 +43,13 @@
     gap: 8px;
     padding: 4px 6px;
     box-sizing: border-box;
-    border: 1px solid var(--ui-border);
+    /* SPEC-0300-0023 R-1760 / R-1814: a band without a frame; the label has the tree's current-folder colour. */
     background: var(--ui-surface-2);
   }
   .path-label {
-    font-size: 12px;
-    font-weight: 600;
+    font-size: var(--ui-font-size);
+    font-weight: bold;
+    color: var(--ui-tree-current);
   }
   .path-bar {
     flex: 1;
@@ -58,7 +59,8 @@
     border: 1px solid var(--ui-border-strong);
     border-radius: 4px;
     background: var(--ui-surface-2);
-    font: 12px var(--ui-font-mono);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-font-size);
     text-overflow: ellipsis;
     outline-style: none;
   }

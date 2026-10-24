@@ -19,7 +19,7 @@
 //! whether the original has `\n` or `\r\n`, and the text ends with exactly one `\r\n`; (4) no BOM.
 //!
 //! The original is `app/src-tauri/templates/config.sample.toml`: written by code-generator, shaped by R-1631 / R-1631-1 / R-1633 /
-//! R-1634 / R-1635 (comments only; `## ` description lines, `# ` setting lines; `ui_theme` -> `input_keymap_custom` -> `external_apps`).
+//! R-1634 / R-1635 (comments only; `## ` description lines, `# ` setting lines; SPEC-0300-0023 R-1830: `[theme]` -> `[colors]` -> `[font]` -> `[layout]` -> `[input_keymap_custom]` -> `[[external_apps]]`).
 
 use std::collections::BTreeSet;
 
@@ -108,13 +108,13 @@ fn r1611_the_real_scaffold_and_sample_are_utf8_crlf_without_bom_and_resolved() {
     }
 }
 
-// AC-1634 / R-1635: the two differ only in the explanation at the top; the body from `# ui_theme` on is the same.
+// AC-1634 / R-1635: the two differ only in the explanation at the top; the body from `# [theme]` on is the same (SPEC-0300-0023: the first setting is the theme table).
 #[test]
 fn ac1634_the_scaffold_and_the_sample_differ_only_in_the_leading_description() {
     let (t, s) = both();
     let (tl, sl) = (lines(&t), lines(&s));
-    let first_setting = index_of(&tl, "# ui_theme = \"system\"");
-    let sample_ui = sl.iter().position(|l| *l == "# ui_theme = \"system\"").unwrap();
+    let first_setting = index_of(&tl, "# [theme]");
+    let sample_ui = sl.iter().position(|l| *l == "# [theme]").unwrap();
     assert_eq!(tl[first_setting..], sl[sample_ui..], "everything from the first setting on is identical");
     assert_ne!(t, s);
     let (th, sh) = (tl[..first_setting].to_vec(), sl[..sample_ui].to_vec());
@@ -150,27 +150,35 @@ fn ac1636_every_line_is_blank_or_one_of_the_two_comment_shapes() {
     }
 }
 
-// AC-1636 / R-1631-1: ui_theme -> input_keymap_custom -> external_apps; the ui_theme line is before the first table heading.
+// AC-1636 / R-1631-1 as amended by SPEC-0300-0023 R-1830: [theme] -> [colors] -> [font] -> [layout] -> [input_keymap_custom] -> [[external_apps]].
+// There is NO `ui_theme` setting line any more (it is explained in a `## ` description only).
 #[test]
-fn ac1636_ui_theme_precedes_the_first_table_heading_and_the_order_is_fixed() {
+fn ac1636_the_tables_come_in_the_fixed_order_and_there_is_no_ui_theme_setting_line() {
     let (t, _) = both();
     let all = lines(&t);
-    assert_eq!(all.iter().filter(|l| **l == "# ui_theme = \"system\"").count(), 1, "R-1632: one default line");
-    let theme = index_of(&all, "# ui_theme = \"system\"");
-    let keymap = index_of(&all, "# [input_keymap_custom]");
-    let apps = index_of(&all, "# [[external_apps]]");
-    assert!(theme < keymap && keymap < apps, "R-1631-1: {theme} < {keymap} < {apps}");
-    assert_eq!(all.iter().filter(|l| l.starts_with("# [")).count(), 1 + 4, "one keymap heading and the four default registrations");
+    let order = [
+        index_of(&all, "# [theme]"),
+        index_of(&all, "# [colors]"),
+        index_of(&all, "# [font]"),
+        index_of(&all, "# [layout]"),
+        index_of(&all, "# [input_keymap_custom]"),
+        index_of(&all, "# [[external_apps]]"),
+    ];
+    assert!(order.windows(2).all(|w| w[0] < w[1]), "R-1830: {order:?}");
+    assert_eq!(all.iter().filter(|l| l.starts_with("# [")).count(), 4 + 1 + 4, "four appearance headings, one keymap heading and the four default registrations");
+    assert!(!all.iter().any(|l| l.starts_with("# ") && !l.starts_with("## ") && l.contains("ui_theme")), "ui_theme is retired: no setting line (R-1830)");
+    assert!(all.iter().any(|l| l.starts_with("## ") && l.contains("ui_theme")), "the retirement is explained");
 }
 
 #[test]
-fn ac1636_uncommenting_only_the_ui_theme_line_reads_as_ui_theme_not_a_keymap_key() {
+fn ac1636_uncommenting_the_theme_heading_and_preset_reads_as_a_theme_table_not_a_keymap_key() {
     let (t, _) = both();
-    let body = t.replace("\r\n# ui_theme = \"system\"\r\n", "\r\nui_theme = \"system\"\r\n");
-    assert_ne!(body, t, "the ui_theme line was found");
+    let body = t.replace("\r\n# [theme]\r\n", "\r\n[theme]\r\n").replace("\r\n# preset = \"nord\"\r\n", "\r\npreset = \"nord\"\r\n");
+    assert_ne!(body, t, "the theme heading and the preset line were found");
     let value: toml::Value = body.parse().expect("valid TOML");
-    assert_eq!(value.get("ui_theme").and_then(|v| v.as_str()), Some("system"));
-    assert!(value.get("input_keymap_custom").is_none(), "the heading stays commented");
+    assert_eq!(value.get("theme").and_then(|v| v.get("preset")).and_then(|v| v.as_str()), Some("nord"));
+    assert!(value.get("preset").is_none(), "preset belongs to [theme]");
+    assert!(value.get("input_keymap_custom").is_none(), "the keymap heading stays commented");
 }
 
 // R-1633 / T-07 / the Rust side of AC-1632: 32 operations (34 minus help_keymap / refresh), each with a `## ` description above it.
@@ -195,7 +203,8 @@ fn r1633_the_keymap_section_has_the_32_operations_each_after_a_description() {
 fn r1630_the_documented_values_rules_and_limits_are_in_the_text() {
     let (t, _) = both();
     for needle in [
-        "\"light\"", "\"dark\"", "\"system\"", "大文字小文字", // ui_theme
+        "preset", "default", "nord", "monokai", "catppuccin", "solarized", "light", "大文字小文字", "#RRGGBB", // [theme] / [colors] (SPEC-0300-0023 R-1830)
+        "JetBrains Mono", "min_col_width", "tree_width_percent", "ui_theme",                          // [font] / [layout] / the retired ui_theme
         "空の文字列", "Comma", "Plus", "Space",             // keymap rules
         "Ctrl+Q", "Ctrl+,", "Shift+Enter", "Shift+Delete", "Shift+Tab", "F10", "Alt+F", "Alt+E", "Alt+V", "Alt+G", // fixed keys
         "name", "program", "args_for_file", "{path}", "{dir}", "{{", "}}", "20", "%", ".exe", // external_apps

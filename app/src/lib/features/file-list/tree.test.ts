@@ -257,6 +257,12 @@ describe("computeFullyVisibleRows (SPEC-0300-0009 R-59-2, AC-623)", () => {
     expect(computeFullyVisibleRows(300, 28)).toBe(10);
   });
 
+  it("SPEC-0300-0023 R-1754 / AC-1753: with the new 21px row (16px x 1.32) the same function gives floor(300 / 21) = 14 and floor(441 / 21) = 21", () => {
+    expect(computeFullyVisibleRows(300, 21)).toBe(14);
+    expect(computeFullyVisibleRows(441, 21)).toBe(21);
+    expect(computeFullyVisibleRows(440, 21)).toBe(20);
+  });
+
   it("a partially-cut-off trailing row is not counted (floors, never rounds/ceils)", () => {
     expect(computeFullyVisibleRows(299, 28)).toBe(10);
     expect(computeFullyVisibleRows(28, 28)).toBe(1);
@@ -350,12 +356,16 @@ const GUID_X = GUID_ROOT + "X";
 const DEV_ROOT = "\\\\.\\C:\\";
 const DEV_WIN = "\\\\.\\C:\\Windows";
 
-describe("treeIndentPx (R-936, AC-911)", () => {
-  it("is 8 + 14 * level (aria-level - 1): C: 8, A 22, B 36", () => {
-    expect(treeNs.treeIndentPx(0)).toBe(8);
-    expect(treeNs.treeIndentPx(1)).toBe(22);
-    expect(treeNs.treeIndentPx(2)).toBe(36);
-    expect(treeNs.treeIndentPx(5)).toBe(78);
+describe("treeIndentCh (SPEC-0300-0023 R-1801, AC-1800; replaces treeIndentPx of R-936)", () => {
+  it("is 2 x depth in ch (the indent is written in CSS ch, the mark column is a separate 2ch): C: 0, A 2, B 4", () => {
+    expect(treeNs.treeIndentCh(0)).toBe(0);
+    expect(treeNs.treeIndentCh(1)).toBe(2);
+    expect(treeNs.treeIndentCh(2)).toBe(4);
+    expect(treeNs.treeIndentCh(5)).toBe(10);
+  });
+
+  it("the old pixel helper is gone (no 8 + 14 x level any more)", () => {
+    expect((treeNs as Record<string, unknown>).treeIndentPx).toBeUndefined();
   });
 });
 

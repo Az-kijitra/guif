@@ -1,5 +1,5 @@
 // SPEC-0300-0017 §16.9: overlays and dialogs (AC-938 ... AC-941).
-import { openFiles, RGB } from "./_util.mjs";
+import { DEFAULT_FONT_FAMILY, openFiles, RGB } from "./_util.mjs";
 
 const rowCount = (ctx) => ctx.ev(`document.querySelector('.file-list').style.gridTemplateRows.match(/repeat\\((\\d+)/)?.[1] * 1`);
 
@@ -26,7 +26,7 @@ export const tests = [
       const i = await ctx.m.cs(".search-bar input", ["border-radius", "background-color", "font-family"]);
       t.eq(i["border-radius"], "4px", "input border-radius");
       t.eq(i["background-color"], RGB.surface, "input background");
-      t.ok(i["font-family"].startsWith('"Segoe UI"'), "input font-family starts with Segoe UI", i["font-family"]);
+      t.eq(i["font-family"], DEFAULT_FONT_FAMILY, "input font-family is the [font] stack");
       const rowsOpen = await rowCount(ctx);
       t.ok(rowsOpen < rowsClosed, "rows were recomputed for the shorter body", `${rowsOpen} vs ${rowsClosed}`);
 
@@ -51,7 +51,7 @@ export const tests = [
   },
   {
     id: "AC-939",
-    title: "visit history: max-height 240, scrolls, highlighted row #e8f0ff, long path ellipsized with title, 📁 first, × last",
+    title: "visit history: max-height 240, scrolls, highlighted row = hover colour, long path ellipsized with title, 📁 first, × last",
     async run(t, ctx) {
       const longName = "a_long_folder_name_".repeat(8); // 152 characters
       const dirs = [];
@@ -108,11 +108,11 @@ export const tests = [
       ]);
       t.eq(s["background-color"], RGB.surface, "menu background");
       for (const side of ["top", "right", "bottom", "left"]) t.eq(s[`border-${side}-width`], "1px", `border-${side}-width`);
-      t.eq([s["border-top-style"], s["border-top-color"], s["border-left-color"]], ["solid", RGB.border, RGB.border], "border style / colour");
-      t.eq(s["box-shadow"], "rgba(0, 0, 0, 0.12) 0px 8px 20px 0px", "box-shadow");
+      t.eq([s["border-top-style"], s["border-top-color"], s["border-left-color"]], ["solid", RGB.borderActive, RGB.borderActive], "border style / colour (--ui-border-active, AC-1810)");
+      t.eq(s["box-shadow"], "rgba(0, 0, 0, 0.4) 0px 8px 20px 0px", "box-shadow (--ui-shadow-1 of nord)");
       const h = await ctx.m.cs(".sort-menu-item.highlighted", ["background-color", "font-size"]);
       t.eq(h["background-color"], RGB.hover, "highlighted item background");
-      t.eq(h["font-size"], "13px", "item font-size");
+      t.eq(h["font-size"], "12px", "item font-size (12px everywhere, AC-1750)");
       await ctx.press.escape();
       await ctx.waitFor(`!document.querySelector('.sort-menu')`, { label: "the sort menu to close" });
     },
@@ -137,7 +137,7 @@ export const tests = [
       t.approx((dialog.left + dialog.right) / 2, 500, "dialog centre x", 1);
       t.approx((dialog.top + dialog.bottom) / 2, 350, "dialog centre y", 1);
       const d = await ctx.m.cs(".ui-dialog", ["padding", "border-radius", "box-shadow"]);
-      t.eq([d.padding, d["border-radius"], d["box-shadow"]], ["16px", "4px", "rgba(0, 0, 0, 0.12) 0px 8px 20px 0px"], "padding / radius / shadow");
+      t.eq([d.padding, d["border-radius"], d["box-shadow"]], ["16px", "0px", "rgba(0, 0, 0, 0.4) 0px 8px 20px 0px"], "padding / radius 0 (AC-1810) / shadow");
       t.eq((await ctx.m.cs(".ui-dialog h2", ["font-weight"]))["font-weight"], "600", "title font-weight");
       const buttons = await ctx.m.cs(".ui-dialog .buttons", ["justify-content", "column-gap"]);
       t.ok(["flex-end", "end"].includes(buttons["justify-content"]), "buttons justify-content", buttons["justify-content"]);

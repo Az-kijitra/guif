@@ -30,24 +30,54 @@ export function expectedBorders(color) {
   return out;
 }
 
+/**
+ * The default preset `nord` (SPEC-0300-0023 R-1708 / R-1722; the E2E measures nord, R-1840) as getComputedStyle prints it. The keys keep the names
+ * of the old light table so the specs read the same; the values are the --ui-* variables of Rust `appearance/vars.rs` for nord. The derived
+ * ones (muted, muted2, error) are what vars_tests.rs fixes for nord: #b3b7be, #8d929a and #ff8a80.
+ */
 export const RGB = {
-  bg: "rgb(245, 245, 245)",
-  surface: "rgb(255, 255, 255)",
-  surface2: "rgb(240, 240, 240)",
-  surface3: "rgb(232, 240, 255)",
-  border: "rgb(208, 208, 208)",
-  borderStrong: "rgb(207, 207, 207)",
-  borderMuted: "rgb(238, 238, 238)",
-  muted: "rgb(102, 102, 102)",
-  hover: "rgb(232, 240, 255)",
-  selected: "rgb(219, 233, 255)",
-  focused: "rgb(122, 167, 255)",
-  error: "rgb(176, 0, 32)",
+  bg: "rgb(46, 52, 64)", //            --ui-bg = bg #2E3440
+  fg: "rgb(236, 239, 244)", //         --ui-fg = file #ECEFF4
+  surface: "rgb(46, 52, 64)", //       --ui-surface = bg
+  surface2: "rgb(46, 52, 64)", //      --ui-surface-2 = bg
+  surface3: "rgb(59, 66, 82)", //      --ui-surface-3 = status_bar_bg #3B4252
+  border: "rgb(76, 86, 106)", //       --ui-border = border_inactive #4C566A
+  borderStrong: "rgb(141, 146, 154)", // --ui-border-strong (derived)
+  borderMuted: "rgb(76, 86, 106)", //  --ui-border-muted = border_inactive
+  borderActive: "rgb(136, 192, 208)", // --ui-border-active = border #88C0D0
+  muted: "rgb(179, 183, 190)", //      --ui-muted (derived)
+  muted2: "rgb(141, 146, 154)", //     --ui-muted-2 (derived)
+  hover: "rgb(143, 188, 187)", //      --ui-hover = cursor_bg #8FBCBB
+  selected: "rgb(59, 66, 82)", //      --ui-selected = status_bar_bg
+  focused: "rgb(136, 192, 208)", //    --ui-focused = border #88C0D0
+  error: "rgb(255, 138, 128)", //      --ui-error (derived, dark)
   backdrop: "rgba(0, 0, 0, 0.35)",
+  cursorFg: "rgb(46, 52, 64)", //      --ui-cursor-fg #2E3440
+  cursorBg: "rgb(143, 188, 187)", //   --ui-cursor-bg #8FBCBB
+  folder: "rgb(129, 161, 193)", //     --ui-folder #81A1C1
+  executable: "rgb(163, 190, 140)", // --ui-executable #A3BE8C
+  selectedFg: "rgb(235, 203, 139)", // --ui-selected-fg #EBCB8B
+  statusFg: "rgb(229, 233, 240)", //   --ui-status-fg #E5E9F0
+  statusBg: "rgb(59, 66, 82)", //      --ui-status-bg #3B4252
+  menuActiveFg: "rgb(46, 52, 64)", //  --ui-menu-active-fg
+  menuActiveBg: "rgb(136, 192, 208)", // --ui-menu-active-bg
+  treeCurrent: "rgb(136, 192, 208)", // --ui-tree-current
+  treeCursor: "rgb(235, 203, 139)", // --ui-tree-cursor
 };
 
-export const FRAME_FOCUS = { width: "1px", style: "solid", color: RGB.focused, offset: "-1px" };
+/** The 1px frame colour of the focused pane / the focus outline (R-1761 / R-1786): --ui-border-active in nord. */
+export const FRAME_FOCUS = { width: "1px", style: "solid", color: RGB.borderActive, offset: "-1px" };
 export const NO_OUTLINE_STYLE = "none";
+
+/**
+ * SPEC-0300-0023 R-1842 / design §3.18.6 (spike S-3): the width of one `ch` in the font of the element `selector` -- the advance of "0" measured on a
+ * canvas with the element's computed `font` (the way the app measures it). `fontSize` etc. come from the element, so the value is the one the app uses.
+ */
+export const chOf = (ctx, selector = ".file-list") =>
+  ctx.ev(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); const c = document.createElement("canvas").getContext("2d"); c.font = getComputedStyle(e).font; return c.measureText("0").width; })()`);
+
+/** The row height the list is laid out with (the CSS variable --list-row-height, a "NNpx" string) as a number. */
+export const rowHeightOf = async (ctx) => Number.parseFloat(await ctx.m.cssVar("--list-row-height"));
 
 const SORT_LABELS = { name: "名前", size: "サイズ", type: "種類", modified: "更新日時" };
 const SORT_STATUS_KEYS = { 名前: "name", サイズ: "size", 種類: "type", 更新日時: "modified" };
@@ -84,20 +114,6 @@ export async function setSort(ctx, key, order) {
   now = await currentSort(ctx);
   if (now.key !== key || now.order !== order) throw new Error(`could not set the sort to ${key} ${order} (now ${now.key} ${now.order})`);
 }
-
-/** R-911-1 dark values as getComputedStyle prints them (SPEC-0300-0017 AC-949). */
-export const RGB_DARK = {
-  bg: "rgb(30, 31, 34)",
-  fg: "rgb(230, 230, 230)",
-  surface: "rgb(43, 45, 49)",
-  border: "rgb(58, 61, 68)",
-  selected: "rgb(58, 74, 99)",
-  hover: "rgb(58, 74, 99)",
-  focused: "rgb(122, 167, 255)",
-  muted: "rgb(207, 207, 207)",
-  error: "rgb(255, 138, 128)",
-  backdrop: "rgba(0, 0, 0, 0.35)",
-};
 
 // ------------------------------------------------------------------ viewer helpers
 // SPEC-0300-0015 viewer window: a separate page target (/viewer) on the same debug port.
@@ -172,3 +188,9 @@ export async function waitViewerShows(t, viewer, fileName, kind, { timeout = 200
   );
   return false;
 }
+
+/** The default [font] family stack (R-1750) as getComputedStyle prints it. */
+export const DEFAULT_FONT_FAMILY = '"JetBrains Mono", "JetBrainsMono NFM", "JetBrainsMono NF", "Cascadia Mono", Consolas, "BIZ UDGothic", monospace';
+
+/** Kept only so theme.mjs loads until it is rewritten (the dark table of ui_theme is gone, SPEC-0300-0023 #2). */
+

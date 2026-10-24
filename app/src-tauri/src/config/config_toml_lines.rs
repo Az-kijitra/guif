@@ -14,7 +14,8 @@ use std::ops::Range;
 use serde::de::{self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use toml::Spanned;
 
-use crate::shared::schema::config_lines::{AppLines, ConfigLines, UnknownSetting};
+use crate::shared::schema::appearance_raw::{COLOR_ALIASES, COLOR_KEYS, FONT_KEYS, LAYOUT_KEYS, THEME_KEYS};
+use crate::shared::schema::config_lines::{KNOWN_TOP_KEYS, AppLines, ConfigLines, UnknownSetting};
 
 /// 1 + the number of line feeds before `offset` (clamped to the text). Counted over the BYTES so that an offset inside a
 /// multi-byte character cannot panic (SHOULD-121). A `\r` of CRLF does not count; a BOM contains no line feed.
@@ -225,6 +226,15 @@ fn app_lines(text: &str, position: usize, element: &Sp<Node>, unknown: &mut Vec<
     app
 }
 
+fn table_key_known(table: &str, key: &str) -> bool {
+    match table {
+        "theme" => THEME_KEYS.contains(&key),
+        "colors" => COLOR_KEYS.contains(&key) || COLOR_ALIASES.iter().any(|(a, _)| *a == key),
+        "font" => FONT_KEYS.contains(&key),
+        _ => LAYOUT_KEYS.contains(&key),
+    }
+}
+
 /// `None` only when the whole text cannot be parsed (a syntax error): then `toml::Value` fails too and `load` reports W-31.
 pub fn index_full(text: &str) -> Option<Indexed> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -233,8 +243,28 @@ pub fn index_full(text: &str) -> Option<Indexed> {
     let mut unknown = Vec::new();
     for (key, value) in &top {
         let line = key_line(text, key);
+        if let Some(l) = line {
+            lines.top.insert(key.value.clone(), l);
+        }
+        if !KNOWN_TOP_KEYS.contains(&key.value.as_str()) {
+            unknown.push(UnknownSetting::Top { name: key.value.clone(), line });
+            continue;
+        }
         match (key.value.as_str(), value) {
-            ("ui_theme", _) => lines.ui_theme = line,
+            (name @ ("theme" | "colors" | "font" | "layout"), Node::Table(entries)) => {
+                let mut map = std::collections::BTreeMap::new();
+                for (k, _) in entries {
+                    let l = key_line(text, k);
+                    if let Some(l) = l {
+                        map.insert(k.value.clone(), l);
+                    }
+                    if !table_key_known(name, &k.value) {
+                        unknown.push(UnknownSetting::TableKey { table: name.to_string(), name: k.value.clone(), line: l });
+                    }
+                }
+                lines.tables.insert(name.to_string(), map);
+            }
+            ("theme" | "colors" | "font" | "layout", _) => {}
             ("input_keymap_custom", value) => {
                 lines.input_keymap_custom = line;
                 if let Node::Table(entries) = value {
@@ -257,7 +287,7 @@ pub fn index_full(text: &str) -> Option<Indexed> {
                     }
                 }
             }
-            (other, _) => unknown.push(UnknownSetting::Top { name: other.to_string(), line }),
+            _ => {}
         }
     }
     Some(Indexed { lines, unknown })

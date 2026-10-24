@@ -6,6 +6,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { KeymapRawLoadResultDto } from "./config";
 import type { ExternalAppsDto } from "./external-apps";
+import type { AppearanceDto } from "./appearance";
 
 // R-1665: a machine-readable code plus the OS text; the sentence is built by `features/settings-file/open-result.ts`.
 export interface SettingsFileOpenDto {
@@ -23,6 +24,8 @@ export interface SettingsFileOpenDto {
 export interface ConfigCheckDto {
   keymap: KeymapRawLoadResultDto;
   externalApps: ExternalAppsDto;
+  // SPEC-0300-0023 §3.18.4: the check resolves the appearance too (and applies nothing).
+  appearance: AppearanceDto;
 }
 
 export class SettingsFileError extends Error {

@@ -81,11 +81,6 @@ export const FILE_OP_ERROR_MESSAGES: Record<string, string> = {
 
 // Notices produced by shared modules.
 export const SHARED_NOTICES = {
-  // W-33
-  themeInvalid: 'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。',
-  // W-33 with the line (SPEC-0300-0022 第5版)
-  themeInvalidAt: (line: number): string =>
-    `config.toml の ${line} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`,
   // W-36 (R-242 item 3)
   navigationCorrupted: "navigation.toml を読み込めなかったため、履歴・ジャンプリスト・検索履歴を空にしました。元のファイルは退避しました。",
   // W-37

@@ -45,25 +45,26 @@ function darkBlock(css: string): string {
   return text.slice(start, i - 1);
 }
 
-describe("the main window's font values (the source of truth, R-920 / R-921)", () => {
-  it("app.css declares the two fonts once each with the spec values", () => {
-    expect(declarations(APP_CSS, "--ui-font")).toEqual([squash(BASE)]);
-    expect(declarations(APP_CSS, "--ui-font-mono")).toEqual([squash(MONO)]);
+// SPEC-0300-0023 second edition (R-1728, U-04, U-08): the main window's two variables both hold the [font] stack; the viewer keeps its own FIXED values.
+const MAIN_STACK = '"JetBrains Mono", "JetBrainsMono NFM", "JetBrainsMono NF", "Cascadia Mono", "Consolas", "BIZ UDGothic", monospace';
+
+describe("the main window's font values (R-1750 / R-1752 second edition)", () => {
+  it("app.css declares --ui-font and --ui-font-mono once each, both with the [font] default stack", () => {
+    expect(declarations(APP_CSS, "--ui-font")).toEqual([squash(MAIN_STACK)]);
+    expect(declarations(APP_CSS, "--ui-font-mono")).toEqual([squash(MAIN_STACK)]);
   });
 });
 
 describe("R-913-4: the viewer's font variables have the SAME values", () => {
-  it("`--vw-font` is declared exactly once, and equals the main `--ui-font` as a string", () => {
+  it("`--vw-font` is declared exactly once, with the fixed present value (U-08: no longer the main window's value)", () => {
     const v = declarations(VIEWER_CSS, "--vw-font");
     expect(v.length).toBe(1);
-    expect(v[0]).toBe(declarations(APP_CSS, "--ui-font")[0]);
     expect(v[0]).toBe(squash(BASE));
   });
 
-  it("`--vw-font-mono` is declared exactly once, and equals the main `--ui-font-mono` as a string", () => {
+  it("`--vw-font-mono` is declared exactly once, with the fixed present value (U-08)", () => {
     const v = declarations(VIEWER_CSS, "--vw-font-mono");
     expect(v.length).toBe(1);
-    expect(v[0]).toBe(declarations(APP_CSS, "--ui-font-mono")[0]);
     expect(v[0]).toBe(squash(MONO));
   });
 
@@ -72,10 +73,11 @@ describe("R-913-4: the viewer's font variables have the SAME values", () => {
     expect(declarations(VIEWER_CSS, "--vw-font-mono")[0].startsWith("ui-monospace")).toBe(true);
   });
 
-  it("the fonts are NOT inside the dark override (they do not change with the theme)", () => {
-    const dark = darkBlock(VIEWER_CSS);
-    expect(dark.length).toBeGreaterThan(0);
-    expect(dark).not.toContain("--vw-font");
+  // SPEC-0300-0023 AC-1726: the dark override block is gone (the colours come from the back end), so there is nothing to keep the fonts out of; the fonts
+  // still do not change with the theme because no theme block exists at all.
+  it("there is no theme override block in the viewer stylesheet, so the fonts cannot be inside one (SPEC-0300-0023 AC-1726)", () => {
+    expect(darkBlock(VIEWER_CSS)).toBe("");
+    expect(strip(VIEWER_CSS)).not.toMatch(/@media/);
   });
 
   it("they are on `html` (the ROOT of the viewer document), so AC-907's root computed-style check sees them", () => {

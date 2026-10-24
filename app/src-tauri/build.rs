@@ -42,6 +42,7 @@ fn main() {
                 "external_app_launch",
                 "settings_file_open",
                 "settings_file_check",
+                "appearance_load",
             ])),
     )
     .expect("failed to run tauri-build");

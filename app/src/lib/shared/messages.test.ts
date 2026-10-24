@@ -110,11 +110,10 @@ describe("FILE_OP_ERROR_MESSAGES: W-25 `フォルダー`", () => {
   });
 });
 
-describe("SHARED_NOTICES: the notices of shared modules (W-33 / W-36 / W-37 / W-38)", () => {
-  it("W-33: the invalid ui_theme notice", () => {
-    expect(SHARED_NOTICES.themeInvalid).toBe(
-      'config.toml の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。',
-    );
+describe("SHARED_NOTICES: the notices of shared modules (W-36 / W-37 / W-38)", () => {
+  it("W-33 is abolished (SPEC-0300-0023 R-1748 / SPEC-0300-0019 第6版): no themeInvalid notice exists any more", () => {
+    expect((SHARED_NOTICES as Record<string, unknown>).themeInvalid).toBeUndefined();
+    expect((SHARED_NOTICES as Record<string, unknown>).themeInvalidAt).toBeUndefined();
   });
 
   it("W-36: navigation.toml was corrupted", () => {

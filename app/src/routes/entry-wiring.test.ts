@@ -18,8 +18,9 @@ function setup() {
   const settingsFileIpc = {
     settingsFileOpen: vi.fn(async () => ({ templateCreated: false, sampleError: null, result: { kind: "vscode" } })),
     settingsFileCheck: vi.fn(async () => ({
-      keymap: { entries: [], parseError: null, uiTheme: "system", uiThemeInvalid: false, uiThemeLine: null, present: true, unknownSettings: [] },
+      keymap: { entries: [], parseError: null, present: true, unknownSettings: [] },
       externalApps: { apps: [], invalid: [], typeError: false, typeErrorLine: null },
+      appearance: { dark: true, bg: "#2e3440", uiVars: [], fontFamily: "monospace", fontSize: 16, rowHeight: 21, minColWidth: 24, treeWidthPercent: 24, problems: [] },
     })),
   };
   const row = { path: "C:\\w\\a.txt", name: "a.txt", entryType: "file" as const };

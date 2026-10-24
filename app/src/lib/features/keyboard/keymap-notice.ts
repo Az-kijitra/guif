@@ -17,13 +17,13 @@ export interface KeymapParseErrorLike {
 // R-45-2 (syntax error) takes precedence over R-45-5 (per-element issues) --
 // they are mutually exclusive in practice (config/config_toml.rs never returns
 // both), but a parse error is always the more actionable message.
-// R-917-5 (2): `alsoDefaultsTheme` (the whole file was unreadable, so the theme fell back to the OS as well)
-// only changes the closing sentence; this feature knows nothing else about the theme (SPEC-0200-0001 §3.11.4).
+// SPEC-0300-0023 R-1823: `alsoDefaultsAppearance` (the whole file was unreadable, so the colour scheme fell back to nord as well)
+// only changes the closing sentence; this feature knows nothing else about the appearance (SPEC-0200-0001 §3.18.4).
 export function buildKeymapLoadNotice(
   parseError: KeymapParseErrorLike | null,
   invalidActions: readonly string[],
   // SPEC-0300-0022 R-1642: `invalidActionLines` is parallel to `invalidActions` (ValidatedKeymap); omitted = no line is known.
-  opts?: { alsoDefaultsTheme?: boolean; invalidActionLines?: readonly (number | null)[] },
+  opts?: { alsoDefaultsAppearance?: boolean; invalidActionLines?: readonly (number | null)[] },
 ): string | null {
   if (parseError !== null) {
     // W-30-2: the type error carries its own full sentence (no detail, the theme is not touched).
@@ -31,8 +31,8 @@ export function buildKeymapLoadNotice(
     if (parseError.wholeFile === false) {
       return parseError.line === null ? KEYMAP_MESSAGES.customKeymapUnreadable : KEYMAP_MESSAGES.customKeymapUnreadableAt(parseError.line);
     }
-    const defaults = opts?.alsoDefaultsTheme
-      ? KEYMAP_MESSAGES.closingKeymapAndTheme
+    const defaults = opts?.alsoDefaultsAppearance
+      ? KEYMAP_MESSAGES.closingKeymapAndAppearance
       : KEYMAP_MESSAGES.closingKeymapOnly;
     return KEYMAP_MESSAGES.readFailed(KEYMAP_MESSAGES.readTarget(parseError.line), defaults, parseError.message);
   }

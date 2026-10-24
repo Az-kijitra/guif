@@ -29,19 +29,19 @@ export const tests = [
   },
   {
     id: "AC-945",
-    title: "640 x 480, tree + size + time, 100 entries: W = 411, column width = 400 (not a narrow list)",
+    title: "640 x 480, tree + size + time, 100 entries (AC-1804 record): W is about 479, one column of W (a narrow list, R-1792 W < minCol is recorded)",
     async run(t, ctx) {
       const dir = ctx.fx.files("many100", 100);
       await ctx.reload();
       await ctx.nav(dir);
       await ctx.ensureView({ size: true, time: true, tree: true, hidden: false });
       await ctx.setViewport(640, 480);
-      const d = await ctx.m.dims(".file-list-frame");
-      t.eq(d.clientWidth, 411, "W = frame clientWidth at 640 x 480");
-      const colWidth = await ctx.m.cs(".file-list", ["--list-col-width"]);
-      t.eq(colWidth["--list-col-width"].trim(), "400px", "--list-col-width (minCol 400)");
-      const grid = await ctx.m.cs(".file-list-row", ["grid-template-columns"]);
-      t.eq(grid["grid-template-columns"], "180px 64px 140px", "row grid is the normal (not narrow) one");
+      const d = await ctx.m.dims(".file-list-frame .pane-body");
+      t.ok(d.clientWidth >= 470 && d.clientWidth <= 490, "W = the list's inner width at 640 x 480 is about 479 (tree 24%)", String(d.clientWidth));
+      const info = await ctx.ev(`(() => { const rows = [...document.querySelectorAll('.file-list-row')]; const lefts = new Set(rows.map((r) => Math.round(r.getBoundingClientRect().left))); return { columns: lefts.size, width: rows[0].getBoundingClientRect().width }; })()`);
+      t.eq(info.columns, 1, "both columns shown: one column (W is below 2 x the minimum column)");
+      t.approx(info.width, d.clientWidth, "that column is W wide", 1.5);
+      t.note("AC-1804 record: at 640 x 480 with size + time the list is a narrow list (W < minCol 54ch)");
     },
   },
   {

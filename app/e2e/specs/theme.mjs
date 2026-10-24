@@ -1,57 +1,30 @@
-// SPEC-0300-0017 第5版 Phase 12 (dark theme): the ACs that need a config.toml other than the default
-// `ui_theme = "light"` (R-995-1), so each scenario is its own app start (config.toml is read once at startup).
-// Design: SPEC-0200-0001 §3.11.9 / §3.11.16 (MUST-124 ... SHOULD-186). run.mjs starts the app per scenario,
-// writes `configToml` into the throw-away config folder before the start, runs `tests` and shuts the app down.
+// SPEC-0300-0023 (the colour scheme: AC-1741 / AC-1742 / AC-1748 / AC-1749 / AC-1708 / AC-960) -- the scenarios that need a config.toml other than the default
+// `external_apps = []` (R-1840), so each is its own app start (config.toml is read once at startup). Replaces the ui_theme scenarios S1 .. S9 of
+// SPEC-0300-0017 Phase 12 (the table "置き換えた受入基準" of SPEC-0300-0017 第11版: AC-906 / AC-907 / AC-949 / AC-951 .. AC-961 -> AC-1724 / AC-1740 .. AC-1743 /
+// AC-1748 / AC-1749 / AC-1708). The presets, [colors], [font], [layout] and their notices are in appearance.mjs.
 //
-// What an E2E can NOT show (R-995-2 note 2): that a fixed theme ignores the OS. `Emulation` overrides the fixed
-// theme, so the fixed-theme scenarios run WITHOUT emulation and the report says whether the OS was the opposite
-// (discriminating) or the same (not discriminating). The real OS switch, the title bar and the first-paint flicker
-// are checked by eye (AC-951 / 953 / 953-1 re-open / 954 / 961).
+// What an E2E can NOT show: that the real OS switch changes nothing and the flicker at the first paint (AC-1742 / AC-1743 are checked by eye).
+// `Emulation` only changes what the page's media query says, which is exactly what the app must not follow now.
 
 import fs from "node:fs";
 import path from "node:path";
 import { MOD, sleep } from "../lib/cdp.mjs";
-import { fixedThemeNote } from "../lib/os-theme.mjs";
-import { openFiles, RGB_DARK, setSort, openViewerWindow, waitViewerShows } from "./_util.mjs";
-import { MENU_STYLE_PROBE, focusRowByName, prepMenu, waitActive, waitDropdown, closeBar } from "./_menu.mjs";
-import { checkRustColours, checkHighlightFollowsOs } from "./viewer-highlight.mjs";
-import { checkTextLook, FIFTY } from "./viewer-text.mjs";
-import { closeViewerWindow, showInViewer } from "./_viewer.mjs";
-import { checkViewerPalette, unquoteFonts, VIEWER_FONT, VIEWER_LOOK, VIEWER_PALETTE } from "./viewer.mjs";
+import { readOsAppTheme } from "../lib/os-theme.mjs";
+import { openFiles, openViewerWindow, RGB, waitViewerShows } from "./_util.mjs";
+import { checkHighlightFollowsOs } from "./viewer-highlight.mjs";
+import { VIEWER_LOOK } from "./viewer.mjs";
 
-// W-33 with the line of `ui_theme` (SPEC-0300-0019 第5版 §4.9 / SPEC-0300-0022 R-1660 / R-1642, ISS-0234 (d)): the sentence is no longer the same for every
-// file, it names the line the key is on (every scenario below writes `ui_theme` on line 1).
-const themeNotice = (line) => `config.toml の ${line} 行目の ui_theme を解釈できないため、OS のテーマ設定に従います(使える値: "light"、"dark"、"system")。`;
-const THEME_NOTICE = themeNotice(1);
-const KEYMAP_LINE = 'toggle_time = "Ctrl+Alt+T"\n';
 const countOf = (text, part) => (part === "" ? 0 : text.split(part).length - 1);
+const configFile = (ctx) => path.join(ctx.handle.cfgDir, "config.toml");
+const uiBg = (ctx) => ctx.m.cssVar("--ui-bg");
+const matchesDark = (ctx, target = ctx.cdp) => target.ev(`matchMedia("(prefers-color-scheme: dark)").matches`);
 
-// ------------------------------------------------------------------ helpers
-
-/** Reload (so the startup notice is shown again, 6 s or 15 s when the config.toml part has something to read -- SPEC-0300-0022 R-1663; the DTO is a snapshot, SHOULD-184) and read the status message. */
+/** Reload (so the startup notice is shown again; the DTO is a snapshot) and read the status message. */
 async function reloadAndReadNotice(ctx) {
   await ctx.reload();
   return await ctx.ev(`document.querySelector('.status-message')?.textContent ?? ""`);
 }
 
-const matchesDark = (ctx, target = ctx.cdp) => target.ev(`matchMedia("(prefers-color-scheme: dark)").matches`);
-const uiBg = (ctx) => ctx.m.cssVar("--ui-bg");
-
-/** SHOULD-185: with no emulation the page's colour scheme equals the OS's, and the DTO says "system". */
-async function checkFollowsOs(t, ctx) {
-  const dto = await ctx.configDto();
-  t.eq(dto.uiTheme, "system", "DTO uiTheme is system (the app did not pin a theme)");
-  const dark = await matchesDark(ctx);
-  if (ctx.osTheme) {
-    t.eq(dark, ctx.osTheme === "dark", `matchMedia(dark) equals the OS app theme (${ctx.osTheme}; no emulation)`);
-  } else {
-    t.note("the OS app theme could not be read (AppsUseLightTheme); only the DTO was checked");
-  }
-  t.eq(await uiBg(ctx), dark ? "#1e1f22" : "#f5f5f5", "--ui-bg matches the colour scheme the page sees");
-  return dto;
-}
-
-const configFile = (ctx) => path.join(ctx.handle.cfgDir, "config.toml");
 function configState(ctx) {
   const file = configFile(ctx);
   if (!fs.existsSync(file)) return null;
@@ -59,239 +32,66 @@ function configState(ctx) {
 }
 /** R-917-6: the app never rewrites config.toml, never leaves a backup/temporary sibling of it. */
 function checkConfigUntouched(t, ctx, before, label) {
-  const after = configState(ctx);
-  t.eq(after, before, `${label}: config.toml bytes and modification time unchanged`);
+  t.eq(configState(ctx), before, `${label}: config.toml bytes and modification time unchanged`);
   const stray = fs.readdirSync(ctx.handle.cfgDir).filter((n) => n.startsWith("config.toml") && n !== "config.toml");
   t.eq(stray, [], `${label}: no backup / temporary file next to config.toml`);
 }
 
-const messageCount = (message, part) => countOf(message, part);
-
-/** Ctrl+Alt+T must fire toggle_time (AC-958 / AC-959 key assignment survives). */
-async function checkToggleTimeFires(t, ctx) {
-  const dir = ctx.fx.files("keymap-check", 10);
-  await ctx.nav(dir);
-  await ctx.ensureView({ size: true, time: false, hidden: false, tree: false });
-  await ctx.focusList();
-  await ctx.key("t", MOD.Ctrl | MOD.Alt, "KeyT");
-  await ctx.settle(200);
-  t.eq((await ctx.viewState()).time, true, "Ctrl+Alt+T fired toggle_time (the time column appeared)");
+/** Nord is the default and is dark: the page, the colour scheme and the window theme agree whatever the OS says. */
+async function checkNord(t, ctx) {
+  t.eq(await uiBg(ctx), "#2e3440", "--ui-bg is nord's bg");
+  t.eq((await ctx.m.cs("body", ["background-color"]))["background-color"], RGB.bg, "body background");
+  t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "dark", "container color-scheme dark");
 }
 
-// ---------------------------------------------------------- S1: ui_theme = "dark"
+// ------------------------------------------- S1: the preset opposite to the OS (AC-1741) + AC-960 at the end
 
-const DARK_VARIABLES = {
-  "--ui-bg": "#1e1f22", "--ui-fg": "#e6e6e6", "--ui-surface": "#2b2d31", "--ui-surface-2": "#2b2d31", "--ui-surface-3": "#3a4a63",
-  "--ui-border": "#3a3d44", "--ui-border-strong": "#3a3d44", "--ui-border-muted": "#3a3d44", "--ui-muted": "#cfcfcf", "--ui-muted-2": "#999",
-  "--ui-hover": "#3a4a63", "--ui-selected": "#3a4a63", "--ui-focused": "#7aa7ff", "--ui-row-head": "#333741", "--ui-link": "#7ab4ff",
-  "--ui-error": "#ff8a80", "--ui-backdrop": "rgba(0,0,0,.35)", "--ui-shadow-1": "rgba(0,0,0,.4)", "--ui-shadow-2": "rgba(0,0,0,.45)",
-  "--list-row-height": "28px",
-};
-
-const S1_CONFIG = '# E2E scenario S1 (AC-960: a comment line must survive untouched)\nui_theme = "dark"   # fixed dark\nexternal_apps = []\n';
+const OS = readOsAppTheme(); // read only; null when unreadable
+// "the opposite of the OS": OS dark -> light, OS light (or unknown) -> nord.
+const OPPOSITE_PRESET = OS === "dark" ? "light" : "nord";
+const OPPOSITE_DARK = OPPOSITE_PRESET !== "light";
+const S1_CONFIG = `# E2E scenario S1 (AC-960: a comment line must survive untouched)\nexternal_apps = []\n\n[theme]\npreset = "${OPPOSITE_PRESET}"   # the opposite of the OS\n`;
 
 const s1Tests = [
   {
-    id: "AC-948",
-    title: "ui_theme = dark: every R-911-1 variable on :root has the dark string; --list-row-height unchanged",
+    id: "AC-1741",
+    title: "a preset whose brightness is the opposite of the OS's (OS dark -> light, OS light -> nord): the main window and the viewer's computed color-scheme follow the preset, not the OS",
     async run(t, ctx) {
-      await openFiles(ctx, "many100", 100);
-      for (const [name, expected] of Object.entries(DARK_VARIABLES)) t.eq(await ctx.m.cssVar(name), expected, name);
-      t.eq((await ctx.configDto()).uiTheme, "dark", "DTO uiTheme");
-    },
-  },
-  {
-    id: "AC-906-ii",
-    title: "ui_theme = dark (no emulation): body #1e1f22, container color-scheme dark, html normal",
-    async run(t, ctx) {
-      await openFiles(ctx, "many100", 100);
-      t.eq(await matchesDark(ctx), true, "prefers-color-scheme: dark matches although nothing is emulated (the app pinned dark)");
-      t.eq((await ctx.m.cs("body", ["background-color"]))["background-color"], RGB_DARK.bg, "body background");
-      t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "dark", "container color-scheme");
-      t.eq((await ctx.m.cs("html", ["color-scheme"]))["color-scheme"], "normal", "html color-scheme");
-      const note = fixedThemeNote("dark", ctx.osTheme ?? null);
-      if (note !== null) t.note(note);
-    },
-  },
-  {
-    id: "AC-949",
-    title: "ui_theme = dark: computed styles of the screen, a dialog, the regex error and the context menu use the dark values",
-    async run(t, ctx) {
-      await openFiles(ctx, "many100", 100, { size: true, time: false, hidden: false, tree: true });
-      await ctx.focusList();
-      await ctx.press.down();
-      await ctx.key(" ", 0, "Space");
-      await ctx.key(" ", 0, "Space");
-      await ctx.press.up(); // focus on the 3rd entry; the 2nd and 3rd are selected
-      await ctx.settle();
-      const bg = async (sel, i = 0) => (await ctx.m.cs(sel, ["background-color"], i))["background-color"];
-      t.eq(await bg("body"), RGB_DARK.bg, "body background");
-      t.eq(await bg(".app-shell"), RGB_DARK.bg, "container background");
-      t.eq((await ctx.m.cs(".app-shell", ["color", "color-scheme"])), { color: RGB_DARK.fg, "color-scheme": "dark" }, "container text colour / color-scheme");
-      for (const sel of [".path-bar-row", ".status-bar", ".tree-panel", ".file-list-frame"]) {
-        t.eq(await bg(sel), RGB_DARK.surface, `${sel} background`);
-        const b = await ctx.m.cs(sel, ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]);
-        t.eq(Object.values(b), Array(4).fill(RGB_DARK.border), `${sel} border colours`);
-      }
-      t.eq(await bg(".file-list-row", 2), RGB_DARK.selected, "focused + selected row background");
-      t.eq((await ctx.m.outline(".file-list-row", 2)).color, RGB_DARK.focused, "focus row outline colour");
-      t.eq((await ctx.m.cs(".file-list-row .size", ["color"], 1)).color, RGB_DARK.muted, "size cell text colour");
-
-      // (i) the delete confirmation dialog
-      await ctx.press.del();
-      await ctx.waitFor(`!!document.querySelector('.ui-dialog')`, { label: "the delete confirmation" });
-      await ctx.settle(150);
-      t.eq(await bg(".backdrop"), RGB_DARK.backdrop, "dialog backdrop");
-      t.eq(await bg(".ui-dialog"), RGB_DARK.surface, "dialog body background");
-      t.eq((await ctx.m.cs(".ui-dialog", ["box-shadow"]))["box-shadow"], "rgba(0, 0, 0, 0.4) 0px 8px 20px 0px", "dialog shadow");
-      t.eq((await ctx.m.cs(".ui-dialog button", ["color-scheme"]))["color-scheme"], "dark", "dialog button color-scheme");
-      if ((await ctx.m.count(".ui-dialog input[type=checkbox]")) > 0) {
-        t.eq((await ctx.m.cs(".ui-dialog input[type=checkbox]", ["color-scheme"]))["color-scheme"], "dark", "dialog checkbox color-scheme");
-      }
-      await ctx.press.escape();
-      await ctx.waitFor(`!document.querySelector('.ui-dialog')`, { label: "the dialog to close" });
-
-      // (ii) the regex error text
-      await ctx.focusList();
-      await ctx.press.search();
-      await ctx.waitFor(`!!document.querySelector('.search-bar input')`, { label: "the search bar" });
-      await ctx.clickSel(".search-bar .regex-toggle");
-      await ctx.ev(`document.querySelector('.search-bar input').focus(); true`);
-      await ctx.type("[");
-      await ctx.waitFor(`!!document.querySelector('.search-bar .search-error')`, { label: "the regex error text" });
-      t.eq((await ctx.m.cs(".search-bar .search-error", ["color"])).color, RGB_DARK.error, "regex error colour");
-      await ctx.press.escape();
-      await ctx.waitFor(`!document.querySelector('.search-bar')`, { label: "the search bar to close" });
-
-      // (iii) the context menu
-      await ctx.focusList();
-      await ctx.rightClickSel(".app-shell .file-list-row", 3);
-      await ctx.waitFor(`!!document.querySelector('.ctx-menu')`, { label: "the context menu" });
-      await ctx.settle(100);
-      const menu = await ctx.m.cs(".ctx-menu", ["border-top-color", "box-shadow"]);
-      t.eq(menu["border-top-color"], RGB_DARK.border, "context menu border");
-      t.eq(menu["box-shadow"], "rgba(0, 0, 0, 0.45) 0px 8px 20px 0px", "context menu shadow");
-      await ctx.press.escape();
-      await ctx.waitFor(`!document.querySelector('.ctx-menu')`, { label: "the context menu to close" });
-
-      // dimensions are the light ones (AC-900 / AC-901)
-      t.eq(await ctx.m.cssVar("--list-row-height"), "28px", "--list-row-height");
-      t.eq((await ctx.m.cs(".file-list-row", ["height"])).height, "28px", "row height");
-    },
-  },
-  {
-    id: "AC-907-ii",
-    title: "viewer (ui_theme = dark): html/body #1e1e1e, text #ddd, html color-scheme dark, margin 0 and no document scrollbar, no --ui-* variables; the content is shown",
-    async run(t, ctx) {
-      const dir = ctx.fx.mkdir("viewer-dark");
-      fs.writeFileSync(ctx.fx.file("viewer-dark", "note.txt"), "dark viewer line one\nsecond line\n");
+      await openFiles(ctx, "opp-main", 20, { size: true, time: false, hidden: false, tree: true });
+      t.note(`OS app theme: ${OS ?? "unknown"}; preset: ${OPPOSITE_PRESET}`);
+      const scheme = OPPOSITE_DARK ? "dark" : "light";
+      t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], scheme, `main: container color-scheme is ${scheme}`);
+      t.eq(await ctx.m.cssVar("--ui-color-scheme"), scheme, `main: --ui-color-scheme is ${scheme}`);
+      t.eq(await matchesDark(ctx), OPPOSITE_DARK, "main: the window theme (matchMedia) follows the preset");
+      if (OS !== null) t.ok(OPPOSITE_DARK !== (OS === "dark"), "this run is discriminating: the preset is the opposite of the OS");
+      const dir = ctx.fx.mkdir("opp-viewer");
+      fs.writeFileSync(ctx.fx.at("opp-viewer", "a.txt"), "opposite line one\n");
       await ctx.reload();
       await ctx.nav(dir);
       const viewer = await openViewerWindow(t, ctx);
       if (viewer === undefined) return;
       try {
-        if (!(await waitViewerShows(t, viewer, "note.txt", "text", { contains: "dark viewer line one" }))) return;
-        const body = await viewer.ev(`document.querySelector('.viewer-body .code')?.textContent ?? ''`);
-        t.ok(body.includes("dark viewer line one"), "the viewer body shows the file's text", JSON.stringify(body.slice(0, 80)));
+        if (!(await waitViewerShows(t, viewer, "a.txt", "text", { contains: "opposite line one" }))) return;
         const s = await viewer.ev(VIEWER_LOOK);
-        t.eq(s.htmlBg, "rgb(30, 30, 30)", "html background");
-        t.eq(s.bodyBg, "rgb(30, 30, 30)", "body background");
-        t.eq(s.margins, ["0px", "0px"], "html / body margin (R-913-3)");
-        t.eq(s.fits.slice(0, 2), [true, true], "the document has no scrollbar (scrollHeight/Width = clientHeight/Width)", JSON.stringify(s.fits));
-        t.eq(s.overflow, ["visible", "visible", "visible", "visible"], "html / body overflow");
-        t.eq(s.htmlScheme, "dark", "html color-scheme (R-913-2)");
-        t.eq(s.rootColor, "rgb(221, 221, 221)", "viewer text colour");
-        t.eq(unquoteFonts(s.rootFont), VIEWER_FONT, "viewer root font-family is --vw-font");
-        t.eq([s.uiBg, s.rowHeight, s.uiVars], ["", "", []], "the main window's variables are not defined in the viewer");
-        t.eq(s.prefersDark, true, "the viewer follows the pinned dark theme without emulation");
-        const note = fixedThemeNote("dark", ctx.osTheme ?? null);
-        if (note !== null) t.note(note);
+        t.eq(s.htmlScheme, scheme, `viewer: html color-scheme is ${scheme}`);
+        t.eq(s.prefersDark, OPPOSITE_DARK, "viewer: matchMedia follows the preset");
+        t.eq(s.uiVars, [], "viewer: no --ui-* variable");
+        t.eq(s.htmlBg, OPPOSITE_DARK ? "rgb(46, 52, 64)" : "rgb(245, 245, 245)", "viewer: html background is the preset's bg");
       } finally {
         viewer.close();
       }
     },
   },
   {
-    id: "AC-955-ii",
-    title: "viewer palette (ui_theme = dark): header, truncation banner, error and line numbers use the R-913-1 dark values",
-    async run(t, ctx) {
-      await checkViewerPalette(t, ctx, VIEWER_PALETTE.dark);
-    },
-  },
-  {
-    id: "AC-1361",
-    title: "dark theme: the menu bar and the dropdown use the R-911-1 dark values (bar / dropdown surface, lit item, shortcut text)",
-    async run(t, ctx) {
-      await prepMenu(ctx, "mb-dark");
-      await focusRowByName(ctx, "d");
-      await ctx.press.f10();
-      await waitActive(ctx);
-      await ctx.press.down();
-      await waitDropdown(ctx);
-      const s = await ctx.ev(MENU_STYLE_PROBE);
-      t.eq(s.bar["background-color"], RGB_DARK.surface, "menu bar background");
-      t.eq(s.bar["border-top-color"], RGB_DARK.border, "menu bar border");
-      t.eq(s.dropdown["background-color"], RGB_DARK.surface, "dropdown background");
-      t.eq(s.highlighted?.["background-color"], RGB_DARK.hover, "lit item background");
-      t.eq(s.shortcut.color, RGB_DARK.muted, "shortcut text colour");
-      t.eq([s.bar.padding, s.item.padding, s.item["font-size"], s.dropdown["min-width"]], ["3px 6px", "6px 12px", "13px", "260px"], "the sizes are the light ones");
-      await closeBar(ctx);
-    },
-  },
-  {
-    id: "AC-522-ii",
-    title: "dark: the text view keeps its fonts and sizes; the number column uses the dark gutter colours",
-    async run(t, ctx) {
-      ctx.fx.mkdir("vt-dark");
-      fs.writeFileSync(ctx.fx.at("vt-dark", "a.txt"), FIFTY);
-      const viewer = await showInViewer(t, ctx, "vt-dark", "a.txt", "text", { contains: "line 1 text" });
-      if (viewer === undefined) return;
-      try {
-        await checkTextLook(t, viewer, { header: "rgb(37, 37, 38)", border: "rgb(58, 58, 58)" });
-      } finally {
-        await closeViewerWindow(ctx, viewer);
-      }
-    },
-  },
-  {
-    id: "AC-528-ii",
-    title: "dark: the Rust sample's keyword / string / comment / built-in colours are the dark palette",
-    async run(t, ctx) {
-      await checkRustColours(t, ctx, "dark");
-    },
-  },
-  {
-    id: "AC-957-reverse",
-    title: "started with ui_theme = dark: removing the line while running changes nothing, even after a page reload (the DTO is a snapshot)",
-    async run(t, ctx) {
-      await ctx.reload();
-      const before = { bg: await uiBg(ctx), dto: await ctx.configDto() };
-      t.eq([before.bg, before.dto.uiTheme], ["#1e1f22", "dark"], "dark at the start");
-      fs.writeFileSync(configFile(ctx), "# the ui_theme line was removed while the app runs\n", "utf8");
-      try {
-        await sleep(10000);
-        t.eq(await uiBg(ctx), "#1e1f22", "still dark 10 s after the line was removed");
-        const notice = await reloadAndReadNotice(ctx);
-        t.eq((await ctx.configDto()).uiTheme, "dark", "after a reload the DTO still says dark (config.toml is not read again)");
-        t.eq(await uiBg(ctx), "#1e1f22", "after a reload still dark");
-        t.eq(notice, "", "no startup notice appears");
-      } finally {
-        fs.writeFileSync(configFile(ctx), S1_CONFIG, "utf8"); // restore the scenario's file for AC-960
-      }
-    },
-  },
-  {
     // MUST be last in S1: it closes the app.
     id: "AC-960",
-    title: "ui_theme = dark with comments: after toggles / sort and a normal window close, config.toml is unchanged and ui-state.toml has no theme item",
+    title: "a [theme] with comments: after toggles / sort and a normal window close, config.toml is unchanged and ui-state.toml has no theme / colour item",
     async run(t, ctx) {
       const before = configState(ctx);
       t.ok(before !== null && Buffer.from(before.bytes, "hex").toString("utf8") === S1_CONFIG, "config.toml holds the scenario's commented content before the test");
       const dir = await openFiles(ctx, "many100", 100, { size: true, time: false, hidden: false, tree: true });
       t.ok(dir.length > 0, "the folder is open");
       await ctx.ensureView({ size: false, time: true, tree: false });
-      await setSort(ctx, "size", "desc");
-
       // The forced kill of shutdown() skips the save at exit: ask the window to close and wait for the process.
       await ctx.settle(1500); // ui-state.toml is saved with a debounce
       await ctx.requestMainWindowClose();
@@ -299,44 +99,25 @@ const s1Tests = [
       t.ok(exited, "the app process ended after the close request");
       if (!exited) return;
       await sleep(500);
-
       checkConfigUntouched(t, ctx, before, "after the close");
       const uiStatePath = path.join(ctx.handle.cfgDir, "ui-state.toml");
       if (fs.existsSync(uiStatePath)) {
         const text = fs.readFileSync(uiStatePath, "utf8");
-        t.ok(!/theme/i.test(text), "ui-state.toml has no theme item", text.slice(0, 200));
+        t.ok(!/theme|preset|colors/i.test(text), "ui-state.toml has no theme item", text.slice(0, 200));
       } else {
         t.fail("ui-state.toml was not written at the close (cannot judge the theme item)");
       }
-      t.note("AC-960 'OS のテーマの切替' の部分は固定テーマ中の Emulation が固定を上書きするため [目視] (SHOULD-186 / 追補)");
+      t.note("AC-1742 の「OS のテーマの切替」の実機の部分は [目視]");
     },
   },
 ];
 
-// ------------------------------------------------- S2: no config.toml (follow the OS)
-
-const FOLLOW_VIEW = (name, lines) => {
-  const l = [];
-  for (let i = 1; i <= lines; i++) l.push(`${name} line ${i}`);
-  return l.join("\n") + "\n";
-};
-
-const PNG_1X1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+// ------------------------------------------------- S2: no appearance keys (AC-1742 / AC-1749)
 
 const s2Tests = [
   {
-    id: "AC-959-i",
-    title: "no config.toml: the theme follows the OS (matchMedia = OS, DTO system), no startup notice",
-    async run(t, ctx) {
-      const notice = await reloadAndReadNotice(ctx);
-      t.eq(/^\s*ui_theme\b/m.test(fs.readFileSync(configFile(ctx), "utf8")), false, "config.toml has no ui_theme line in this scenario");
-      await checkFollowsOs(t, ctx);
-      t.eq(notice, "", "no startup notice");
-    },
-  },
-  {
-    id: "AC-951",
-    title: "no config.toml, OS light then dark (emulated): the screen switches within 1 s with no reload; focus, selection, scroll, rows and the search input stay",
+    id: "AC-1742",
+    title: "nord, OS light then dark (emulated): nothing changes -- no reload, no colour change; focus, selection, rows and the search input stay (main) and the viewer's colours stay (viewer, code colours)",
     async run(t, ctx) {
       await openFiles(ctx, "follow-main", 100, { size: true, time: false, hidden: false, tree: true }, { prefix: "report_" });
       await ctx.focusList();
@@ -344,7 +125,6 @@ const s2Tests = [
       await ctx.key(" ", 0, "Space");
       await ctx.key(" ", 0, "Space");
       await ctx.press.up();
-      await ctx.ev(`document.querySelector('.file-list').scrollLeft = 268; true`);
       await ctx.press.search();
       await ctx.waitFor(`!!document.querySelector('.search-bar input')`, { label: "the search bar" });
       await ctx.ev(`document.querySelector('.search-bar input').focus(); true`);
@@ -357,40 +137,25 @@ const s2Tests = [
           const input = document.querySelector('.search-bar input');
           return {
             marker: window.__themeMarker ?? null,
-            focus: rows.findIndex((r) => r.classList.contains('focused')),
+            cursor: rows.findIndex((r) => r.classList.contains('cursor') || r.classList.contains('idle')),
             selected: rows.map((r, i) => (r.getAttribute('aria-selected') === 'true' ? i : -1)).filter((i) => i >= 0),
             rows: rows.length,
-            scrollLeft: document.querySelector('.file-list').scrollLeft,
+            bg: getComputedStyle(document.documentElement).getPropertyValue('--ui-bg').trim(),
+            scheme: getComputedStyle(document.querySelector('.app-shell')).colorScheme,
             search: input ? { value: input.value, start: input.selectionStart, end: input.selectionEnd } : null,
           };
         })()`);
       try {
-        await ctx.emulateColorScheme("light"); // Given: OS light (made explicit, whatever the PC's OS is)
-        await ctx.waitFor(`getComputedStyle(document.documentElement).getPropertyValue('--ui-bg').trim() === '#f5f5f5'`, { timeout: 3000, label: "light --ui-bg" });
         const given = await snapshot();
-        t.eq(given.marker, "kept", "the marker is in the page");
+        t.eq(given.bg, "#2e3440", "Given: nord");
         t.eq(given.search, { value: "rep", start: 3, end: 3 }, "the search input holds rep with the caret at the end");
         t.ok(given.selected.length === 2, "two rows are selected", JSON.stringify(given.selected));
-
-        await ctx.emulateColorScheme("dark");
-        const started = Date.now();
-        let switched = false;
-        while (Date.now() - started < 2000) {
-          if ((await ctx.m.cssVar("--ui-bg")) === "#1e1f22") {
-            switched = true;
-            break;
-          }
-          await sleep(25);
+        for (const scheme of ["light", "dark", "light"]) {
+          await ctx.emulateColorScheme(scheme);
+          await sleep(1200);
+          t.eq(await snapshot(), given, `OS emulated ${scheme}: marker, cursor, selection, rows, colours and the search input are unchanged (no reload, no recolour)`);
         }
-        const elapsed = Date.now() - started;
-        t.ok(switched && elapsed <= 1000, "--ui-bg became #1e1f22 within 1 s", `${switched ? elapsed + " ms" : "never"}`);
-        t.eq((await ctx.m.cs(".app-shell", ["color-scheme"]))["color-scheme"], "dark", "container color-scheme dark");
-        t.eq(await snapshot(), given, "marker, focus row, selection, scrollLeft, rows and the search input are unchanged in dark (no reload)");
-
-        await ctx.emulateColorScheme("light");
-        await ctx.waitFor(`getComputedStyle(document.documentElement).getPropertyValue('--ui-bg').trim() === '#f5f5f5'`, { timeout: 3000, label: "light --ui-bg again" });
-        t.eq(await snapshot(), given, "back in light everything is still unchanged");
-        t.note("実際の OS の切替は [目視] (AC-951 後段)");
+        t.note("実際の OS の切替・ちらつきは [目視] (AC-1742 / AC-1743)");
       } finally {
         await ctx.emulateColorScheme("");
       }
@@ -398,238 +163,109 @@ const s2Tests = [
     },
   },
   {
-    id: "AC-953",
-    title: "viewer (no config.toml): OS light -> dark (emulated on the viewer page) repaints it without a reload; file, scrollTop and N / M stay; a reused window stays dark",
+    id: "AC-1742-viewer",
+    title: "viewer, nord: OS light -> dark (emulated on the viewer page) changes neither the page colours nor the code colours, and nothing reloads",
     async run(t, ctx) {
       const dir = ctx.fx.mkdir("follow-viewer");
-      fs.writeFileSync(ctx.fx.at("follow-viewer", "a-long.txt"), FOLLOW_VIEW("a", 400));
-      fs.writeFileSync(ctx.fx.at("follow-viewer", "b-second.txt"), FOLLOW_VIEW("b", 50));
+      fs.writeFileSync(ctx.fx.at("follow-viewer", "a-long.txt"), Array.from({ length: 400 }, (_, i) => `a line ${i + 1}`).join("\n") + "\n");
       await ctx.reload();
       await ctx.nav(dir);
       const viewer = await openViewerWindow(t, ctx);
       if (viewer === undefined) return;
       try {
         if (!(await waitViewerShows(t, viewer, "a-long.txt", "text", { contains: "a line 1" }))) return;
-        const state = () =>
-          viewer.ev(`(() => ({ marker: window.__themeMarker ?? null, name: document.querySelector('.filename')?.textContent, pos: document.querySelector('.position')?.textContent,
-            scrollTop: document.querySelector('.viewer-body').scrollTop }))()`);
         await viewer.ev(`window.__themeMarker = "kept"; document.querySelector('.viewer-body').scrollTop = 150; true`);
         await sleep(200);
-        await ctx.emulateColorScheme("light", viewer);
-        const look = () => viewer.ev(`(() => { const r = getComputedStyle(document.querySelector('.viewer')); return [getComputedStyle(document.documentElement).backgroundColor, r.color, getComputedStyle(document.documentElement).colorScheme]; })()`);
-        for (let i = 0; i < 20 && (await look())[0] !== "rgb(255, 255, 255)"; i++) await sleep(100);
-        const given = await state();
-        t.ok(given.scrollTop > 0, "the body is scrolled down", String(given.scrollTop));
-        t.eq(await look(), ["rgb(255, 255, 255)", "rgb(17, 17, 17)", "light"], "Given: light (emulated)");
-
-        await ctx.emulateColorScheme("dark", viewer);
-        for (let i = 0; i < 20 && (await look())[0] !== "rgb(30, 30, 30)"; i++) await sleep(100);
-        t.eq(await look(), ["rgb(30, 30, 30)", "rgb(221, 221, 221)", "dark"], "dark: background / text / color-scheme");
-        t.eq(await state(), given, "no reload: marker, file name, N / M and scrollTop are unchanged");
-
-        // reuse the same viewer window for another file: it stays dark (same CDP target, so the emulation holds)
-        await ctx.focusList();
-        await ctx.press.down();
-        await ctx.press.enter();
-        if (await waitViewerShows(t, viewer, "b-second.txt", "text", { contains: "b line 1" })) {
-          t.eq((await look())[0], "rgb(30, 30, 30)", "the reused viewer window is dark");
+        const look = () => viewer.ev(`(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.querySelector('.viewer')).color, getComputedStyle(document.documentElement).colorScheme, window.__themeMarker ?? null, document.querySelector('.viewer-body').scrollTop])()`);
+        const given = await look();
+        t.eq(given.slice(0, 3), ["rgb(46, 52, 64)", "rgb(236, 239, 244)", "dark"], "Given: nord (background / text / color-scheme)");
+        for (const scheme of ["light", "dark"]) {
+          await ctx.emulateColorScheme(scheme, viewer);
+          await sleep(600);
+          t.eq(await look(), given, `OS emulated ${scheme}: background, text, color-scheme, marker and scrollTop are unchanged`);
         }
-        t.note("ビューアを閉じて開き直したときのテーマ(AC-953 後段)と実際の OS の切替は [目視]");
       } finally {
         await ctx.emulateColorScheme("", viewer).catch(() => {});
         viewer.close();
       }
-    },
-  },
-  {
-    id: "AC-528-os",
-    title: "viewer (no config.toml): OS light -> dark (emulated) recolours the highlighted code without a reload; the scroll position stays",
-    async run(t, ctx) {
       await checkHighlightFollowsOs(t, ctx);
     },
   },
   {
-    id: "AC-953-1",
-    title: "viewer (no config.toml): OS light -> dark leaves the Markdown zoom / HTML-Text mode and the image's 200% display unchanged",
-    async run(t, ctx) {
-      const dir = ctx.fx.mkdir("follow-viewer2");
-      fs.writeFileSync(ctx.fx.at("follow-viewer2", "a.md"), "# Title\n\n[a link](http://example.invalid/)\n\n`code`\n\n> quote\n");
-      fs.writeFileSync(ctx.fx.at("follow-viewer2", "b.png"), PNG_1X1);
-      await ctx.reload();
-      await ctx.nav(dir);
-      const viewer = await openViewerWindow(t, ctx);
-      if (viewer === undefined) return;
-      const clickButton = (label) =>
-        viewer.ev(`(() => { const b = [...document.querySelectorAll('.viewer-header button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
-      const state = () =>
-        viewer.ev(`(() => ({ marker: window.__themeMarker ?? null, name: document.querySelector('.filename')?.textContent, zoom: document.querySelector('.zoom')?.textContent ?? null,
-          pressed: [...document.querySelectorAll('.viewer-header button[aria-pressed]')].map((b) => b.textContent.trim() + ':' + b.getAttribute('aria-pressed')),
-          htmlView: !!document.querySelector('.markdown-html'), imgStyle: document.querySelector('.image-stage img')?.getAttribute('style') ?? null }))()`);
-      const bgNow = () => viewer.ev(`getComputedStyle(document.documentElement).backgroundColor`);
-      const toDark = async () => {
-        await ctx.emulateColorScheme("light", viewer);
-        for (let i = 0; i < 20 && (await bgNow()) !== "rgb(255, 255, 255)"; i++) await sleep(100);
-        const given = await state();
-        await ctx.emulateColorScheme("dark", viewer);
-        for (let i = 0; i < 20 && (await bgNow()) !== "rgb(30, 30, 30)"; i++) await sleep(100);
-        return given;
-      };
-      try {
-        if (!(await waitViewerShows(t, viewer, "a.md", "markdown"))) return;
-        await viewer.ev(`window.__themeMarker = "kept"; true`);
-        t.eq(await clickButton("+"), true, "the zoom + button exists");
-        t.eq(await clickButton("+"), true, "zoom + again");
-        t.eq(await clickButton("Text"), true, "the Text mode button exists");
-        await sleep(300);
-        const mdGiven = await toDark();
-        t.eq(mdGiven.zoom, "120%", "Markdown zoom is 120% before the change");
-        t.eq(mdGiven.htmlView, false, "Markdown is in Text mode before the change");
-        t.eq(await bgNow(), "rgb(30, 30, 30)", "Markdown view: dark now");
-        t.eq(await state(), mdGiven, "Markdown: zoom, HTML/Text mode and the marker are unchanged");
-
-        await ctx.focusList();
-        await ctx.press.down();
-        await ctx.press.enter();
-        if (!(await waitViewerShows(t, viewer, "b.png", "image"))) return;
-        t.eq(await clickButton("200%"), true, "the 200% button exists");
-        await sleep(300);
-        const imgGiven = await toDark();
-        t.eq(imgGiven.zoom, "200%", "image shows 200% before the change");
-        t.eq(await bgNow(), "rgb(30, 30, 30)", "image view: dark now");
-        t.eq(await state(), imgGiven, "image: the 200% display (width / height) and the marker are unchanged");
-        t.note("実際の OS の切替は [目視]");
-      } finally {
-        await ctx.emulateColorScheme("", viewer).catch(() => {});
-        viewer.close();
-      }
-    },
-  },
-  {
-    id: "AC-957",
-    title: "started without ui_theme: writing ui_theme = dark into config.toml while running changes nothing (also after a reload)",
+    id: "AC-1749",
+    title: "started with the default: writing [theme] preset = light into config.toml while running changes nothing (also after a reload; config.toml is read at the start only)",
     async run(t, ctx) {
       const noticeBefore = await reloadAndReadNotice(ctx);
       const bgBefore = await uiBg(ctx);
-      const darkBefore = await matchesDark(ctx);
-      t.eq((await ctx.configDto()).uiTheme, "system", "DTO says system at the start");
-      fs.writeFileSync(configFile(ctx), 'ui_theme = "dark"\nexternal_apps = []\n', "utf8"); // written by the harness, not by the app
+      t.eq(bgBefore, "#2e3440", "nord at the start");
+      fs.writeFileSync(configFile(ctx), 'external_apps = []\n\n[theme]\npreset = "light"\n', "utf8"); // written by the harness, not by the app
       try {
-        await sleep(10000);
-        t.eq(await uiBg(ctx), bgBefore, "the colours did not change within 10 s");
-        t.eq(await matchesDark(ctx), darkBefore, "matchMedia did not change");
+        await sleep(8000);
+        t.eq(await uiBg(ctx), bgBefore, "the colours did not change within 8 s");
         const noticeAfter = await reloadAndReadNotice(ctx);
-        t.eq((await ctx.configDto()).uiTheme, "system", "after a reload the DTO still says system (config.toml was not read again)");
-        t.eq(noticeAfter, noticeBefore, "the startup notice is unchanged");
-        t.eq(await uiBg(ctx), bgBefore, "after a reload the colours are unchanged");
-        t.note("「再起動するとダークで起動する」は S1(ui_theme = dark で起動するシナリオ)で代える");
+        t.eq(noticeAfter, noticeBefore, "the startup notice is unchanged after a reload");
+        t.eq(await uiBg(ctx), bgBefore, "after a reload the colours are unchanged (the start's snapshot)");
       } finally {
-        fs.writeFileSync(configFile(ctx), "external_apps = []\n", "utf8"); // back to the scenario's file (no ui_theme)
+        fs.writeFileSync(configFile(ctx), "external_apps = []\n", "utf8"); // back to the scenario's file
       }
     },
   },
 ];
 
-// -------------------------------------- S3: ui_theme = "system"
+// ------------------------------------------- S3: ui_theme is an unknown key now (AC-1748)
 
+const S3_CONFIG = 'external_apps = []\nui_theme = "light"\n';
 const s3Tests = [
   {
-    id: "AC-917-system",
-    title: 'ui_theme = "system": same as no key (matchMedia = OS, DTO system, no notice)',
-    async run(t, ctx) {
-      const notice = await reloadAndReadNotice(ctx);
-      await checkFollowsOs(t, ctx);
-      t.eq(notice, "", "no startup notice");
-    },
-  },
-];
-
-// ------------------------------------------- S4-S7: invalid ui_theme values + a valid keymap
-
-/** AC-958 for one invalid value: followed OS, one theme notice, the keymap works, config.toml untouched. */
-function invalidThemeTest(id, label, { extraKeymapNotice = null } = {}) {
-  return {
-    id,
-    title: `ui_theme ${label}: follows the OS, one W-33 ui_theme notice, Ctrl+Alt+T works, config.toml untouched`,
+    id: "AC-1748",
+    title: 'ui_theme = "light" on line 2 (no [theme]): nord; W-AC lists ui_theme(2 行目) and the old W-33 sentence is gone; config.toml untouched',
     async run(t, ctx) {
       const before = configState(ctx);
       const message = await reloadAndReadNotice(ctx);
-      const dto = await checkFollowsOs(t, ctx);
-      t.eq(dto.uiThemeInvalid, true, "DTO uiThemeInvalid");
-      t.eq(messageCount(message, THEME_NOTICE), 1, "the theme notice appears exactly once in the startup message", JSON.stringify(message));
-      if (extraKeymapNotice !== null) {
-        t.eq(message, `${extraKeymapNotice} ${THEME_NOTICE}`, "the keymap notice and the theme notice are one message, keymap first, joined by one space");
-      } else {
-        t.eq(message, THEME_NOTICE, "nothing but the theme notice");
-      }
-      await checkToggleTimeFires(t, ctx);
+      await checkNord(t, ctx);
+      t.eq(message, "config.toml の不明な設定 1 件を無視しました: ui_theme(2 行目)。", "W-AC with the line of ui_theme");
+      t.eq(countOf(message, "ui_theme を解釈できない"), 0, "no W-33 sentence");
+      t.eq(countOf(message, "OS のテーマ設定に従います"), 0, "nothing says the theme follows the OS");
       checkConfigUntouched(t, ctx, before, "after the start");
     },
-  };
-}
-
-const keymapBlock = `\n[input_keymap_custom]\n${KEYMAP_LINE}`;
+  },
+];
 
 // ---------------------------------------------- S8 / S9: whole-file vs wrong-typed keymap
 
 const s8Tests = [
   {
-    id: "AC-959-ii",
-    title: "config.toml with a syntax error (and a ui_theme line): follows the OS, one R-45-2 notice that mentions the default theme, no separate theme notice",
+    id: "AC-1708",
+    title: "config.toml with a syntax error on line 2: nord and the defaults, one W-31 that says 配色(nord), no separate notice for colours / fonts, config.toml untouched",
     async run(t, ctx) {
       const before = configState(ctx);
       const message = await reloadAndReadNotice(ctx);
-      const dto = await checkFollowsOs(t, ctx);
-      t.eq(dto.uiThemeInvalid, false, "no theme notice of its own");
-      t.eq(dto.parseError?.wholeFile, true, "DTO parseError.wholeFile");
-      t.eq(messageCount(message, "読み込めなかったため"), 1, "the R-45-2 notice (W-31) appears once", JSON.stringify(message));
-      t.ok(message.includes("既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。"), "the notice says the theme falls back too (W-31)", message);
-      t.ok(message.includes("テーマ"), "the notice mentions the theme", message);
-      t.eq(messageCount(message, "ui_theme を解釈できない"), 0, "no separate theme notice (W-33)");
+      await checkNord(t, ctx);
+      t.ok(
+        message.startsWith("config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、配色(nord)、外部アプリの既定の登録を使います。 詳細: "),
+        "W-31 with its line 2 and the closing sentence naming 配色(nord)",
+        JSON.stringify(message),
+      );
+      for (const item of ["[colors]", "[font]", "[layout]", "使われない設定", "不明な設定"]) t.eq(countOf(message, item), 0, `no separate item in the notice: ${item}`);
+      t.eq((await ctx.m.cs(".app-shell", ["font-size"]))["font-size"], "12px", "the default font size (12px)");
+      const tree = await ctx.m.rect(".tree-pane");
+      const body = await ctx.m.rect(".app-shell > .body");
+      t.approx(tree.width, Math.floor((body.width * 24) / 100), "tree_width_percent 24 (the default)");
+      t.eq((await ctx.externalAppsDto()).apps.length, 4, "the default four external apps (nothing was started: no key or menu was used here)");
       checkConfigUntouched(t, ctx, before, "after the start");
     },
   },
 ];
 
-// AC-1641 (SPEC-0300-0022 R-1640 / R-1641 / R-1645; the ONLY place it is checked: S8 is the one scenario that may start with a broken file, R-1682).
-s8Tests.push({
-  id: "AC-1641",
-  title: "syntax error on line 2: everything default, W-31 names line 2 and no setting item, config.toml unchanged",
-  async run(t, ctx) {
-    const before = configState(ctx);
-    const message = await reloadAndReadNotice(ctx);
-    const dto = await checkFollowsOs(t, ctx);
-    t.eq(dto.parseError?.wholeFile, true, "DTO parseError.wholeFile");
-    t.eq(dto.parseError?.line, 2, "DTO parseError.line is the line of the syntax error (this file's line 2)");
-    t.ok(
-      message.startsWith("config.toml の 2 行目を読み込めなかったため、既定のキー割り当て、テーマ(OS の設定に従う)、外部アプリの既定の登録を使います。 詳細: "),
-      "W-31 with its line 2 and the closing sentence",
-      JSON.stringify(message),
-    );
-    for (const item of ["ui_theme", "input_keymap_custom", "external_apps", "不正なキー割り当て", "外部アプリの登録", "不明な設定"]) {
-      t.eq(messageCount(message, item), 0, `no setting item in the notice: ${item} (R-1641)`);
-    }
-    t.eq((await ctx.externalAppsDto()).apps.length, 4, "the default four external apps (nothing was started: no key or menu was used here)");
-    checkConfigUntouched(t, ctx, before, "after the start");
-  },
-});
-
 const s9Tests = [
   {
     id: "AC-959-iii",
-    title: 'ui_theme = "dark" with input_keymap_custom = "Ctrl+X" (not a table): dark; default keymap; one R-45-2 notice that does not mention the theme',
+    title: "input_keymap_custom = \"Ctrl+X\" (not a table) on line 3: nord; default keymap; one W-30-2 notice with its line that does not mention the colours",
     async run(t, ctx) {
       const before = configState(ctx);
       const message = await reloadAndReadNotice(ctx);
-      const dto = await ctx.configDto();
-      t.eq([dto.uiTheme, dto.uiThemeInvalid], ["dark", false], "DTO: ui_theme is valid and stays dark");
-      t.eq(dto.parseError?.wholeFile, false, "DTO parseError.wholeFile is false");
-      t.eq(await matchesDark(ctx), true, "the page is dark (no emulation)");
-      t.eq(await uiBg(ctx), "#1e1f22", "--ui-bg dark");
-      // W-30-2 with the line (SPEC-0300-0019 第5版 / SPEC-0300-0022 R-1642): input_keymap_custom is on line 3 of the scenario's file
-      t.eq(message, "config.toml の 3 行目の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。", "the R-45-2 (b) notice is exactly the W-30-2 sentence (with its line)", message);
-      t.ok(!message.includes("テーマ") && !/theme/i.test(message), "the notice does not mention the theme", message);
-      t.ok(!message.includes("詳細:"), "the notice has no detail part (W-30-2)", message);
-      // default keymap: Ctrl+H toggles hidden files
+      await checkNord(t, ctx);
+      t.eq(message, "config.toml の 3 行目の input_keymap_custom を解釈できないため、既定のキー割り当てを使います。", "the notice is exactly the W-30-2 sentence (with its line)", message);
       const dir = ctx.fx.files("keymap-check2", 5);
       await ctx.nav(dir);
       await ctx.ensureView({ size: true, time: false, hidden: false, tree: false });
@@ -638,26 +274,63 @@ const s9Tests = [
       await ctx.settle(300);
       t.eq((await ctx.viewState()).hidden, true, "Ctrl+H fired toggle_hidden (the default keymap)");
       checkConfigUntouched(t, ctx, before, "after the start");
-      const note = fixedThemeNote("dark", ctx.osTheme ?? null);
-      if (note !== null) t.note(note);
     },
   },
 ];
 
+// ------------------------------------------- S4 .. S7: ui_theme in other shapes + a valid keymap (AC-1748 with a keymap notice)
+
+const KEYMAP_LINE = 'toggle_time = "Ctrl+Alt+T"\n';
+const keymapBlock = `
+[input_keymap_custom]
+${KEYMAP_LINE}`;
+const W_AC_THEME = "config.toml の不明な設定 1 件を無視しました: ui_theme(2 行目)。";
+
+/** One ui_theme shape: it is an unknown key whatever its value (nord, W-AC with line 2), and the valid keymap still works. */
+function unknownThemeTest(id, label, { extraKeymapNotice = null } = {}) {
+  return {
+    id,
+    title: `ui_theme ${label} (an unknown key now): nord, W-AC names ui_theme(2 行目), Ctrl+Alt+T works, config.toml untouched`,
+    async run(t, ctx) {
+      const before = configState(ctx);
+      const message = await reloadAndReadNotice(ctx);
+      await checkNord(t, ctx);
+      t.eq(countOf(message, W_AC_THEME), 1, "W-AC for ui_theme appears exactly once", JSON.stringify(message));
+      t.eq(message, extraKeymapNotice === null ? W_AC_THEME : `${extraKeymapNotice} ${W_AC_THEME}`, "the whole notice (the keymap notice first, W-AC last)");
+      const dir = ctx.fx.files("keymap-check", 10);
+      await ctx.nav(dir);
+      await ctx.ensureView({ size: true, time: false, hidden: false, tree: false });
+      await ctx.focusList();
+      await ctx.key("t", MOD.Ctrl | MOD.Alt, "KeyT");
+      await ctx.settle(200);
+      t.eq((await ctx.viewState()).time, true, "Ctrl+Alt+T fired toggle_time (the time column appeared)");
+      checkConfigUntouched(t, ctx, before, "after the start");
+    },
+  };
+}
+
 export const scenarios = [
-  { id: "S1", title: "ui_theme = dark", configToml: S1_CONFIG, tests: s1Tests },
-  { id: "S2", title: "no ui_theme line (external_apps only)", configToml: "external_apps = []\n", tests: s2Tests },
-  { id: "S3", title: 'ui_theme = "system"', configToml: 'ui_theme = "system"\nexternal_apps = []\n', tests: s3Tests },
-  { id: "S4", title: 'ui_theme = "Dark" + keymap', configToml: `ui_theme = "Dark"\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-i", '"Dark"')] },
-  { id: "S5", title: "ui_theme = 1 + keymap", configToml: `ui_theme = 1\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-ii", "= 1")] },
-  { id: "S6", title: "ui_theme = { mode } + keymap", configToml: `ui_theme = { mode = "dark" }\nexternal_apps = []\n${keymapBlock}`, tests: [invalidThemeTest("AC-958-iii", "= { mode = \"dark\" } (a table)")] },
+  { id: "S1", title: `[theme] preset = ${OPPOSITE_PRESET} (the opposite of the OS: ${OS ?? "unknown"})`, configToml: S1_CONFIG, tests: s1Tests },
+  { id: "S2", title: "no appearance keys (external_apps only)", configToml: "external_apps = []\n", tests: s2Tests },
+  { id: "S3", title: "ui_theme (an unknown key now) on line 2", configToml: S3_CONFIG, tests: s3Tests },
+  { id: "S4", title: 'ui_theme = "Dark" + keymap', configToml: `external_apps = []
+ui_theme = "Dark"
+${keymapBlock}`, tests: [unknownThemeTest("AC-1748-i", '= "Dark"')] },
+  { id: "S5", title: "ui_theme = 1 + keymap", configToml: `external_apps = []
+ui_theme = 1
+${keymapBlock}`, tests: [unknownThemeTest("AC-1748-ii", "= 1")] },
+  { id: "S6", title: "ui_theme = { mode } + keymap", configToml: `external_apps = []
+ui_theme = { mode = "dark" }
+${keymapBlock}`, tests: [unknownThemeTest("AC-1748-iii", '= { mode = "dark" } (a table)')] },
   {
     id: "S7",
-    title: "invalid ui_theme + unknown keymap action",
-    configToml: `ui_theme = "Dark"\nexternal_apps = []\n${keymapBlock}no_such_action = "Ctrl+Alt+Z"\n`,
-    tests: [invalidThemeTest("AC-958-tail", '"Dark" with an unknown action id', { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action(6 行目)。" })],
+    title: "ui_theme + unknown keymap action",
+    configToml: `external_apps = []
+ui_theme = "Dark"
+${keymapBlock}no_such_action = "Ctrl+Alt+Z"
+`,
+    tests: [unknownThemeTest("AC-1748-iv", "with an unknown keymap action", { extraKeymapNotice: "config.toml の不正なキー割り当て 1 件を無視しました: no_such_action(6 行目)。" })],
   },
-  { id: "S8", title: "TOML syntax error", configToml: 'ui_theme = "dark"\nthis is = = not toml\n', allowUndeclaredExternalApps: true, tests: s8Tests },
-  { id: "S9", title: 'ui_theme = "dark" + input_keymap_custom not a table', configToml: 'ui_theme = "dark"\nexternal_apps = []\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },
+  { id: "S8", title: "TOML syntax error", configToml: "# E2E: a syntax error on line 2\nthis is = = not toml\n", allowUndeclaredExternalApps: true, tests: s8Tests },
+  { id: "S9", title: "input_keymap_custom not a table", configToml: '# E2E\nexternal_apps = []\ninput_keymap_custom = "Ctrl+X"\n', tests: s9Tests },
 ];
-

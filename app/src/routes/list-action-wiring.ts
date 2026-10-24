@@ -25,8 +25,8 @@ interface OpenTargetEntry {
 
 export interface ListActionDeps<E extends EntryLike = EntryLike> {
   fileList: {
-    moveRow(visible: readonly E[], direction: "up" | "down"): void;
-    moveColumn(visible: readonly E[], direction: "left" | "right", rowsPerColumn: number): void;
+    moveRow(visible: readonly E[], direction: "up" | "down", extendSelection?: boolean): void;
+    moveColumn(visible: readonly E[], direction: "left" | "right", rowsPerColumn: number, extendSelection?: boolean): void;
     openFocused(): Promise<NavigateResult>;
     goParent(): Promise<NavigateResult>;
     toggleFocused(visible: readonly E[]): void;
@@ -39,8 +39,8 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
     toggleSize(): void;
     toggleTime(): void;
     clearSelection(): void;
-    pageUp(visible: readonly E[]): void;
-    pageDown(visible: readonly E[]): void;
+    pageUp(visible: readonly E[], extendSelection?: boolean): void;
+    pageDown(visible: readonly E[], extendSelection?: boolean): void;
     showTree(): boolean;
     showHidden(): boolean;
     sortKey(): string;
@@ -109,16 +109,20 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
 
     switch (action) {
       case "move_up":
-        deps.fileList.moveRow(deps.filteredEntries(), "up");
+        if (event.shiftKey) deps.fileList.moveRow(deps.filteredEntries(), "up", true);
+        else deps.fileList.moveRow(deps.filteredEntries(), "up");
         return true;
       case "move_down":
-        deps.fileList.moveRow(deps.filteredEntries(), "down");
+        if (event.shiftKey) deps.fileList.moveRow(deps.filteredEntries(), "down", true);
+        else deps.fileList.moveRow(deps.filteredEntries(), "down");
         return true;
       case "move_left":
-        deps.fileList.moveColumn(deps.filteredEntries(), "left", Math.max(deps.rowsPerColumn(), 1));
+        if (event.shiftKey) deps.fileList.moveColumn(deps.filteredEntries(), "left", Math.max(deps.rowsPerColumn(), 1), true);
+        else deps.fileList.moveColumn(deps.filteredEntries(), "left", Math.max(deps.rowsPerColumn(), 1));
         return true;
       case "move_right":
-        deps.fileList.moveColumn(deps.filteredEntries(), "right", Math.max(deps.rowsPerColumn(), 1));
+        if (event.shiftKey) deps.fileList.moveColumn(deps.filteredEntries(), "right", Math.max(deps.rowsPerColumn(), 1), true);
+        else deps.fileList.moveColumn(deps.filteredEntries(), "right", Math.max(deps.rowsPerColumn(), 1));
         return true;
       case "open": {
         const focused = deps.focusedEntry();
@@ -183,10 +187,12 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
         deps.fileList.clearSelection();
         return true;
       case "page_up":
-        deps.fileList.pageUp(deps.filteredEntries());
+        if (event.shiftKey) deps.fileList.pageUp(deps.filteredEntries(), true);
+        else deps.fileList.pageUp(deps.filteredEntries());
         return true;
       case "page_down":
-        deps.fileList.pageDown(deps.filteredEntries());
+        if (event.shiftKey) deps.fileList.pageDown(deps.filteredEntries(), true);
+        else deps.fileList.pageDown(deps.filteredEntries());
         return true;
       case "sort_menu":
         deps.sortMenu?.toggle();

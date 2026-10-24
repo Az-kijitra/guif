@@ -63,7 +63,7 @@
   }
   h2 {
     margin: 0 0 8px;
-    font-size: 13px;
+    font-size: var(--ui-font-size);
     font-weight: 600;
   }
   .body p {

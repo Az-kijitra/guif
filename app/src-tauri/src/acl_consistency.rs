@@ -71,6 +71,8 @@ const REQUIRED_COMMANDS: &[&str] = &[
     // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): "設定ファイルを開く" / "設定ファイルのチェック", main window only, no path / program / argument parameter.
     "settings_file_open",
     "settings_file_check",
+    // SPEC-0300-0023 (SPEC-0200-0001 §3.18.3 / §3.18.15 MUST-2): the resolved appearance for the main window; `appearance/commands.rs`.
+    "appearance_load",
 ];
 
 /// Removes `// ...` line comments (good enough for the three files here).
@@ -403,6 +405,8 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_ph
         // SPEC-0300-0022 (SPEC-0200-0001 §3.17.6): 28 -> 30. Still NO opener / shell permission (AC-1606).
         "allow-settings-file-open",
         "allow-settings-file-check",
+        // SPEC-0300-0023 (SPEC-0200-0001 §3.18.3): 30 -> 31, main window only. Still NO opener / shell permission.
+        "allow-appearance-load",
     ]
     .into_iter()
     .map(String::from)

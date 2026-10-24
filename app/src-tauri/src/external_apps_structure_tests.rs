@@ -379,7 +379,8 @@ fn the_new_modules_and_every_test_module_are_wired() {
     let shared = code_with_strings(&read(&src("shared/mod.rs")));
     assert!(shared.contains("mod e2e_scope_launch_tests;"), "shared/mod.rs must declare #[cfg(test)] `mod e2e_scope_launch_tests;`");
     let config = code_with_strings(&read(&src("config/mod.rs")));
-    assert!(config.contains("mod config_toml_external_apps_tests;"), "config/mod.rs must declare #[cfg(test)] `mod config_toml_external_apps_tests;`");
+    // SPEC-0300-0023: migrated (the filler `ui_theme` is the top-level `theme`) and renamed
+    assert!(config.contains("mod config_toml_external_apps_raw_tests;"), "config/mod.rs must declare #[cfg(test)] `mod config_toml_external_apps_raw_tests;`");
     let schema = code_with_strings(&read(&src("shared/schema/mod.rs")));
     assert!(schema.contains("pub mod external_apps;"), "shared/schema/mod.rs must declare `pub mod external_apps;`");
     assert!(src("shared/schema/external_apps.rs").is_file());

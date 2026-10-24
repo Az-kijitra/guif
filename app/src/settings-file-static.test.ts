@@ -56,7 +56,7 @@ describe("AC-1652: the check and the start-up share the pure evaluation; the che
   it("config-evaluate.ts calls the existing validation and sentence builders (no second implementation)", () => {
     const c = code("routes/config-evaluate.ts");
     for (const fn of [
-      "validateKeymapEntries(", "keyRules(", "buildRegistry(", "buildKeymapLoadNotice(", "buildThemeNotice(", "buildExternalAppsNotice(", "buildUnknownSettingsNotice(",
+      "validateKeymapEntries(", "keyRules(", "buildRegistry(", "buildKeymapLoadNotice(", "buildAppearanceNotice(", "buildUnusedNotice(", "buildExternalAppsNotice(", "buildUnknownSettingsNotice(",
     ]) {
       expect(c, fn).toContain(fn);
     }
@@ -75,7 +75,7 @@ describe("AC-1652: the check and the start-up share the pure evaluation; the che
   it("startup-wiring.ts uses evaluateConfig too, and no longer builds the sentences itself", () => {
     const c = code("routes/startup-wiring.ts");
     expect(c).toContain("evaluateConfig(");
-    expect(c).not.toMatch(/\bbuildKeymapLoadNotice\(|\bbuildThemeNotice\(|\bbuildExternalAppsNotice\(|\bvalidateKeymapEntries\(|\bbuildRegistry\(/);
+    expect(c).not.toMatch(/\bbuildKeymapLoadNotice\(|\bbuildAppearanceNotice\(|\bbuildExternalAppsNotice\(|\bvalidateKeymapEntries\(|\bbuildRegistry\(/);
   });
 
   it("startup-wiring.ts is the only writer of the settings state: hydrate is called there and nowhere in the check path", () => {

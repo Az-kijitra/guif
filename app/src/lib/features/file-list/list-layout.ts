@@ -1,276 +1,125 @@
-// SPEC-0300-0009 §3.2 (R-15~R-19) + SPEC-0300-0017 §8/§9 (R-946, R-955~R-959):
-// multi-column "vertical-first, column-flow" file list layout math. Pure
-// functions only -- no DOM/Svelte dependency, so they stay testable without a
-// rendering environment (SPEC-0400-0001 §3).
+// SPEC-0300-0023 R-1780 .. R-1783 / R-1791 .. R-1793 (replaces SPEC-0300-0017 R-955 / R-956 / R-958 / R-959); SPEC-0200-0001 §3.18.7:
+// the multi-column "vertical-first" list layout in `ch` units, with page-wise column switching (tuif's `start_col`).
+// Pure functions that take VALUES only -- no DOM, no Svelte, no appearanceState (§3.18.15 SHOULD-2).
 
 const FALLBACK_ROW_HEIGHT = 32;
-const NAME_COLUMN_MIN_WIDTH = 140;
-const SIZE_COLUMN_EXTRA_WIDTH = 72;
-const TIME_COLUMN_EXTRA_WIDTH = 140;
-// SPEC-0300-0017 R-956: 8px per extra item and a 32px column margin are part of minCol.
-const ITEM_GAP_IN_MIN_COL = 8;
-const COLUMN_MARGIN = 32;
 
-export const LIST_COL_GAP_PX = 16;
-export const LIST_BODY_PADDING_Y_PX = 6;
-export const COL_MAX_WIDTH_PX = 720;
-// R-946 / R-946-1: fixed widths of the size and time cells; the name column floor.
-export const SIZE_CELL_PX = 64;
-export const TIME_CELL_PX = 140;
-export const NAME_CELL_MIN_PX = 140;
-// R-945: row padding 6px left + right, gap 2px between items.
-const ROW_PADDING_X_TOTAL = 12;
-const ROW_ITEM_GAP = 2;
+// R-1781 / R-1782 / R-1783: the mark cell, the size cell and the time cell, in ch; the gap between cells is 1ch.
+const MARK_CELL_CH = 2;
+const SIZE_CELL_CH = 10;
+const TIME_CELL_CH = 16;
+// R-1792: the minimum column also counts the size and the time cell (tuif: min_col_width + 10 + 20).
+const SIZE_MIN_COL_EXTRA_CH = 10;
+const TIME_MIN_COL_EXTRA_CH = 20;
 
-export interface ListLayoutInput {
-  containerWidth: number;
-  containerHeight: number;
-  rowHeight: number | undefined;
-  entryCount: number;
-  showSize: boolean;
-  showTime: boolean;
-}
-
-export interface ListLayout {
-  rows: number;
-  cols: number;
-}
-
-export interface ColumnWidthInput {
-  showSize: boolean;
-  showTime: boolean;
-}
-
-export interface OverflowMarkersInput {
-  totalCols: number;
-  firstVisibleCol: number;
-  lastVisibleCol: number;
-}
-
-export interface OverflowMarkers {
-  showLeadingMarker: boolean;
-  showTrailingMarker: boolean;
-}
-
-export interface ScrollSnapInput {
-  scrollLeft: number;
-  colWidth: number;
-}
-
-// R-956 minCol: 140 (+72 size) (+140 time) + 8 x (items - 1) + 32 => 172 / 252 / 320 / 400.
-export function computeColumnWidth(input: ColumnWidthInput): number {
-  let width = NAME_COLUMN_MIN_WIDTH;
-  let items = 1;
-  if (input.showSize) {
-    width += SIZE_COLUMN_EXTRA_WIDTH;
-    items += 1;
-  }
-  if (input.showTime) {
-    width += TIME_COLUMN_EXTRA_WIDTH;
-    items += 1;
-  }
-  return width + ITEM_GAP_IN_MIN_COL * (items - 1) + COLUMN_MARGIN;
-}
-
-interface ColumnMath {
-  rows: number;
-  cols: number;
-  needed: number;
-  maxFit: number;
-  minCol: number;
-  colWidth: number;
-  pitch: number;
-  bodyWidth: number;
-  maxScrollLeft: number;
-}
-
-// R-956 (+ R-956-2). `bodyContentHeight` is H = the list body's content height.
-function columnMath(input: {
+export interface ColumnPageInput {
+  // The INNER width / height of the list body (no padding, no frame line).
   width: number;
-  bodyContentHeight: number;
-  rowHeight: number | undefined;
-  entryCount: number;
+  height: number;
+  rowHeight: number;
+  // px per ch (the advance of `0` in the list font).
+  ch: number;
+  count: number;
   showSize: boolean;
   showTime: boolean;
-}): ColumnMath {
-  const rowHeight = input.rowHeight ?? FALLBACK_ROW_HEIGHT;
-  const rows = Math.max(1, Math.floor(input.bodyContentHeight / rowHeight));
-  const minCol = computeColumnWidth({ showSize: input.showSize, showTime: input.showTime });
-  const needed = Math.max(1, Math.ceil(input.entryCount / rows));
-  const maxFit = Math.max(1, Math.floor((input.width + LIST_COL_GAP_PX) / (minCol + LIST_COL_GAP_PX)));
-  let cols = Math.min(maxFit, needed);
-  let colWidth: number;
-  if (input.width < minCol) {
-    // R-956-2: narrower than one minimum column -> one column as wide as the frame.
-    cols = 1;
-    colWidth = Math.max(0, input.width);
-  } else if (needed > maxFit) {
-    colWidth = minCol;
-  } else {
-    colWidth = Math.min(
-      COL_MAX_WIDTH_PX,
-      Math.max(minCol, Math.floor((input.width - LIST_COL_GAP_PX * (cols - 1)) / cols)),
-    );
-  }
-  const pitch = colWidth + LIST_COL_GAP_PX;
+  minColWidth: number;
+  // The position of the cursor in the (filtered) array; -1 when it is not shown.
+  focusIndex: number;
+}
+
+export interface ColumnPage {
+  rows: number;
+  totalCols: number;
+  // Columns per page.
+  cols: number;
+  startCol: number;
+  // Columns drawn on this page (the last page may have fewer than `cols`).
+  shown: number;
+  colWidths: number[];
+  // `entries.slice(first, last + 1)` is what is drawn.
+  first: number;
+  last: number;
+}
+
+// R-1792: the whole page computation.
+export function computeColumnPage(input: ColumnPageInput): ColumnPage {
+  const width = Math.max(0, input.width);
+  const rows = Math.max(1, Math.floor(input.height / input.rowHeight));
+  const totalCols = Math.max(1, Math.ceil(input.count / rows));
+  const minCol = (input.minColWidth + (input.showSize ? SIZE_MIN_COL_EXTRA_CH : 0) + (input.showTime ? TIME_MIN_COL_EXTRA_CH : 0)) * input.ch;
+  const maxFit = Math.max(1, minCol > 0 ? Math.floor(width / minCol) : 1);
+  const cols = Math.min(maxFit, totalCols);
+  const focusCol = input.focusIndex >= 0 && input.focusIndex < input.count ? Math.floor(input.focusIndex / rows) : 0;
+  const startCol = Math.floor(focusCol / cols) * cols;
+  const shown = Math.min(cols, totalCols - startCol);
+  // R-1793: the page's columns share the whole width; the remainder goes 1px each to the rightmost columns.
+  const base = Math.floor(width / shown);
+  const remainder = width - base * shown;
+  const colWidths = Array.from({ length: shown }, (_, i) => base + (i >= shown - remainder ? 1 : 0));
   return {
     rows,
+    totalCols,
     cols,
-    needed,
-    maxFit,
-    minCol,
-    colWidth,
-    pitch,
-    bodyWidth: cols * colWidth + LIST_COL_GAP_PX * (cols - 1),
-    maxScrollLeft: (needed - cols) * pitch,
+    startCol,
+    shown,
+    colWidths,
+    first: startCol * rows,
+    last: Math.min((startCol + shown) * rows - 1, input.count - 1),
   };
 }
-
-// R-16-1/R-16-2/R-17: rows/cols recomputed from container dimensions.
-// `containerHeight` is H (the list body's content height, MUST-110); see
-// computeListGeometry for the variant that takes the outer frame.
-export function computeListLayout(input: ListLayoutInput): ListLayout {
-  const m = columnMath({
-    width: input.containerWidth,
-    bodyContentHeight: input.containerHeight,
-    rowHeight: input.rowHeight,
-    entryCount: input.entryCount,
-    showSize: input.showSize,
-    showTime: input.showTime,
-  });
-  return { rows: m.rows, cols: m.cols };
-}
-
-// R-19: overflow markers appear when columns are scrolled out of view.
-export function computeOverflowMarkers(input: OverflowMarkersInput): OverflowMarkers {
-  return {
-    showLeadingMarker: input.firstVisibleCol > 0,
-    showTrailingMarker: input.lastVisibleCol < input.totalCols - 1,
-  };
-}
-
-// R-18: snap scroll position to the nearest column boundary.
-export function computeScrollSnapTarget(input: ScrollSnapInput): number {
-  if (input.colWidth <= 0) {
-    return 0;
-  }
-  return Math.round(input.scrollLeft / input.colWidth) * input.colWidth;
-}
-
-// ---------------------------------------------------------------------
-// Phase 9 (SPEC-0300-0017 R-946/R-949/R-955~R-959; SPEC-0200-0001 §3.8.6).
-// ---------------------------------------------------------------------
 
 export interface ListGeometryInput {
   frameWidth: number;
   frameHeight: number;
+  // undefined: the CSS variable could not be read (falls back to 32px).
   rowHeight: number | undefined;
   entryCount: number;
   showSize: boolean;
   showTime: boolean;
+  focusIndex: number;
+  minColWidth: number;
+  ch: number;
 }
 
-export interface ListGeometry {
-  rows: number;
-  cols: number;
-  needed: number;
-  maxFit: number;
-  minCol: number;
-  colWidth: number;
-  pitch: number;
+export interface ListGeometry extends ColumnPage {
   bodyWidth: number;
   bodyHeight: number;
-  maxScrollLeft: number;
 }
 
-export interface ScrollTargetInput {
-  focusIndex: number;
-  rows: number;
-  cols: number;
-  pitch: number;
-  scrollLeft: number;
-  needed: number;
-}
-
-export interface EdgeMarkerRowsInput {
-  scrollLeft: number;
-  pitch: number;
-  rows: number;
-  cols: number;
-  needed: number;
-  entryCount: number;
-}
-
-export interface NameCellWidthInput {
-  colWidth: number;
-  showSize: boolean;
-  showTime: boolean;
-}
-
-// R-956: W = frame clientWidth, H = frame clientHeight - 6 (body padding; subtracted only here).
-export function computeListGeometry(input: ListGeometryInput): ListGeometry {
+// The geometry the panel draws from: the page plus the body's size.
+export function buildGeometry(input: ListGeometryInput): ListGeometry {
   const rowHeight = input.rowHeight ?? FALLBACK_ROW_HEIGHT;
-  const m = columnMath({
+  const page = computeColumnPage({
     width: input.frameWidth,
-    bodyContentHeight: input.frameHeight - LIST_BODY_PADDING_Y_PX,
-    rowHeight: input.rowHeight,
-    entryCount: input.entryCount,
+    height: input.frameHeight,
+    rowHeight,
+    ch: input.ch,
+    count: input.entryCount,
     showSize: input.showSize,
     showTime: input.showTime,
+    minColWidth: input.minColWidth,
+    focusIndex: input.focusIndex,
   });
-  return { ...m, bodyHeight: m.rows * rowHeight };
+  return { ...page, bodyWidth: input.frameWidth, bodyHeight: page.rows * rowHeight };
 }
 
-// R-958: the smallest pitch multiple that shows the focus column in full;
-// unchanged when it is already visible. Clamped to [0, maxScrollLeft] (G7).
-export function computeScrollTargetForFocus(input: ScrollTargetInput): number {
-  if (input.pitch <= 0 || input.rows <= 0) return 0;
-  const maxScroll = Math.max(0, (input.needed - input.cols) * input.pitch);
-  const col = Math.floor(Math.max(0, input.focusIndex) / input.rows);
-  const first = Math.round(input.scrollLeft / input.pitch);
-  let target = input.scrollLeft;
-  if (col < first) {
-    target = col * input.pitch;
-  } else if (col > first + input.cols - 1) {
-    target = (col - input.cols + 1) * input.pitch;
-  }
-  return Math.min(maxScroll, Math.max(0, target));
-}
-
-// R-959: head rows of the leftmost / rightmost visible columns, when columns are hidden.
-export function computeEdgeMarkerRows(input: EdgeMarkerRowsInput): { leftIndex: number | null; rightIndex: number | null } {
-  if (input.entryCount <= 0 || input.pitch <= 0) return { leftIndex: null, rightIndex: null };
-  const first = Math.max(0, Math.round(input.scrollLeft / input.pitch));
-  const last = Math.min(input.needed - 1, first + input.cols - 1);
-  return {
-    leftIndex: first > 0 ? first * input.rows : null,
-    rightIndex: last < input.needed - 1 ? last * input.rows : null,
-  };
-}
-
-// R-946 (+ R-956-2 note): the name column drops its 140px floor in a narrow list.
-export function rowGridTemplate(showSize: boolean, showTime: boolean, colWidth?: number): string {
-  const minCol = computeColumnWidth({ showSize, showTime });
-  const narrow = colWidth !== undefined && colWidth < minCol;
-  const parts = [narrow ? "minmax(0, 1fr)" : `minmax(${NAME_CELL_MIN_PX}px, 1fr)`];
-  if (showSize) parts.push(`${SIZE_CELL_PX}px`);
-  if (showTime) parts.push(`${TIME_CELL_PX}px`);
+// R-1783: the row is `2ch minmax(0, 1fr) [10ch] [16ch]`.
+export function rowGridTemplate(showSize: boolean, showTime: boolean): string {
+  const parts = [`${MARK_CELL_CH}ch`, "minmax(0, 1fr)"];
+  if (showSize) parts.push(`${SIZE_CELL_CH}ch`);
+  if (showTime) parts.push(`${TIME_CELL_CH}ch`);
   return parts.join(" ");
 }
 
-// Design §3.8.5 / R-956-2: width of the name cell (never negative).
-export function computeNameCellWidth(input: NameCellWidthInput): number {
-  const items = 1 + (input.showSize ? 1 : 0) + (input.showTime ? 1 : 0);
-  const width =
-    input.colWidth -
-    ROW_PADDING_X_TOTAL -
-    ROW_ITEM_GAP * (items - 1) -
-    (input.showSize ? SIZE_CELL_PX : 0) -
-    (input.showTime ? TIME_CELL_PX : 0);
-  return Math.max(0, width);
+// R-1788: the width the name may use (never negative): the column minus the other cells and the 1ch gaps between cells.
+export function computeNameCellWidth(input: { colWidth: number; ch: number; showSize: boolean; showTime: boolean; separator?: boolean }): number {
+  const cells = MARK_CELL_CH + (input.showSize ? SIZE_CELL_CH : 0) + (input.showTime ? TIME_CELL_CH : 0);
+  const gaps = 1 + (input.showSize ? 1 : 0) + (input.showTime ? 1 : 0);
+  // A column with a vertical rule (`.sep`, border-right 1px) has 1px less inside.
+  return Math.max(0, input.colWidth - (input.separator ? 1 : 0) - input.ch * (cells + gaps));
 }
 
-// SPEC-0200-0001 §3.8.1: parses a CSS length like "28px" (undefined => the caller falls back).
+// SPEC-0200-0001 §3.8.1: parses a CSS length like "21px" (undefined => the caller falls back).
 export function parseRowHeightPx(raw: string): number | undefined {
   const m = /^\s*(\d+(?:\.\d+)?)px\s*$/.exec(raw);
   return m ? Number(m[1]) : undefined;

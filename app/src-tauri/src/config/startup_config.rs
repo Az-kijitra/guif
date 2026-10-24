@@ -14,7 +14,6 @@ use tauri::AppHandle;
 use super::config_toml::{self, ConfigTomlLoadResult, KeymapParseError, KeymapRawLoadResult};
 use super::paths;
 use crate::shared::schema::config_lines::UnknownSetting;
-use crate::shared::schema::ui_theme::{interpret_ui_theme, ThemeResolution, ThemeSetting};
 
 /// The single place that resolves the `config.toml` path (SHOULD-183 (a), M-1 of SPEC-0200-0001 §3.17): `StartupConfig::load`,
 /// `config_bridge/open.rs` and `config_bridge/sample_startup.rs` (whose folder is the parent of this path) all go through it.
@@ -26,7 +25,6 @@ pub fn locate(app: &AppHandle) -> io::Result<PathBuf> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupConfig {
     pub loaded: ConfigTomlLoadResult,
-    pub theme: ThemeResolution,
 }
 
 impl StartupConfig {
@@ -44,8 +42,7 @@ impl StartupConfig {
     }
 
     pub fn from_loaded(loaded: ConfigTomlLoadResult) -> Self {
-        let theme = interpret_ui_theme(&loaded.ui_theme);
-        Self { loaded, theme }
+        Self { loaded }
     }
 
     /// R-917-5 (2) without a file read: the whole file counts as unreadable and the theme follows the OS. It is `present`
@@ -80,14 +77,6 @@ impl StartupConfig {
                 line: e.line,
                 whole_file: e.whole_file,
             }),
-            ui_theme: match self.theme.setting {
-                ThemeSetting::System => "system",
-                ThemeSetting::Light => "light",
-                ThemeSetting::Dark => "dark",
-            }
-            .to_string(),
-            ui_theme_invalid: self.theme.invalid,
-            ui_theme_line: lines.ui_theme,
             present: self.loaded.present,
             unknown_settings: self.loaded.unknown.iter().map(UnknownSettingDto::from).collect(),
         }
@@ -117,6 +106,7 @@ pub struct KeymapParseErrorDto {
 pub struct UnknownSettingDto {
     pub kind: &'static str,
     pub name: String,
+    pub table: Option<String>,
     pub position: Option<usize>,
     pub line: Option<u32>,
 }
@@ -124,9 +114,10 @@ pub struct UnknownSettingDto {
 impl From<&UnknownSetting> for UnknownSettingDto {
     fn from(setting: &UnknownSetting) -> Self {
         match setting {
-            UnknownSetting::Top { name, line } => Self { kind: "key", name: name.clone(), position: None, line: *line },
+            UnknownSetting::Top { name, line } => Self { kind: "key", name: name.clone(), table: None, position: None, line: *line },
+            UnknownSetting::TableKey { table, name, line } => Self { kind: "tableKey", name: name.clone(), table: Some(table.clone()), position: None, line: *line },
             UnknownSetting::AppField { position, name, line } => {
-                Self { kind: "appField", name: name.clone(), position: Some(*position), line: *line }
+                Self { kind: "appField", name: name.clone(), table: None, position: Some(*position), line: *line }
             }
         }
     }
@@ -139,11 +130,7 @@ impl From<&UnknownSetting> for UnknownSettingDto {
 #[serde(rename_all = "camelCase")]
 pub struct KeymapLoadResultDto {
     pub entries: Vec<KeymapRawEntryDto>,
-    pub ui_theme: String,
-    pub ui_theme_invalid: bool,
     pub parse_error: Option<KeymapParseErrorDto>,
-    /// R-1642 (W-33): the line of `ui_theme`.
-    pub ui_theme_line: Option<u32>,
     /// R-1654 (W-AB): the file was there.
     pub present: bool,
     pub unknown_settings: Vec<UnknownSettingDto>,

@@ -106,6 +106,46 @@ fn ac1606_no_capability_gains_an_opener_or_shell_permission() {
 #[test]
 fn the_three_places_agree_on_the_command_count() {
     let handler = handler_commands(LIB_RS);
-    assert_eq!(handler.len(), 34, "generate_handler! has 34 commands (32 + the two settings_file commands)");
+    assert_eq!(handler.len(), 35, "generate_handler! has 35 commands (32 + the two settings_file commands + appearance_load)");
     assert_eq!(manifest_commands(BUILD_RS), handler, "build.rs lists exactly the handler's commands");
+}
+
+// =============================================================================================== SPEC-0300-0023: appearance_load
+
+// SPEC-0200-0001 §3.18.3 / §3.18.10 (the row "acl_consistency*"): `appearance_load` is defined in `appearance/commands.rs` (NOT in `config_bridge/`, whose
+// six files stay fixed), registered in all three places, granted to the main window only, and takes no argument of its own.
+// TDD (unit-test-writer, 2026-10-24): RED until code-generator adds `appearance/commands.rs`, `appearance::commands::appearance_load` in
+// `generate_handler!`, `"appearance_load"` in `build.rs` and `allow-appearance-load` in `capabilities/default.json`.
+
+fn appearance_commands() -> BTreeSet<String> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/appearance/commands.rs");
+    let source = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e} (RED until implemented)", path.display()));
+    let production = source.split("#[cfg(test)]").next().unwrap_or(&source).to_string();
+    let cleaned = strip_line_comments(&production);
+    let mut defined = BTreeSet::new();
+    let mut parts = cleaned.split("#[tauri::command");
+    parts.next();
+    for chunk in parts {
+        let after_attr = chunk.split(']').nth(1).unwrap_or("");
+        if let Some(at) = after_attr.find("fn ") {
+            defined.insert(after_attr[at + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect());
+        }
+    }
+    defined
+}
+
+#[test]
+fn must64_appearance_commands_defines_exactly_appearance_load_and_it_is_registered_by_its_path() {
+    assert_eq!(appearance_commands(), set(&["appearance_load"]));
+    let handler = handler_commands(LIB_RS);
+    assert!(handler.contains("appearance_load"), "defined but not in generate_handler!");
+    assert!(strip_line_comments(LIB_RS).contains("appearance::commands::appearance_load"), "generate_handler! lists appearance::commands::appearance_load");
+}
+
+#[test]
+fn must64_build_rs_and_the_main_capability_know_appearance_load_and_the_viewer_does_not() {
+    assert!(manifest_commands(BUILD_RS).contains("appearance_load"), "missing from build.rs AppManifest::commands");
+    assert!(capability_allows(CAPABILITY_JSON).contains("allow-appearance-load"), "missing from capabilities/default.json");
+    assert!(!all_permissions(VIEWER_CAPABILITY_JSON).contains("allow-appearance-load"), "the viewer gets its colours from the initialization script (SPEC-0200-0001 §3.18.5), not from this command");
+    assert!(all_permissions(CAPABILITY_JSON).contains("allow-appearance-load"));
 }

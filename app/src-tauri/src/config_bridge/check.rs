@@ -13,6 +13,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Window};
 
 use super::evaluate::{snapshot, snapshot_at};
+use crate::appearance::dto::{appearance_dto, AppearanceDto};
 use crate::config::startup_config::KeymapLoadResultDto;
 use crate::external_apps::commands::{check_main_window, registry_dto, ExternalAppsDto};
 
@@ -22,18 +23,19 @@ use crate::external_apps::commands::{check_main_window, registry_dto, ExternalAp
 pub struct ConfigCheckDto {
     pub keymap: KeymapLoadResultDto,
     pub external_apps: ExternalAppsDto,
+    pub appearance: AppearanceDto,
 }
 
 /// The pure core of the command, on an explicit path and environment.
 pub fn check_at(path: &Path, env: &dyn Fn(&str) -> Option<OsString>, path_var: Option<OsString>) -> ConfigCheckDto {
-    let (startup, registry) = snapshot_at(path, env, path_var);
-    ConfigCheckDto { keymap: startup.to_dto(), external_apps: registry_dto(&registry) }
+    let (startup, registry, appearance) = snapshot_at(path, env, path_var);
+    ConfigCheckDto { keymap: startup.to_dto(), external_apps: registry_dto(&registry), appearance: appearance_dto(&appearance) }
 }
 
 /// R-1555 / R-1673: the main window only. No parameter names a path, a program or an argument (R-1605).
 #[tauri::command(async)]
 pub fn settings_file_check(window: Window, app: AppHandle) -> Result<ConfigCheckDto, String> {
     check_main_window(window.label()).map_err(|_| "the calling window is not allowed".to_string())?;
-    let (startup, registry) = snapshot(&app);
-    Ok(ConfigCheckDto { keymap: startup.to_dto(), external_apps: registry_dto(&registry) })
+    let (startup, registry, appearance) = snapshot(&app);
+    Ok(ConfigCheckDto { keymap: startup.to_dto(), external_apps: registry_dto(&registry), appearance: appearance_dto(&appearance) })
 }

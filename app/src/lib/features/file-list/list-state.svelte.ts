@@ -35,6 +35,7 @@ import {
 } from "./selection";
 import { resolveContextClick, resolveRestoredSelection, resolveRowClick } from "./click";
 import {
+  extendRangeSelection,
   moveFocusPage,
   moveFocusRow,
   moveFocusColumn,
@@ -43,7 +44,7 @@ import {
   type RowDirection,
   type ColumnDirection,
 } from "./navigation";
-import { computeListGeometry, type ListGeometry } from "./list-layout";
+import { buildGeometry, type ListGeometry } from "./list-layout";
 import { INITIAL_UI_STATE } from "./aria";
 import { SORT_KEYS } from "./sort";
 import { uiStatePersistence } from "./ui-state-persistence";
@@ -237,9 +238,28 @@ export function createFileListState() {
     return entries[focusedIndex];
   }
 
+  function updateMovementSelection(
+    visible: readonly FsEntry[],
+    previousPath: string | null,
+    targetPath: string,
+    extendSelection?: boolean,
+  ): void {
+    if (extendSelection) {
+      if (anchor === null && previousPath !== null) {
+        anchor = previousPath;
+      }
+      const currentAnchor = anchor ?? targetPath;
+      anchor = currentAnchor;
+      const visiblePaths = visible.map((e) => e.path);
+      selected = extendRangeSelection(visiblePaths, currentAnchor, targetPath);
+    } else {
+      anchor = targetPath;
+    }
+  }
+
   // §3.1.4-2 (MUST-44) step 1: an empty `visible` makes every movement/
   // selection wrapper an immediate no-op.
-  function moveRow(visible: readonly FsEntry[], direction: RowDirection): void {
+  function moveRow(visible: readonly FsEntry[], direction: RowDirection, extendSelection?: boolean): void {
     if (visible.length === 0) return;
     const visualIndex = toVisualIndex(focusedIndex, entries, visible);
     // §3.1.3: a -1 (currently-hidden focus) falls back to visual index 0 as
@@ -249,10 +269,15 @@ export function createFileListState() {
     const nextReal = toRealIndex(nextVisual, entries, visible);
     // §3.1.4-2 (MUST-44) step 3: never write an unresolved (-1) index.
     if (nextReal === -1) return;
+    const previousPath = focusedEntry()?.path ?? null;
     focusedIndex = nextReal;
+    const targetPath = entries[nextReal]?.path;
+    if (targetPath !== undefined) {
+      updateMovementSelection(visible, previousPath, targetPath, extendSelection);
+    }
   }
 
-  function moveColumn(visible: readonly FsEntry[], direction: ColumnDirection, rowsPerColumn: number): void {
+  function moveColumn(visible: readonly FsEntry[], direction: ColumnDirection, rowsPerColumn: number, extendSelection?: boolean): void {
     if (visible.length === 0) return;
     const visualIndex = toVisualIndex(focusedIndex, entries, visible);
     const safeVisualIndex = visualIndex === -1 ? 0 : visualIndex;
@@ -261,7 +286,12 @@ export function createFileListState() {
     const nextVisual = moveFocusColumn(safeVisualIndex, direction, rowsPerColumn, visible.length);
     const nextReal = toRealIndex(nextVisual, entries, visible);
     if (nextReal === -1) return;
+    const previousPath = focusedEntry()?.path ?? null;
     focusedIndex = nextReal;
+    const targetPath = entries[nextReal]?.path;
+    if (targetPath !== undefined) {
+      updateMovementSelection(visible, previousPath, targetPath, extendSelection);
+    }
   }
 
   // §3.1.4-2 (MUST-44) step 2: a selection-changing operation no-ops when the
@@ -382,17 +412,9 @@ export function createFileListState() {
     return { status: "noop" };
   }
 
-  // SPEC-0300-0017 R-956 / SPEC-0200-0001 §3.8.6: the full geometry from the file list
-  // FRAME's size. `entryCount` defaults to all entries; routes passes the search-filtered
-  // count (file-list never imports search, §3.1.2 path 2). `rowHeight` comes from
-  // `--list-row-height` (undefined => the 32px fallback).
-  function layout(
-    frameWidth: number,
-    frameHeight: number,
-    entryCount: number = entries.length,
-    rowHeight: number | undefined = undefined,
-  ): ListGeometry {
-    return computeListGeometry({ frameWidth, frameHeight, rowHeight, entryCount, showSize, showTime });
+  // SPEC-0300-0023 R-1792 / §3.18.7: the page geometry from the body's INNER size; routes passes the filtered count, the cursor position and the appearance numbers.
+  function layout(w: number, h: number, count: number, rowHeight: number | undefined, focusIndex: number, minColWidth: number, ch: number): ListGeometry {
+    return buildGeometry({ frameWidth: w, frameHeight: h, rowHeight, entryCount: count, showSize, showTime, focusIndex, minColWidth, ch });
   }
 
   // SPEC-0200-0001 §3.6.6: toggles flip a flag and request a save; the
@@ -452,22 +474,27 @@ export function createFileListState() {
     pageRows = Math.max(1, rows);
   }
 
-  function pageUp(visible: readonly FsEntry[]): void {
-    movePage(visible, "up");
+  function pageUp(visible: readonly FsEntry[], extendSelection?: boolean): void {
+    movePage(visible, "up", extendSelection);
   }
 
-  function pageDown(visible: readonly FsEntry[]): void {
-    movePage(visible, "down");
+  function pageDown(visible: readonly FsEntry[], extendSelection?: boolean): void {
+    movePage(visible, "down", extendSelection);
   }
 
-  function movePage(visible: readonly FsEntry[], direction: "up" | "down"): void {
+  function movePage(visible: readonly FsEntry[], direction: "up" | "down", extendSelection?: boolean): void {
     if (visible.length === 0) return;
     const visualIndex = toVisualIndex(focusedIndex, entries, visible);
     const safeVisualIndex = visualIndex === -1 ? 0 : visualIndex;
     const nextVisual = moveFocusPage(visible, safeVisualIndex, direction, pageRows);
     const nextReal = toRealIndex(nextVisual, entries, visible);
     if (nextReal === -1) return;
+    const previousPath = focusedEntry()?.path ?? null;
     focusedIndex = nextReal;
+    const targetPath = entries[nextReal]?.path;
+    if (targetPath !== undefined) {
+      updateMovementSelection(visible, previousPath, targetPath, extendSelection);
+    }
   }
 
   function onUiStateChange(callback: () => void): void {
@@ -501,6 +528,9 @@ export function createFileListState() {
     },
     get focusedIndex() {
       return focusedIndex;
+    },
+    get focusedPath() {
+      return entries[focusedIndex]?.path ?? "";
     },
     get loading() {
       return loading;

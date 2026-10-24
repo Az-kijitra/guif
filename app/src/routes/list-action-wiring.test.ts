@@ -161,6 +161,15 @@ describe("createListActionHandler: existing cases keep working (regression of th
     expect(deps.fileList.moveRow).toHaveBeenNthCalledWith(2, filtered, "down");
   });
 
+  it("move_up / move_down with Shift => fileList.moveRow(filteredEntries, 'up'/'down', true) (R-60)", () => {
+    const { deps, filtered } = makeDeps();
+    const handler = createListActionHandler(deps as never);
+    expect(handler("move_up", ev({ shiftKey: true }))).toBe(true);
+    expect(handler("move_down", ev({ shiftKey: true }))).toBe(true);
+    expect(deps.fileList.moveRow).toHaveBeenNthCalledWith(1, filtered, "up", true);
+    expect(deps.fileList.moveRow).toHaveBeenNthCalledWith(2, filtered, "down", true);
+  });
+
   it("move_left / move_right => moveColumn(filteredEntries, dir, rowsPerColumn) with a floor of 1", () => {
     const { deps, filtered } = makeDeps({ rowsPerColumn: () => 0 });
     const handler = createListActionHandler(deps as never);

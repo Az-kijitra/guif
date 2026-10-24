@@ -74,8 +74,10 @@
     max-height: 240px;
     overflow-y: auto;
     box-sizing: border-box;
-    border: 1px solid var(--ui-border);
+    /* SPEC-0300-0023 R-1812: a pop-up list with the active frame colour. */
+    border: 1px solid var(--ui-border-active);
     background: var(--ui-surface);
+    color: var(--ui-fg);
   }
   .nav-history-row {
     display: flex;
@@ -86,11 +88,14 @@
   }
   .nav-history-row.selected {
     background: var(--ui-hover);
+    color: var(--ui-cursor-fg);
+    font-weight: bold;
   }
   .path {
     flex: 1;
     min-width: 0;
-    font: 12px var(--ui-font-mono);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-font-size);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

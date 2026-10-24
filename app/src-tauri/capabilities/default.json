@@ -35,6 +35,7 @@
     "allow-external-app-launch",
     "allow-settings-file-open",
     "allow-settings-file-check",
+    "allow-appearance-load",
     "core:window:allow-close",
     "core:window:allow-destroy"
   ]

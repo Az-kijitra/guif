@@ -44,7 +44,8 @@ use std::path::Path;
 use super::config_toml_lines::{index_full, line_of};
 use crate::shared::schema::config_lines::{ConfigLines, UnknownSetting};
 use crate::shared::schema::external_apps::{ExternalAppsRaw, RawExternalApp, RawValue};
-use crate::shared::schema::ui_theme::UiThemeRaw;
+use crate::shared::schema::appearance_raw::RawAppearance;
+use crate::shared::schema::config_lines::KNOWN_TOP_KEYS;
 
 /// One raw `input_keymap_custom` table entry, before any validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +77,7 @@ pub struct KeymapRawLoadResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigTomlLoadResult {
     pub keymap: KeymapRawLoadResult,
-    pub ui_theme: UiThemeRaw,
+    pub appearance: RawAppearance,
     /// SPEC-0300-0021 R-1500: the top-level `external_apps`, RAW (R-1503: judged by `external_apps/registry.rs`).
     pub external_apps: ExternalAppsRaw,
     /// R-1644 / R-1654: the file was there (everything but `NotFound`; an unreadable file IS present: W-31, not "no file").
@@ -91,7 +92,7 @@ impl Default for ConfigTomlLoadResult {
     fn default() -> Self {
         Self {
             keymap: KeymapRawLoadResult::default(),
-            ui_theme: UiThemeRaw::Missing,
+            appearance: RawAppearance::default(),
             external_apps: ExternalAppsRaw::Missing,
             present: false,
             lines: ConfigLines::default(),
@@ -120,7 +121,7 @@ fn line_number_from_span(err: &toml::de::Error, text: &str) -> Option<u32> {
 
 /// R-1643 without positions (only when the position-keeping parse failed although `toml::Value` succeeded): alphabetical.
 fn unknown_from_value(table: &toml::value::Table) -> Vec<UnknownSetting> {
-    const KNOWN: [&str; 3] = ["ui_theme", "input_keymap_custom", "external_apps"];
+    const KNOWN: [&str; 6] = KNOWN_TOP_KEYS;
     const APP_FIELDS: [&str; 5] = ["name", "program", "args", "args_for_file", "key"];
     let mut unknown: Vec<UnknownSetting> =
         table.keys().filter(|k| !KNOWN.contains(&k.as_str())).map(|k| UnknownSetting::Top { name: k.clone(), line: None }).collect();
@@ -133,15 +134,6 @@ fn unknown_from_value(table: &toml::value::Table) -> Vec<UnknownSetting> {
         }
     }
     unknown
-}
-
-/// The top-level `ui_theme` as it is, unjudged (R-917-3).
-fn raw_ui_theme(table: &toml::value::Table) -> UiThemeRaw {
-    match table.get("ui_theme") {
-        None => UiThemeRaw::Missing,
-        Some(toml::Value::String(s)) => UiThemeRaw::Str(s.clone()),
-        Some(_) => UiThemeRaw::WrongType,
-    }
 }
 
 fn raw_string(table: &toml::value::Table, key: &str) -> RawValue<String> {
@@ -210,7 +202,6 @@ pub fn load(path: &Path) -> ConfigTomlLoadResult {
     };
 
     let Some(table) = value.as_table() else { return ConfigTomlLoadResult { present: true, ..ConfigTomlLoadResult::default() } };
-    let ui_theme = raw_ui_theme(table);
     // R-1642 / R-1643: a second parse of the SAME text (the file is not read again) for the lines and the unknown settings.
     let (lines, unknown) = match index_full(text) {
         Some(indexed) => (indexed.lines, indexed.unknown),
@@ -238,5 +229,6 @@ pub fn load(path: &Path) -> ConfigTomlLoadResult {
             }),
         },
     };
-    ConfigTomlLoadResult { keymap, ui_theme, external_apps: raw_external_apps(table), present: true, lines, unknown }
+    let appearance = super::appearance_raw::read(table, &lines);
+    ConfigTomlLoadResult { keymap, appearance, external_apps: raw_external_apps(table), present: true, lines, unknown }
 }
