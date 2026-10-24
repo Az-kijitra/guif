@@ -7,7 +7,7 @@
 
 import { matchesMenuBarActivation, type MenuBarActivationKind } from "./menubar-activation";
 import { ACTION_IDS, DEFAULT_KEYMAP } from "./keymap-defaults";
-import { matchesAction, resolveBinding, type KeydownLikeEvent } from "./keymap-resolve";
+import { matchesAction, matchesActionExact, resolveBinding, type KeydownLikeEvent } from "./keymap-resolve";
 
 // R-10: a single capture-phase `keydown` listener on the given target
 // (normally `window`), per R-10/AC-01. Individual components never register
@@ -25,8 +25,36 @@ export function resolveActionForKey(
   event: KeydownLikeEvent,
   customOverrides: Record<string, string>,
 ): string | null {
-
+  // Prioritize explicit custom overrides over default bindings so remapped keys win
+  const orderedActionIds: string[] = [];
   for (const actionId of ACTION_IDS) {
+    if (actionId in customOverrides) {
+      orderedActionIds.push(actionId);
+    }
+  }
+  for (const actionId of ACTION_IDS) {
+    if (!(actionId in customOverrides)) {
+      orderedActionIds.push(actionId);
+    }
+  }
+
+  // Pass 1: exact matches (e.g. Shift+V explicitly bound to select_all wins over V bound to select_toggle)
+  for (const actionId of orderedActionIds) {
+    const defaultBinding = DEFAULT_KEYMAP[actionId];
+    if (defaultBinding === undefined) {
+      continue;
+    }
+    const bindings = resolveBinding({ customOverrides, actionId, defaultBinding });
+    if (bindings.length === 0) {
+      continue;
+    }
+    if (matchesActionExact(event, bindings)) {
+      return actionId;
+    }
+  }
+
+  // Pass 2: fallback match (e.g. R-34 Shift-only rescue when no action explicitly matched)
+  for (const actionId of orderedActionIds) {
     const defaultBinding = DEFAULT_KEYMAP[actionId];
     if (defaultBinding === undefined) {
       continue;
@@ -66,6 +94,7 @@ export const TREE_HANDLED_ACTIONS = [
   "move_right",
   "move_left",
   "open",
+  "select_toggle",
 ] as const;
 
 export function isTreeHandledAction(actionId: string): boolean {

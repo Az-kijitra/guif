@@ -24,6 +24,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     handleMoveRight: vi.fn(),
     handleMoveLeft: vi.fn(),
     selectFocused: vi.fn(() => ({ path: "C:\\A\\B" }) as { path: string } | null),
+    toggleExpand: vi.fn(),
   };
   const deps = {
     tree,
@@ -117,8 +118,26 @@ describe("createTreeActionHandler: Shift+Enter is a no-op (SPEC-0300-0010 R-15-1
   });
 });
 
+describe("createTreeActionHandler: select_toggle (Space key expands/collapses focused node)", () => {
+  it("select_toggle calls tree.toggleExpand on the focused node", () => {
+    const { deps, tree } = makeDeps();
+    tree.selectFocused = vi.fn(() => ({ path: "C:\\A\\B" }));
+    const onTreeAction = createTreeActionHandler(deps as never);
+    expect(onTreeAction("select_toggle", ev())).toBe(true);
+    expect(tree.toggleExpand).toHaveBeenCalledWith("C:\\A\\B");
+  });
+
+  it("select_toggle with no focused node is consumed without calling toggleExpand", () => {
+    const { deps, tree } = makeDeps();
+    tree.selectFocused = vi.fn(() => null);
+    const onTreeAction = createTreeActionHandler(deps as never);
+    expect(onTreeAction("select_toggle", ev())).toBe(true);
+    expect(tree.toggleExpand).not.toHaveBeenCalled();
+  });
+});
+
 describe("createTreeActionHandler: unknown action falls through (SHOULD-125: no file-operation cases at all)", () => {
-  it("an action outside the 7 tree-handled ones returns false", () => {
+  it("an action outside the tree-handled ones returns false", () => {
     const { deps } = makeDeps();
     const onTreeAction = createTreeActionHandler(deps as never);
     expect(onTreeAction("delete", ev())).toBe(false);

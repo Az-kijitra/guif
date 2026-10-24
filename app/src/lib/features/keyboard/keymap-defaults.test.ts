@@ -103,22 +103,22 @@ describe("ACTION_IDS (SPEC-0300-0010 第8版 R-21, R-21-2)", () => {
   });
 });
 
-describe("DEFAULT_KEYMAP (SPEC-0300-0010 第8版 R-20-1, R-21, §4.2, P1 actions)", () => {
+describe("DEFAULT_KEYMAP (Windows-like as primary, Vim-like as secondary per tuif)", () => {
   const expectedP1: Record<string, string> = {
-    move_up: "ArrowUp",
-    move_down: "ArrowDown",
-    move_left: "ArrowLeft",
-    move_right: "ArrowRight",
-    page_up: "PageUp",
-    page_down: "PageDown",
-    select_toggle: "Space",
-    select_all: "Ctrl+A",
+    move_up: "ArrowUp,K",
+    move_down: "ArrowDown,J",
+    move_left: "ArrowLeft,H",
+    move_right: "ArrowRight,L",
+    page_up: "PageUp,Ctrl+U",
+    page_down: "PageDown,Ctrl+D",
+    select_toggle: "Space,V",
+    select_all: "Ctrl+A,Shift+V",
     clear_selection: "Escape",
     open: "Enter",
-    go_parent: "Backspace",
+    go_parent: "Backspace,Minus",
     exit: "Ctrl+Q",
-    toggle_hidden: "Ctrl+H",
-    toggle_tree: "Ctrl+Shift+B",
+    toggle_hidden: "Ctrl+H,Dot",
+    toggle_tree: "Ctrl+Shift+B,T",
     sort_menu: "S",
     toggle_size: "Ctrl+Shift+S",
     toggle_time: "Ctrl+Shift+T",
@@ -138,14 +138,14 @@ describe("DEFAULT_KEYMAP (SPEC-0300-0010 第8版 R-20-1, R-21, §4.2, P1 actions
     expect(DEFAULT_KEYMAP.settings).toBe("Ctrl+Comma");
   });
 
-  it("Phase 2 defaults (SPEC-0300-0011 R-14/R-56-4-1/R-72-1): copy/cut/paste/delete/rename/new_file/new_folder", () => {
-    expect(DEFAULT_KEYMAP.copy).toBe("Ctrl+C");
-    expect(DEFAULT_KEYMAP.cut).toBe("Ctrl+X");
-    expect(DEFAULT_KEYMAP.paste).toBe("Ctrl+V");
-    expect(DEFAULT_KEYMAP.delete).toBe("Delete");
-    expect(DEFAULT_KEYMAP.rename).toBe("F2");
-    expect(DEFAULT_KEYMAP.new_file).toBe("Ctrl+N");
-    expect(DEFAULT_KEYMAP.new_folder).toBe("Ctrl+Shift+N");
+  it("Phase 2 defaults with Vim-like secondaries: copy/cut/paste/delete/rename/new_file/new_folder", () => {
+    expect(DEFAULT_KEYMAP.copy).toBe("Ctrl+C,Y");
+    expect(DEFAULT_KEYMAP.cut).toBe("Ctrl+X,X");
+    expect(DEFAULT_KEYMAP.paste).toBe("Ctrl+V,P");
+    expect(DEFAULT_KEYMAP.delete).toBe("Delete,D");
+    expect(DEFAULT_KEYMAP.rename).toBe("F2,R");
+    expect(DEFAULT_KEYMAP.new_file).toBe("Ctrl+N,A");
+    expect(DEFAULT_KEYMAP.new_folder).toBe("Ctrl+Shift+N,Shift+A");
   });
 
   it("does not define a binding for jump_add_url (removed, §4.4)", () => {
@@ -164,19 +164,17 @@ describe("DEFAULT_KEYMAP (SPEC-0300-0010 第8版 R-20-1, R-21, §4.2, P1 actions
   });
 });
 
-describe("AC-55: H/J/K/L are NOT bound by default (SPEC-0300-0010 R-20, R-20-1)", () => {
-  it("no action is bound to plain H/J/K/L (nor the former page keys Ctrl+U / Ctrl+D)", () => {
-    const values = Object.values(DEFAULT_KEYMAP);
-    for (const k of ["H", "J", "K", "L", "Ctrl+U", "Ctrl+D"]) {
-      expect(values).not.toContain(k);
-    }
+describe("Vim-like navigation keys (H/J/K/L etc.) are supported as secondary keys", () => {
+  it("move actions have Windows arrow keys first and Vim hjkl second", () => {
+    expect(DEFAULT_KEYMAP.move_left).toBe("ArrowLeft,H");
+    expect(DEFAULT_KEYMAP.move_right).toBe("ArrowRight,L");
+    expect(DEFAULT_KEYMAP.move_up).toBe("ArrowUp,K");
+    expect(DEFAULT_KEYMAP.move_down).toBe("ArrowDown,J");
   });
 
-  it("move_* defaults are the arrow keys only", () => {
-    expect(DEFAULT_KEYMAP.move_left).toBe("ArrowLeft");
-    expect(DEFAULT_KEYMAP.move_right).toBe("ArrowRight");
-    expect(DEFAULT_KEYMAP.move_up).toBe("ArrowUp");
-    expect(DEFAULT_KEYMAP.move_down).toBe("ArrowDown");
+  it("page actions include PageUp/Down and Ctrl+U/D", () => {
+    expect(DEFAULT_KEYMAP.page_up).toBe("PageUp,Ctrl+U");
+    expect(DEFAULT_KEYMAP.page_down).toBe("PageDown,Ctrl+D");
   });
 });
 

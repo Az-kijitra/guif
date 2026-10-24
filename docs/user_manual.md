@@ -130,44 +130,47 @@ Ctrl、Alt、Meta のいずれかを伴う矢印キー、PageUp / PageDown、Hom
 
 ## 6. キー割り当て
 
+guif は Windows 標準のショートカットキー（Windows like）を基本としつつ、TUI 版の tuif と同様の Vim like なキー操作（H/J/K/L によるカーソル移動など）も既定で併用できるように割り当てられています。
+
 既定のキー割り当ては次のとおりです。
 
-| 操作 | 既定のキー |
-|---|---|
-| 上へ移動 | ↑ |
-| 下へ移動 | ↓ |
-| 左へ移動 | ← |
-| 右へ移動 | → |
-| 前のページ | PageUp |
-| 次のページ | PageDown |
-| 選択の切り替え | Space |
-| すべて選択 | Ctrl+A |
-| 選択の解除 | Esc |
-| 開く | Enter |
-| 親フォルダーへ | Backspace |
-| 終了 | Ctrl+Q |
-| 設定ファイルを開く(§8) | Ctrl+, |
-| パス欄へ移動 | Ctrl+L |
-| 隠しファイルの表示の切り替え | Ctrl+H |
-| ツリーの表示の切り替え | Ctrl+Shift+B |
-| コピー | Ctrl+C |
-| 切り取り | Ctrl+X |
-| 貼り付け | Ctrl+V |
-| 削除(ごみ箱へ) | Delete |
-| 名前の変更 | F2 |
-| 新規作成 | Ctrl+N |
-| 新しいフォルダー | Ctrl+Shift+N |
-| 検索 | / |
-| 並び替え | S |
-| 履歴 | Ctrl+Y |
-| ジャンプリスト | Ctrl+J |
-| ジャンプリストに追加 | Ctrl+Shift+J |
-| サイズの列の表示の切り替え | Ctrl+Shift+S |
-| 更新日時の列の表示の切り替え | Ctrl+Shift+T |
-| ZIPに圧縮 | Ctrl+Alt+Z |
-| ZIPを展開 | Ctrl+Alt+X |
+| 操作 | 既定のキー (Windows like / Vim like) | 操作 ID |
+|---|---|---|
+| 上へ移動 | ↑, K | `move_up` |
+| 下へ移動 | ↓, J | `move_down` |
+| 左へ移動 | ←, H | `move_left` |
+| 右へ移動 | →, L | `move_right` |
+| 前のページ | PageUp, Ctrl+U | `page_up` |
+| 次のページ | PageDown, Ctrl+D | `page_down` |
+| 選択の切り替え / 開閉 | Space, V | `select_toggle` |
+| すべて選択 | Ctrl+A, Shift+V | `select_all` |
+| 選択の解除 | Esc | `clear_selection` |
+| 開く | Enter | `open` |
+| 親フォルダーへ | Backspace, Minus(-) | `go_parent` |
+| 終了 | Ctrl+Q | `exit` |
+| 設定ファイルを開く(§8) | Ctrl+, | `settings` |
+| パス欄へ移動 | Ctrl+L | `focus_path` |
+| 隠しファイルの表示の切り替え | Ctrl+H, Dot(.) | `toggle_hidden` |
+| ツリーの表示の切り替え | Ctrl+Shift+B, T | `toggle_tree` |
+| コピー | Ctrl+C, Y | `copy` |
+| 切り取り | Ctrl+X, X | `cut` |
+| 貼り付け | Ctrl+V, P | `paste` |
+| 削除(ごみ箱へ) | Delete, D | `delete` |
+| 名前の変更 | F2, R | `rename` |
+| 新規作成 | Ctrl+N, A | `new_file` |
+| 新しいフォルダー | Ctrl+Shift+N, Shift+A | `new_folder` |
+| 検索 | / | `search` |
+| 並び替え | S | `sort_menu` |
+| 履歴 | Ctrl+Y | `history` |
+| ジャンプリスト | Ctrl+J | `history_jump_list` |
+| ジャンプリストに追加 | Ctrl+Shift+J, M | `jump_add` |
+| サイズの列の表示の切り替え | Ctrl+Shift+S | `toggle_size` |
+| 更新日時の列の表示の切り替え | Ctrl+Shift+T | `toggle_time` |
+| ZIPに圧縮 | Ctrl+Alt+Z, Z | `zip_create` |
+| ZIPを展開 | Ctrl+Alt+X, Shift+Z | `zip_extract` |
 
-完全削除(`Shift+Delete`)は独立した割り当てではなく、「削除」のキーに Shift を加えた操作です。復元できません。
+- **ツリーでの Space キー**: フォルダーツリー（ドライブ／ツリー）にフォーカスがあるとき、`Space` キー（または `V`）はフォーカス中のフォルダーの開閉（展開／折りたたみのトグル）を行います（ファイル一覧のような複数選択チェックにはなりません）。
+- 完全削除(`Shift+Delete` または `Shift+D`)は独立した割り当てではなく、「削除」のキーに Shift を加えた操作です。復元できません。
 
 `Ctrl+,` は「設定ファイルを開く」(操作 ID は `settings`)です。`Ctrl+,` は `Ctrl+Q`(終了)と同じく固定のキーで、ほかの割り当てより先に働きます。`settings` に別のキーを書くとそのキーでも開けますが、`settings = ""` と書いても `Ctrl+,` は無効になりません。検索バーの入力中、ダイアログの表示中、パスバーの編集中にも働きます。右クリックメニューやメニューバーを開いているときは、それを閉じてから開きます。
 
@@ -190,8 +193,8 @@ move_down = "ArrowDown,J"
 - 空の文字列(`""`)を書くと、その操作は無効になります。
 - カンマで区切ると、1つの操作に複数のキーを割り当てられます。
 - 修飾キーは `Ctrl`、`Alt`、`Shift`、`Meta` の順に並べ、`+` でつなぎ、最後にキー本体を書きます(例: `Ctrl+Shift+N`)。修飾キーの名前は大文字と小文字を区別しません。
-- キー本体は、英数字1文字(大文字と小文字を区別しません)か、次の名前です: `ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Escape`、`Delete`、`Backspace`、`Tab`、`Space`、`Home`、`End`、`PageUp`、`PageDown`、`F1`〜`F12`、`Comma`、`Plus`。名前の大文字と小文字は区別しません。
-- `,` と `+` はそのままでは書けません(`,` は複数のキーの区切り、`+` は連結に使うため)。`Comma` と `Plus` と書きます。例: `Ctrl+Comma`、`Ctrl+Plus`。スペースは `Space` と書きます。
+- キー本体は、英数字1文字(大文字と小文字を区別しません)か、次の名前です: `ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Escape`、`Delete`、`Backspace`、`Tab`、`Space`、`Home`、`End`、`PageUp`、`PageDown`、`F1`〜`F12`、`Comma`、`Plus`、`Minus`、`Dot`。名前の大文字と小文字は区別しません。
+- `,` と `+` はそのままでは書けません(`,` は複数のキーの区切り、`+` は連結に使うため)。`Comma` と `Plus` と書きます。例: `Ctrl+Comma`、`Ctrl+Plus`。スペースは `Space`、`-` は `Minus`、`.` は `Dot` と書きます。
 - 上の一覧にない名前は、キー割り当てとして受け付けられません。
 - 操作の ID は、`move_up`、`move_down`、`move_left`、`move_right`、`page_up`、`page_down`、`select_toggle`、`select_all`、`clear_selection`、`open`、`go_parent`、`exit`、`settings`、`focus_path`、`toggle_hidden`、`toggle_tree`、`copy`、`cut`、`paste`、`delete`、`rename`、`new_file`、`new_folder`、`search`、`sort_menu`、`history`、`history_jump_list`、`jump_add`、`toggle_size`、`toggle_time`、`zip_create`、`zip_extract` です。
 - `config.toml` はアプリの起動時に1回だけ読み込みます。変更は再起動で反映されます。

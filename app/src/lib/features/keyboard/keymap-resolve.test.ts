@@ -152,6 +152,13 @@ describe("normalizeKeyString/matchesAction: 'Plus'/'Comma' key-body words (MUST-
     expect(matchesAction(event, ["Plus"])).toBe(true);
   });
 
+  it("pressing the '-' key matches 'Minus' and pressing '.' matches 'Dot'", () => {
+    const minusEvent = { key: "-", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+    expect(matchesAction(minusEvent, ["Minus"])).toBe(true);
+    const dotEvent = { key: ".", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+    expect(matchesAction(dotEvent, ["Dot"])).toBe(true);
+  });
+
   it("pressing the ',' key with Ctrl matches a 'Ctrl+Comma' binding (the new settings default)", () => {
     const event = { key: ",", ctrlKey: true, altKey: false, shiftKey: false, metaKey: false };
     expect(matchesAction(event, ["Ctrl+Comma"])).toBe(true);

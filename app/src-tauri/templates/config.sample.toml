@@ -124,9 +124,9 @@
 ##   修飾キーの名前と、キー本体の名前は、大文字小文字を区別しません。
 ##   キー本体は、英数字や / などの1文字(, と + を除く)か、次の名前です。
 ##     ArrowUp、ArrowDown、ArrowLeft、ArrowRight、Enter、Escape、Delete、Backspace、Tab、Space、
-##     Home、End、PageUp、PageDown、F1〜F12、Comma、Plus
+##     Home、End、PageUp、PageDown、F1〜F12、Comma、Plus、Minus、Dot
 ##   , と + はそのままでは書けません(, は複数のキーの区切り、+ は連結に使うため)。Comma と Plus と書きます。
-##   例: Ctrl+Comma、Ctrl+Plus。スペースは Space と書きます。
+##   例: Ctrl+Comma、Ctrl+Plus。スペースは Space、- は Minus、. は Dot と書きます。
 ##   上の名前にない2文字以上の名前は、キー割り当てとして受け付けられません。
 ##
 ## 次のキーは固定されていて、どの操作にも割り当てられません(外部アプリのキーにも使えません)。
@@ -141,28 +141,28 @@
 ## 操作の ID と既定のキーは、次のとおりです。
 # [input_keymap_custom]
 ## 上へ移動: フォーカスを1つ上の項目へ動かします。
-# move_up = "ArrowUp"
+# move_up = "ArrowUp,K"
 ## 下へ移動: フォーカスを1つ下の項目へ動かします。
-# move_down = "ArrowDown"
+# move_down = "ArrowDown,J"
 ## 左へ移動: 左へ動かします。ツリーでは、フォルダーを折りたたむ、または親のフォルダーへ移ります。
-# move_left = "ArrowLeft"
+# move_left = "ArrowLeft,H"
 ## 右へ移動: 右へ動かします。ツリーでは、フォルダーを展開する、または子のフォルダーへ移ります。
-# move_right = "ArrowRight"
+# move_right = "ArrowRight,L"
 ## 前のページ: 1画面分、上へ動かします。
-# page_up = "PageUp"
+# page_up = "PageUp,Ctrl+U"
 ## 次のページ: 1画面分、下へ動かします。
-# page_down = "PageDown"
-## 選択の切り替え: フォーカスのある項目の選択と選択の解除を切り替えます。
-# select_toggle = "Space"
+# page_down = "PageDown,Ctrl+D"
+## 選択の切り替え: フォーカスのある項目の選択と選択の解除を切り替えます。ツリーではフォルダーの開閉(展開/折りたたみ)を切り替えます。
+# select_toggle = "Space,V"
 ## すべて選択: 一覧に表示している項目をすべて選択します。
-# select_all = "Ctrl+A"
+# select_all = "Ctrl+A,Shift+V"
 ## 選択の解除: 選択している項目をすべて解除します。
 # clear_selection = "Escape"
 ## 開く: フォルダーなら中へ移動します。ファイルならビューアなどで開きます。
 ## (Shift+Enter でOSの関連付けで開く操作は固定で、変えられません。)
 # open = "Enter"
 ## 親フォルダーへ: 1つ上のフォルダーへ移動します。
-# go_parent = "Backspace"
+# go_parent = "Backspace,Minus"
 ## 終了: guif を終了します。ここを変えても、Ctrl+Q は固定のキーとして終了のままです。
 # exit = "Ctrl+Q"
 ## 設定ファイルを開く: この config.toml を VS Code で開きます。VS Code が見つからないときは、Windows の関連付けで開きます。
@@ -171,22 +171,22 @@
 ## パス欄へ移動: パス欄に入力のカーソルを移します。
 # focus_path = "Ctrl+L"
 ## 隠しファイルの表示の切り替え: 隠しファイルを表示する、しないを切り替えます。
-# toggle_hidden = "Ctrl+H"
+# toggle_hidden = "Ctrl+H,Dot"
 ## ツリーの表示の切り替え: フォルダーのツリーを表示する、しないを切り替えます。
-# toggle_tree = "Ctrl+Shift+B"
+# toggle_tree = "Ctrl+Shift+B,T"
 ## コピー: 選択した項目(選択がなければフォーカスのある項目)をクリップボードへコピーします。
-# copy = "Ctrl+C"
+# copy = "Ctrl+C,Y"
 ## 切り取り: 選択した項目をクリップボードへ切り取ります。貼り付けると移動になります。
-# cut = "Ctrl+X"
+# cut = "Ctrl+X,X"
 ## 貼り付け: クリップボードの項目を現在のフォルダーに貼り付けます。
-# paste = "Ctrl+V"
+# paste = "Ctrl+V,P"
 ## 削除(ごみ箱へ): 選択した項目をごみ箱へ移します。
 ## Shift を加えた Shift+Delete は完全削除です(復元できません)。このため、delete に Shift を含むキーは割り当てられません。
-# delete = "Delete"
+# delete = "Delete,D"
 ## 名前の変更: フォーカスのある項目の名前を変えます。
-# rename = "F2"
+# rename = "F2,R"
 ## 新規作成: 新しいファイルを作ります。
-# new_file = "Ctrl+N"
+# new_file = "Ctrl+N,A"
 ## 検索: 検索バーを開き、現在のフォルダーの中から探します。
 # search = "/"
 ## 並び替え: 並び順を選ぶメニューを開きます。
@@ -194,9 +194,9 @@
 ## ジャンプリスト: 登録したフォルダーの一覧を開きます。
 # history_jump_list = "Ctrl+J"
 ## ジャンプリストに追加: 現在のフォルダーをジャンプリストに登録します。
-# jump_add = "Ctrl+Shift+J"
+# jump_add = "Ctrl+Shift+J,M"
 ## 新しいフォルダー: 新しいフォルダーを作ります。
-# new_folder = "Ctrl+Shift+N"
+# new_folder = "Ctrl+Shift+N,Shift+A"
 ## 履歴: 訪問したフォルダーの履歴を開きます。
 # history = "Ctrl+Y"
 ## サイズの列の表示の切り替え: 一覧のサイズの列を表示する、しないを切り替えます。
@@ -204,9 +204,9 @@
 ## 更新日時の列の表示の切り替え: 一覧の更新日時の列を表示する、しないを切り替えます。
 # toggle_time = "Ctrl+Shift+T"
 ## ZIPに圧縮: 選択した項目をZIPに圧縮します。
-# zip_create = "Ctrl+Alt+Z"
+# zip_create = "Ctrl+Alt+Z,Z"
 ## ZIPを展開: 選択したZIPファイルを展開します。
-# zip_extract = "Ctrl+Alt+X"
+# zip_extract = "Ctrl+Alt+X,Shift+Z"
 
 ## ----------------------------------------------------------------------
 ## 外部アプリで開く([[external_apps]])

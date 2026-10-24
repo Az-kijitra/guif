@@ -41,6 +41,8 @@ const KNOWN_MULTI_CHAR_KEY_BODIES = [
   "PageDown",
   "Comma",
   "Plus",
+  "Minus",
+  "Dot",
   "F1",
   "F2",
   "F3",
@@ -65,6 +67,8 @@ const KNOWN_MULTI_CHAR_KEY_BODY_BY_LOWER = new Map(
 // string passes through unchanged (forward-compatibility -- "interpretable"
 // is not the same predicate as "known", see `isKnownKeyBody` below).
 export function canonicalizeKeyBody(raw: string): string {
+  if (raw === "-") return "Minus";
+  if (raw === ".") return "Dot";
   if (raw.length === 1) return raw.toUpperCase();
   const known = KNOWN_MULTI_CHAR_KEY_BODY_BY_LOWER.get(raw.toLowerCase());
   return known ?? raw;
@@ -155,6 +159,12 @@ function eventKeyToken(key: string): string {
   if (key === ",") {
     return "Comma";
   }
+  if (key === "-") {
+    return "Minus";
+  }
+  if (key === ".") {
+    return "Dot";
+  }
   if (key.length === 1) {
     return key.toUpperCase();
   }
@@ -174,19 +184,23 @@ function eventToNormalizedString(event: KeydownLikeEvent): string {
   return [...eventModifiers(event), eventKeyToken(event.key)].join("+");
 }
 
+export function matchesActionExact(event: KeydownLikeEvent, bindings: readonly string[]): boolean {
+  const normalizedBindings = bindings.map(normalizeKeyString);
+  const eventString = eventToNormalizedString(event);
+  return normalizedBindings.includes(eventString);
+}
+
 // R-33/R-34: match a keydown event against a resolved list of bindings,
 // including the Shift-only rescue match (a Shift-only event also matches a
 // binding string with no modifiers, i.e. the "Shift+" prefix stripped).
 export function matchesAction(event: KeydownLikeEvent, bindings: readonly string[]): boolean {
-  const normalizedBindings = bindings.map(normalizeKeyString);
-  const eventString = eventToNormalizedString(event);
-
-  if (normalizedBindings.includes(eventString)) {
+  if (matchesActionExact(event, bindings)) {
     return true;
   }
 
   const shiftOnly = event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
   if (shiftOnly) {
+    const normalizedBindings = bindings.map(normalizeKeyString);
     const keyOnly = eventKeyToken(event.key);
     if (normalizedBindings.includes(keyOnly)) {
       return true;
@@ -204,7 +218,7 @@ export function keyStringToEvent(key: string): KeydownLikeEvent {
   const body = parts[parts.length - 1];
   const modifiers = new Set(parts.slice(0, -1));
   const shiftKey = modifiers.has("Shift");
-  const named: Record<string, string> = { Comma: ",", Plus: "+", Space: " " };
+  const named: Record<string, string> = { Comma: ",", Plus: "+", Space: " ", Minus: "-", Dot: "." };
   let eventKey = named[body] ?? body;
   if (eventKey.length === 1) eventKey = shiftKey ? eventKey.toUpperCase() : eventKey.toLowerCase();
   return { key: eventKey, ctrlKey: modifiers.has("Ctrl"), altKey: modifiers.has("Alt"), shiftKey, metaKey: modifiers.has("Meta") };

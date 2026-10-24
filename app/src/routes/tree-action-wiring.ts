@@ -17,6 +17,7 @@ export interface TreeActionDeps {
     handleMoveRight(): void; // R-65
     handleMoveLeft(): void; // R-66
     selectFocused(): { path: string } | null; // R-43
+    toggleExpand(path: string): void;
   };
   afterUserNavigation: (navigation: Promise<NavigateResult>) => Promise<NavigateResult>;
   // SPEC-0200-0001 §3.7.2: node selection (drive nodes included, R-773) goes
@@ -80,6 +81,13 @@ export function createTreeActionHandler(deps: TreeActionDeps) {
       case "open": {
         const target = deps.tree.selectFocused();
         if (target !== null) selectTreePath(target.path);
+        return true;
+      }
+      case "select_toggle": {
+        const target = deps.tree.selectFocused();
+        if (target !== null) {
+          deps.tree.toggleExpand(target.path);
+        }
         return true;
       }
       default:

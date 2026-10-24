@@ -73,23 +73,28 @@ describe("resolveActionForKey (SPEC-0300-0010 第8版 §4.2, single default keym
   });
 });
 
-// AC-55 (SPEC-0300-0010 第8版, ISS-0102/ISS-0103): the former vim keys are not
-// bound by default; movement is by the arrow keys only. (AC-27, which
-// verified the vim keys, was deleted and its number retired.)
-describe("resolveActionForKey AC-55 (H/J/K/L do not move by default, R-20-1)", () => {
-  it.each(["h", "j", "k", "l", "H", "J", "K", "L"])("plain '%s' resolves to no action", (k) => {
-    expect(resolveActionForKey(key(k), {})).toBeNull();
+// Vim-like movement keys (H/J/K/L) are supported as secondary keys alongside arrow keys per tuif
+describe("resolveActionForKey (Windows arrow keys + Vim H/J/K/L secondary keys)", () => {
+  it.each([
+    ["h", "move_left"],
+    ["j", "move_down"],
+    ["k", "move_up"],
+    ["l", "move_right"],
+    ["H", "move_left"],
+    ["J", "move_down"],
+    ["K", "move_up"],
+    ["L", "move_right"],
+    ["ArrowLeft", "move_left"],
+    ["ArrowDown", "move_down"],
+    ["ArrowUp", "move_up"],
+    ["ArrowRight", "move_right"],
+  ])("key '%s' resolves to %s", (k, expectedAction) => {
+    expect(resolveActionForKey(key(k), {})).toBe(expectedAction);
   });
 
-  it("a stale legacy-profile setting cannot alter resolution: resolveActionForKey takes only (event, customOverrides)", () => {
-    expect(resolveActionForKey.length).toBe(2);
-    expect(resolveActionForKey(key("j"), {})).toBeNull();
-    expect(resolveActionForKey(key("ArrowDown"), {})).toBe("move_down");
-  });
-
-  it("R-30: the custom-override route still works — move_down='J' makes J resolve to move_down (replaces the old vim-default test data)", () => {
-    expect(resolveActionForKey(key("j"), { move_down: "J" })).toBe("move_down");
-    expect(resolveActionForKey(key("k"), { move_up: "K" })).toBe("move_up");
+  it("custom-override still works on top of defaults", () => {
+    expect(resolveActionForKey(key("j"), { move_down: "Down" })).toBeNull();
+    expect(resolveActionForKey(key("Down"), { move_down: "Down" })).toBe("move_down");
   });
 });
 
@@ -108,7 +113,7 @@ describe("matchesHardcodedShortcut (SPEC-0300-0010 R-12 priority 1)", () => {
 });
 
 describe("TREE_HANDLED_ACTIONS / isTreeHandledAction (SPEC-0300-0010 R-15, AC-05)", () => {
-  it("AC-05: limits the tree handler to exactly the 7 specified actions", () => {
+  it("AC-05: limits the tree handler to the specified actions (now including select_toggle for folder expand/collapse)", () => {
     expect(TREE_HANDLED_ACTIONS).toEqual([
       "move_up",
       "move_down",
@@ -117,6 +122,7 @@ describe("TREE_HANDLED_ACTIONS / isTreeHandledAction (SPEC-0300-0010 R-15, AC-05
       "move_right",
       "move_left",
       "open",
+      "select_toggle",
     ]);
   });
 
@@ -126,6 +132,10 @@ describe("TREE_HANDLED_ACTIONS / isTreeHandledAction (SPEC-0300-0010 R-15, AC-05
 
   it("AC-05: move_up is treated as a tree action", () => {
     expect(isTreeHandledAction("move_up")).toBe(true);
+  });
+
+  it("select_toggle is treated as a tree action", () => {
+    expect(isTreeHandledAction("select_toggle")).toBe(true);
   });
 });
 

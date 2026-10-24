@@ -79,6 +79,7 @@ export function createListTreeControllers(deps: ListTreeControllersDeps) {
       handleMoveRight: () => deps.treeState.handleMoveRight(),
       handleMoveLeft: () => deps.treeState.handleMoveLeft(),
       selectFocused: () => deps.treeState.selectFocused(),
+      toggleExpand: (path) => deps.treeState.toggleExpand(path),
     },
     afterUserNavigation: deps.afterUserNavigation,
     navigate: (path) => deps.fileList.navigate(path),
