@@ -15,4 +15,8 @@ describe("NAVIGATION_HISTORY_MESSAGES.removeItem (W-10)", () => {
   it("the old `Remove {path}` is gone", () => {
     expect(NAVIGATION_HISTORY_MESSAGES.removeItem("C:\\x").startsWith("Remove ")).toBe(false);
   });
+
+  it("addedJump formats the jump notification", () => {
+    expect(NAVIGATION_HISTORY_MESSAGES.addedJump("C:\\work")).toBe("ジャンプリストに追加しました: C:\\work");
+  });
 });

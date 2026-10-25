@@ -3,4 +3,5 @@
 
 export const NAVIGATION_HISTORY_MESSAGES = {
   removeItem: (path: string): string => `${path} を一覧から削除`, // W-10 (aria-label of the delete button)
+  addedJump: (path: string): string => `ジャンプリストに追加しました: ${path}`,
 } as const;

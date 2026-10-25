@@ -13,6 +13,7 @@
   import PathBar from "$lib/features/path-bar/PathBar.svelte";
   import { searchState } from "$lib/features/search/search-state.svelte";
   import { navigationHistoryState } from "$lib/features/navigation-history/navigation-history-state.svelte";
+  import { NAVIGATION_HISTORY_MESSAGES } from "$lib/features/navigation-history/messages";
   import { resolveListKeyIntent } from "$lib/features/navigation-history/list-ops";
   import { modalHost } from "$lib/shared/state/modal-host.svelte";
   import ModalHost from "./_components/modal/ModalHost.svelte";
@@ -105,19 +106,12 @@
   });
   const { activateSearch, openHistoryList } = overlay;
   const historyRows = createHistoryRowHandlers({ history: navigationHistoryState, overlay, focusContainer: focus.container });
+  const addJump = (path: string) => { navigationHistoryState.addJump(path); statusMessage.show(NAVIGATION_HISTORY_MESSAGES.addedJump(path)); };
   // SPEC-0300-0016: path bar (R-710 focus_path, R-720 confirm, R-740 Tab).
   const pathBar = createPathBarController({
-    currentPath: () => fileListState.currentPath,
-    navigate: (path) => afterUserNavigation(fileListState.navigate(path)),
-    listDirForCompletion: listDirForTree, // R-742: dirs only, hidden per setting
-    showHidden: () => fileListState.showHidden(),
-    notify: (message) => statusMessage.show(message),
-    history: navigationHistoryState,
-    search: searchState,
-    closeSearchForPathBar: overlay.closeSearchForPathBar,
-    addJump: (path) => navigationHistoryState.addJump(path),
-    focus,
-    nextTick: tick,
+    currentPath: () => fileListState.currentPath, navigate: (path) => afterUserNavigation(fileListState.navigate(path)),
+    listDirForCompletion: listDirForTree, showHidden: () => fileListState.showHidden(), notify: (message) => statusMessage.show(message),
+    history: navigationHistoryState, search: searchState, closeSearchForPathBar: overlay.closeSearchForPathBar, addJump, focus, nextTick: tick,
   });
 
   const sortMenu = createSortMenuController({ fileList: fileListState, focus, state: sortMenuState });
@@ -185,7 +179,7 @@
     afterUserNavigation,
     activateSearch,
     openHistoryList,
-    addJump: (path) => navigationHistoryState.addJump(path),
+    addJump,
     currentPath: () => fileListState.currentPath,
     fileOps,
     archive,
