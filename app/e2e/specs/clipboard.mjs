@@ -6,7 +6,7 @@
 //   * the whole test runs inside ctx.withClipboardGuard (the user's clipboard is saved, emptied, restored);
 //   * file lists written to the OS by the TEST are only paths inside the test folder (writeFileDropForTest enforces it);
 //   * fs_ops_copy / fs_ops_move are let through only inside ctx.withScopedFileOps (items and destination inside the
-//     test folder), and the backend independently refuses anything outside it (REFLEXFILES_E2E_FS_SCOPE);
+//     test folder), and the backend independently refuses anything outside it (GUIF_E2E_FS_SCOPE);
 //   * every file touched here lives under one folder `cb-<id>` of the test folder, no junctions are created.
 // Not driven here: the [目視] checks (round trips with Explorer, `\\?\` acceptance by Explorer, apps that write no
 // Preferred DropEffect) and AC-06-12 / AC-09 (static / self tests).
@@ -148,7 +148,7 @@ export const tests = [
         t.eq(os.paths, expected, "the OS file list (same order, same strings)");
         t.eq(os.effect, 1, "Preferred DropEffect = 1 (copy)");
         // real-device check (SPEC-0200-0001 §3.10.4 / §3.10.14 #2): the app's MAIN WINDOW owns what it wrote
-        t.eq(clipboardOwnerProcessName(), "reflexfiles-successor", "the clipboard owner is the app's own window");
+        t.eq(clipboardOwnerProcessName(), "guif", "the clipboard owner is the app's own window");
         t.ok((await statusText(ctx)).includes("2件をコピーしました"), "status shows 2件をコピーしました");
         t.ok(!(await statusText(ctx)).includes("OSのクリップボードには書き込めませんでした"), "no OS-write-failed note");
         // real device: the Windows shell (Explorer's own paste path) accepts it and copies, the source stays

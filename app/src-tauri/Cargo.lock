@@ -1489,6 +1489,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "guif"
+version = "0.3.0"
+dependencies = [
+ "encoding_rs",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tempfile",
+ "time",
+ "toml 0.8.23",
+ "trash",
+ "windows-sys 0.61.2",
+ "zip",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2887,23 +2904,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
-]
-
-[[package]]
-name = "reflexfiles-successor"
-version = "0.3.0"
-dependencies = [
- "encoding_rs",
- "serde",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tempfile",
- "time",
- "toml 0.8.23",
- "trash",
- "windows-sys 0.61.2",
- "zip",
 ]
 
 [[package]]

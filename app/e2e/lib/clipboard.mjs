@@ -173,15 +173,15 @@ export function writeFileDropForTest(paths, effect, { root }) {
 }
 
 /**
- * The process name of the window that currently OWNS the clipboard ("reflexfiles-successor" for the
+ * The process name of the window that currently OWNS the clipboard ("guif" for the
  * app's main window, SPEC-0200-0001 §3.10.4), "none" when there is no owner. Real-device check.
  */
 export function clipboardOwnerProcessName() {
   const out = powershell(
     [
-      `Add-Type -Namespace RfE2e -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);'`,
-      `$h = [RfE2e.Win]::GetClipboardOwner()`,
-      `if ($h -eq [IntPtr]::Zero) { 'OWNER:none' } else { $p = [uint32]0; [void][RfE2e.Win]::GetWindowThreadProcessId($h, [ref]$p); 'OWNER:' + (Get-Process -Id $p).ProcessName }`,
+      `Add-Type -Namespace GuifE2e -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetClipboardOwner(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);'`,
+      `$h = [GuifE2e.Win]::GetClipboardOwner()`,
+      `if ($h -eq [IntPtr]::Zero) { 'OWNER:none' } else { $p = [uint32]0; [void][GuifE2e.Win]::GetWindowThreadProcessId($h, [ref]$p); 'OWNER:' + (Get-Process -Id $p).ProcessName }`,
     ].join("; "),
     // Add-Type compiles C#: a stale LIB (e.g. a Visual Studio path that no longer exists) turns csc's warning into an error.
     { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== "LIB")) },

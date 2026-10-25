@@ -105,12 +105,9 @@ describe("required content (R-1486, R-1461, T-04)", () => {
   });
 });
 
-// 第2版 R-1449: the old product is not mentioned at all (name, removal steps, its settings / log folders, succession).
-// 第3版 AC-1460: the former names (ReflexFiles, ReflexViewer, the former identifier) do not appear either.
-describe("AC-1460 第2版・第3版 / R-1449: no mention of the old product or of the former names", () => {
-  // The former identifier is built from parts so that this file does not contain it (SPEC-0300-0017 AC-946 (ii) scans app/src).
-  const FORMER_ID = ["dev", "reflexfiles", "successor"].join(".");
-  const OLD = [/ReflexFiles/, /ReflexViewer/, new RegExp(FORMER_ID.replaceAll(".", "\\.")), /ReflexFIles/, /%APPDATA%\\?ReflexFIles/, /%LOCALAPPDATA%\\?ReflexViewer/, /旧製品/, /旧アプリ/];
+// R-1449: the old product is not mentioned at all.
+describe("AC-1460 / R-1449: no mention of the old product", () => {
+  const OLD = [/旧製品/, /旧アプリ/];
   it.each([
     ["README.md", README],
     ["CHANGELOG.md", CHANGELOG],

@@ -4,7 +4,7 @@ import fs from "node:fs";
 export const tests = [
   {
     id: "AC-947",
-    title: "the settings of this run went to the override folder (REFLEXFILES_CONFIG_DIR); the stderr line was verified at launch",
+    title: "the settings of this run went to the override folder (GUIF_CONFIG_DIR); the stderr line was verified at launch",
     async run(t, ctx) {
       if (!ctx.handle.cfgDir) throw new Error("the settings folder of this run is unknown (attached without a record)");
       // The app saves with a debounce: give it a moment after the last state change.

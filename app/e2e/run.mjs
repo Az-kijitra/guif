@@ -30,7 +30,7 @@
 //
 // File operations (SPEC-0200-0001 §3.10.17): the page stubs refuse every file-changing command except
 // fs_ops_copy / fs_ops_move inside withScopedFileOps (only paths inside the test folder), and the backend is
-// started with REFLEXFILES_E2E_FS_SCOPE = the test folder so it refuses anything outside it as well.
+// started with GUIF_E2E_FS_SCOPE = the test folder so it refuses anything outside it as well.
 //
 // Real settings folder (R-08): its snapshot from BEFORE THE FIRST launch is compared after the last app has
 // ended, also when the run aborts (SPEC-0200-0001 §3.11.16 MUST-124).
@@ -93,7 +93,7 @@ async function loadTests() {
 // external-apps.mjs: SPEC-0300-0021 (probe registrations only; `prepare()` builds the test executable, `cleanup(fx)` waits for sleepers);
 // os-input.mjs: the OS key input checks (SPEC-0400-0001 R-12). A scenario may carry `skipReason()` (null = run): when it
 // returns a string the app is NOT started and the scenario's tests are recorded as SKIP with that reason. os-input is
-// opt-in (REFLEXFILES_E2E_OS_INPUT=1, R-12-5; the reason text begins "OS のキー入力のテストは無効") because it uses the
+// opt-in (GUIF_E2E_OS_INPUT=1, R-12-5; the reason text begins "OS のキー入力のテストは無効") because it uses the
 // user's screen and keyboard.
 const SCENARIO_FILES = ["theme", "appearance", "history-invalid", "menubar-keymap", "external-apps", "settings-file", "os-input"];
 

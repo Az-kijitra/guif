@@ -10,10 +10,10 @@ use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 /// Name of the debug-only override variable (SPEC-0400-0001 第2版 R-06).
-const CONFIG_DIR_ENV: &str = "REFLEXFILES_CONFIG_DIR";
+const CONFIG_DIR_ENV: &str = "GUIF_CONFIG_DIR";
 
 /// Returns the app config directory, creating it if missing. In debug builds the
-/// environment variable `REFLEXFILES_CONFIG_DIR` overrides the location
+/// environment variable `GUIF_CONFIG_DIR` overrides the location
 /// (SPEC-0400-0001 第2版 R-06; a bad value is an error, never a fallback).
 pub fn app_config_dir(app: &AppHandle) -> io::Result<PathBuf> {
     if let Some(dir) = config_dir_override()? {
@@ -58,7 +58,7 @@ pub fn ui_state_path(app: &AppHandle) -> io::Result<PathBuf> {
 // debug-only configuration-folder override for E2E runs.
 // ---------------------------------------------------------------------
 
-/// Why a `REFLEXFILES_CONFIG_DIR` value was rejected.
+/// Why a `GUIF_CONFIG_DIR` value was rejected.
 #[derive(Debug)]
 pub struct ConfigDirOverrideError(pub String);
 
@@ -76,7 +76,7 @@ impl From<ConfigDirOverrideError> for io::Error {
     }
 }
 
-/// Validates the raw value of `REFLEXFILES_CONFIG_DIR` (`None` = the variable
+/// Validates the raw value of `GUIF_CONFIG_DIR` (`None` = the variable
 /// does not exist, the only case that means "use the default"). Compiled in
 /// EVERY build (not gated by `debug_assertions`) so `cargo test` covers it.
 /// Rejects (before creating anything): empty / blank, non-Unicode, non-absolute

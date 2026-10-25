@@ -3,10 +3,10 @@
 // the next keys? Needs a person once: the window of the app started here must be clicked (title bar) so that it is in front,
 // because a process started from a background shell cannot take the foreground by itself (Windows foreground lock).
 //
-//   $env:REFLEXFILES_E2E_OS_INPUT = "1"; cd app; node e2e/keymenu-probe.mjs        (PowerShell)
-//   REFLEXFILES_E2E_OS_INPUT=1 node e2e/keymenu-probe.mjs                         (bash)
+//   $env:GUIF_E2E_OS_INPUT = "1"; cd app; node e2e/keymenu-probe.mjs        (PowerShell)
+//   GUIF_E2E_OS_INPUT=1 node e2e/keymenu-probe.mjs                         (bash)
 //
-// Without REFLEXFILES_E2E_OS_INPUT=1 it does nothing and does not even start the app. Safety (SPEC-0400-0001 R-08 / R-10 /
+// Without GUIF_E2E_OS_INPUT=1 it does nothing and does not even start the app. Safety (SPEC-0400-0001 R-08 / R-10 /
 // R-12): the same start as run.mjs (throw-away config folder, E2E file scope, refusing stubs verified), keys only from the
 // allow-list of lib/os-input.mjs and only while the app window of THIS run is in front (checked before every step and again
 // by the helper before every key); the probe never brings a window to the front and stops at once when the app loses the

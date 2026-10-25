@@ -19,7 +19,7 @@
 //! - `shared::schema` (persisted schema types, SPEC-0200-0001 §6.1)
 //! - `archive` (SPEC-0300-0014 ZIP create/extract — Phase 5; see
 //!   `archive/mod.rs`)
-//! - `viewer` (SPEC-0300-0015 ReflexViewer integration — Phase 6, not yet
+//! - `viewer` (SPEC-0300-0015 Viewer integration — Phase 6, not yet
 //!   implemented; see `viewer/mod.rs`)
 //!
 //! `main.rs` is a thin entry point that calls `run()` below (the standard
@@ -41,7 +41,7 @@ pub mod shared;
 // part of this bootstrap that joins `config`, `external_apps` and `settings_file` (H-2) and is imported by nothing but this file.
 pub mod settings_file;
 pub mod config_bridge;
-// SPEC-0300-0015 (Phase 6, ReflexViewer): not implemented yet (TDD). See
+// SPEC-0300-0015 (Phase 6, Viewer): not implemented yet (TDD). See
 // `viewer/mod.rs` for the planned submodule list; this declaration alone is
 // enough for `viewer/*_tests.rs` to be picked up by `cargo test`, and is
 // expected to make the WHOLE crate fail to compile until code-generator fills
@@ -130,7 +130,7 @@ pub fn run() {
         // "設定ファイルを開く"), which would otherwise race for the same temporary file.
         .manage(settings_file::sample::SettingsFileLock::default())
         .setup(|app| {
-            // SPEC-0400-0001 R-06-2: a bad `REFLEXFILES_CONFIG_DIR` (debug builds) is a startup
+            // SPEC-0400-0001 R-06-2: a bad `GUIF_CONFIG_DIR` (debug builds) is a startup
             // error; it never falls back to the real config folder.
             config::paths::config_dir_override()?;
             // SPEC-0400-0001 R-10-1 (debug builds only): an invalid E2E file scope also stops start-up.
@@ -208,8 +208,8 @@ pub fn run() {
         .expect("error while building tauri application");
 
     // R-917-8: `config.toml` is read here, once, before any window exists. A bad
-    // `REFLEXFILES_CONFIG_DIR` (SPEC-0400-0001 R-06-2) is a start-up error, distinct from an unreadable file.
-    config::paths::config_dir_override().expect("invalid REFLEXFILES_CONFIG_DIR (SPEC-0400-0001 R-06-2)");
+    // `GUIF_CONFIG_DIR` (SPEC-0400-0001 R-06-2) is a start-up error, distinct from an unreadable file.
+    config::paths::config_dir_override().expect("invalid GUIF_CONFIG_DIR (SPEC-0400-0001 R-06-2)");
     // SPEC-0300-0022 R-1651 / SPEC-0200-0001 §3.17.3 (H-2): start-up and "設定ファイルのチェック" take the snapshot through the SAME
     // function, `config_bridge::snapshot`, which also reads the environment for the external apps (`config_bridge/env.rs`; `lib.rs`
     // reads none any more, MUST-142 as rewritten) and keeps `config/` and `external_apps/` from importing each other.

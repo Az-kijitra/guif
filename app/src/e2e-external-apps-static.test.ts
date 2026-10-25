@@ -4,7 +4,7 @@ import { join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-// [静的 / 単体] Spec: SPEC-0300-0021 AC-1506 + R-1585 (EVERY E2E and every CDP operation on the real app starts the app with `REFLEXFILES_CONFIG_DIR` and the E2E
+// [静的 / 単体] Spec: SPEC-0300-0021 AC-1506 + R-1585 (EVERY E2E and every CDP operation on the real app starts the app with `GUIF_CONFIG_DIR` and the E2E
 //   scope, and EVERY `config.toml` it writes declares `external_apps` -- the test executable only, or `[]` -- because without it the default four are active and a
 //   key press could start the USER's apps; no `explorer.exe` / `wt.exe` / `Code.exe` / `GitHubDesktop.exe` is ever registered; the ONE exception, decided 2026-10-17
 //   (design question Q-3): a deliberately broken `config.toml` (current `theme.mjs` S8), guarded by (i) the page-side block of `external_app_launch`, (ii) the backend
@@ -265,10 +265,10 @@ describe("AC-1506: every config.toml the E2E writes declares external_apps (R-15
 });
 
 describe("AC-1506: every start passes the config folder and the E2E scope (R-1585 1)", () => {
-  it("the harness spawns the app with REFLEXFILES_CONFIG_DIR and REFLEXFILES_E2E_FS_SCOPE", () => {
+  it("the harness spawns the app with GUIF_CONFIG_DIR and GUIF_E2E_FS_SCOPE", () => {
     const launch = read(join(E2E, "lib", "launch.mjs"));
-    expect(launch).toMatch(/REFLEXFILES_CONFIG_DIR:\s*cfgDir/);
-    expect(launch).toMatch(/REFLEXFILES_E2E_FS_SCOPE:\s*scopeRoot/);
+    expect(launch).toMatch(/GUIF_CONFIG_DIR:\s*cfgDir/);
+    expect(launch).toMatch(/GUIF_E2E_FS_SCOPE:\s*scopeRoot/);
   });
 
   it("every call of launchApp(..) in the tree passes an `fsScope` (the harness refuses to start without a usable scope folder)", () => {

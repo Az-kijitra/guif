@@ -264,7 +264,7 @@ describe("Phase 5 archive boundaries (SPEC-0300-0014 R-310, SPEC-0200-0001 §3.4
   });
 });
 
-// SPEC-0300-0015 (Phase 6, ReflexViewer): `features/viewer/` must depend on
+// SPEC-0300-0015 (Phase 6, Viewer): `features/viewer/` must depend on
 // `shared/` only (never on `file-list`/`keyboard`/`search`/`file-ops`/
 // `archive`/`navigation-history`, and never on `routes/`); only `routes/`
 // (list-action-wiring.ts + the file-list row's dblclick handler + the

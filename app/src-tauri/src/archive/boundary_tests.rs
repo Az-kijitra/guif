@@ -438,7 +438,7 @@ fn cargo_toml_windows_sys_features_are_exactly_the_approved_five() {
 // §3.10.17.6-2 (MUST-123, SHOULD-178..180). The variable name is assembled at run time.
 
 fn e2e_scope_var() -> String {
-    ["REFLEXFILES_E2E", "_FS_SCOPE"].concat()
+    ["GUIF_E2E", "_FS_SCOPE"].concat()
 }
 
 fn env_var_call() -> String {

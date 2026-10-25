@@ -1,5 +1,5 @@
 //! Tests for the debug-only configuration-folder override
-//! (`REFLEXFILES_CONFIG_DIR`): SPEC-0400-0001 第2版 R-06~R-08 / AC-06~AC-08,
+//! (`GUIF_CONFIG_DIR`): SPEC-0400-0001 第2版 R-06~R-08 / AC-06~AC-08,
 //! SPEC-0300-0017 §18.2 / AC-947, SPEC-0200-0001 §3.8.10-1 as overridden by
 //! §3.8.17 MUST-108 (`var_os`; only "variable absent" means the default; set but
 //! empty / blank / non-Unicode / relative / `..` / a file => error), MUST-109
@@ -84,7 +84,7 @@ fn non_unicode_is_an_error_even_when_it_looks_absolute_and_nothing_is_created() 
 
 #[test]
 fn relative_paths_are_rejected_and_not_created_in_the_current_directory() {
-    let marker = "reflexfiles_rel_override_must_not_exist";
+    let marker = "guif_rel_override_must_not_exist";
     let cases = [marker.to_string(), format!("{marker}/sub"), format!("./{marker}"), ".".to_string()];
     for raw in cases {
         assert!(
@@ -100,7 +100,7 @@ fn relative_paths_are_rejected_and_not_created_in_the_current_directory() {
 fn windows_drive_relative_and_rooted_without_drive_are_rejected() {
     // `C:config` (relative to the drive's current directory) and `\config`
     // (rooted, no drive) are not absolute paths.
-    for raw in ["C:reflexfiles_rel_override_must_not_exist", "\\reflexfiles_rel_override_must_not_exist"] {
+    for raw in ["C:guif_rel_override_must_not_exist", "\\guif_rel_override_must_not_exist"] {
         assert!(resolve_config_dir_override(Some(OsStr::new(raw))).is_err(), "{raw:?}");
     }
 }
@@ -245,7 +245,7 @@ fn code_only(src: &str) -> String {
 #[test]
 fn the_variable_is_read_with_var_os_never_with_the_lossy_var() {
     let code = code_only(PATHS_SRC);
-    assert!(code.contains("REFLEXFILES_CONFIG_DIR"), "the variable name must be defined in paths.rs");
+    assert!(code.contains("GUIF_CONFIG_DIR"), "the variable name must be defined in paths.rs");
     assert!(code.contains("var_os"), "MUST-108: use std::env::var_os (non-Unicode must not become 'unset')");
     assert!(!code.contains("env::var("), "MUST-108: std::env::var(..) hides non-Unicode values");
 }

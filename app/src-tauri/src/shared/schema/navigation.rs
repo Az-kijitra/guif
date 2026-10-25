@@ -60,7 +60,7 @@ mod tests {
         assert!(d.search_history.is_empty());
     }
 
-    // R-239-2: legacy (ReflexFiles) field names are not aliased.
+    // R-239-2: legacy field names are not aliased.
     #[test]
     fn legacy_field_names_are_not_read() {
         let d: NavigationData =

@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 /// `OpSummary` failure code / `code=` prefix of command errors.
 pub const VIOLATION_CODE: &str = "e2e_scope_violation";
 
-/// Invalid `REFLEXFILES_E2E_FS_SCOPE` value (start-up error).
+/// Invalid `GUIF_E2E_FS_SCOPE` value (start-up error).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScopeError(pub String);
 
@@ -45,7 +45,7 @@ impl ScopeViolation {
 mod imp {
     /// The only place that reads the environment (debug builds only).
     pub(super) fn read() -> Option<std::ffi::OsString> {
-        std::env::var_os("REFLEXFILES_E2E_FS_SCOPE")
+        std::env::var_os("GUIF_E2E_FS_SCOPE")
     }
 }
 #[cfg(not(debug_assertions))]

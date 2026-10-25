@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 // Contract assumed (reported to the implementer): no script is imported here, only files are read.
 //   - app/src-tauri/tauri.conf.json carries the keys of §3.15.5 (version 0.3.0, top-level mainBinaryName, bundle.targets ["nsis"], ...).
 //   - app/src-tauri/icons/ holds exactly 32x32.png, 128x128.png, 128x128@2x.png, icon.ico, made from icons-source/android-chrome-512x512.png (R-1470).
-//   - Cargo.toml `[package] version`, Cargo.lock `reflexfiles-successor` version, package.json and package-lock.json
+//   - Cargo.toml `[package] version`, Cargo.lock `guif` version, package.json and package-lock.json
 //     (top level and packages[""]) are all 0.3.0.
 // Status at TDD time: RED (the repo is still at 0.0.0 / targets "all" / icon []).
 
@@ -35,7 +35,7 @@ function cargoTomlVersion(text: string): string | null {
   return m ? m[1] : null;
 }
 function cargoLockVersion(text: string): string | null {
-  const m = /name\s*=\s*"reflexfiles-successor"\s*\r?\nversion\s*=\s*"([^"]+)"/.exec(text);
+  const m = /name\s*=\s*"guif"\s*\r?\nversion\s*=\s*"([^"]+)"/.exec(text);
   return m ? m[1] : null;
 }
 
@@ -54,7 +54,7 @@ describe("R-1411 / T-09 / H-4: the versions agree on 0.3.0", () => {
   it("Cargo.toml [package] version is 0.3.0", () => {
     expect(cargoTomlVersion(read(join(TAURI, "Cargo.toml")))).toBe(EXPECTED_VERSION);
   });
-  it("Cargo.lock: the reflexfiles-successor package is 0.3.0 (the Cargo package name is not renamed: 【確定 #6-5】)", () => {
+  it("Cargo.lock: the guif package is 0.3.0", () => {
     expect(cargoLockVersion(read(join(TAURI, "Cargo.lock")))).toBe(EXPECTED_VERSION);
   });
 });
@@ -69,8 +69,8 @@ describe("AC-1400 / R-1400 / R-1403 / T-02 / T-03: tauri.conf.json distribution 
     expect(main?.title).toBe("guif");
     if (conf.bundle?.publisher !== undefined) expect(conf.bundle.publisher).toBe("guif");
   });
-  it("the Cargo package name is unchanged (reflexfiles-successor)", () => {
-    expect(/^\[package\][\s\S]*?^name\s*=\s*"reflexfiles-successor"/m.test(read(join(TAURI, "Cargo.toml")))).toBe(true);
+  it("the Cargo package name is guif", () => {
+    expect(/^\[package\][\s\S]*?^name\s*=\s*"guif"/m.test(read(join(TAURI, "Cargo.toml")))).toBe(true);
   });
   it("bundle.targets is exactly [\"nsis\"] (no MSI)", () => {
     expect(conf.bundle.targets).toEqual(["nsis"]);
@@ -120,10 +120,10 @@ describe("AC-1404 / R-1448: the installer has no old-product detection of its ow
     expect(existsSync(join(TAURI, "installer-hooks.nsh"))).toBe(false);
     expect(sourceFiles(TAURI).filter((p) => /\.(nsh|nsi)$/i.test(p))).toEqual([]);
   });
-  it("(iii) no file under app/src-tauri contains `ReflexFIles` (case-sensitive) or `BundleIdentifier`", () => {
+  it("(iii) no file under app/src-tauri contains `BundleIdentifier`", () => {
     const hits = sourceFiles(TAURI).filter((p) => {
       const text = readFileSync(p).toString("latin1");
-      return text.includes("ReflexFIles") || text.includes("BundleIdentifier");
+      return text.includes("BundleIdentifier");
     });
     expect(hits).toEqual([]);
   });
@@ -168,13 +168,4 @@ describe("AC-1401 / T-01 / R-1470: icons made from the source image", () => {
   });
 });
 
-// SPEC-0300-0017 AC-946 (ii) [静的]: no code reads or moves the settings folder of the name before the rename.
-describe("AC-946 (ii) / R-1472: the former identifier does not appear in app/src and app/src-tauri/src", () => {
-  const FORMER = ["dev", "reflexfiles", "successor"].join("."); // built here so that this file itself does not contain it
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-  it("no file contains the former identifier", () => {
-    const hits = [...walk(join(APP, "src")), ...walk(join(TAURI, "src"))].filter((p) => readFileSync(p).toString("latin1").includes(FORMER));
-    expect(hits).toEqual([]);
-  });
-});
+

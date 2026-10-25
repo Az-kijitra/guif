@@ -6,14 +6,14 @@
 // wrong state ends in "nothing sent", never in "keys went somewhere else":
 //   * only the names in ALLOWED_KEYS can be sent (checked before the first send; there is no way to name another key);
 //   * the app is found by PROCESS: a descendant of the test-launched process whose executable is exactly
-//     <app>\src-tauri\target\<profile>\<exe> (debug: reflexfiles-successor.exe, release: <mainBinaryName>.exe; never by window title,
+//     <app>\src-tauri\target\<profile>\<exe> (debug: guif.exe, release: <mainBinaryName>.exe; never by window title,
 //     never the user's installed guif.exe: the full path under this checkout is compared);
 //   * before EVERY entry the foreground window is read; if it is not the target window nothing more is sent (a FAIL for the
 //     caller, never a SKIP), and the real implementation checks it once more inside the same PowerShell call that sends;
 //   * the helper never brings a window to the front or moves the focus (the app has to get the foreground by itself);
 //   * the modifiers of an entry are pressed and released inside ONE SendInput array; at the end the modifiers are read back
 //     (GetAsyncKeyState) and only REPORTED (stuckModifiers), never "repaired" by sending more input;
-//   * the opt-in: REFLEXFILES_E2E_OS_INPUT=1 (R-12-5). Without it the checks are SKIPPED with OS_INPUT_SKIP_REASON.
+//   * the opt-in: GUIF_E2E_OS_INPUT=1 (R-12-5). Without it the checks are SKIPPED with OS_INPUT_SKIP_REASON.
 //
 // Self test (no app, nothing is sent):   node e2e/lib/os-input.mjs --selftest
 // Read-only probe of the Win32 side:      node e2e/lib/os-input.mjs --probe   (prints the foreground window and held modifiers)
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 
 // ------------------------------------------------------------------------------------------------ opt-in
 
-export const OS_INPUT_ENV = "REFLEXFILES_E2E_OS_INPUT";
+export const OS_INPUT_ENV = "GUIF_E2E_OS_INPUT";
 export const OS_INPUT_SKIP_REASON = `OS のキー入力のテストは無効です(${OS_INPUT_ENV}=1 を設定すると実行します。実行中はユーザーの画面とキーボードを使います)`;
 
 /** null when the OS input checks are enabled, else the SKIP reason (R-12-5). */
@@ -106,7 +106,7 @@ const releaseExeName = () =>
 
 export function expectedExePath({ appDir, profile }) {
   if (profile !== "debug" && profile !== "release") throw new Error(`os-input: unknown build profile ${String(profile)}`);
-  return path.join(appDir, "src-tauri", "target", profile, profile === "release" ? releaseExeName() : "reflexfiles-successor.exe");
+  return path.join(appDir, "src-tauri", "target", profile, profile === "release" ? releaseExeName() : "guif.exe");
 }
 
 // ------------------------------------------------------------------------------------------------ sendKeys
@@ -462,7 +462,7 @@ async function selftest() {
   const outside = [["Page", "Down"].join(""), ["Ctrl", "C"].join("+"), ["Alt", "F4"].join("+"), "f10", "", 13, null];
   check("outside names are refused", outside.every((k) => throws(() => assertAllowedKey(k))));
   check("Alt+Space expands to Alt+Space, Escape", JSON.stringify(sequenceFor("Alt+Space")) === '["Alt+Space","Escape"]');
-  const exe = "C:\\r\\app\\src-tauri\\target\\debug\\reflexfiles-successor.exe";
+  const exe = "C:\\r\\app\\src-tauri\\target\\debug\\guif.exe";
   const table = [
     { pid: 1, ppid: 0, exePath: "n" },
     { pid: 2, ppid: 1, exePath: exe },

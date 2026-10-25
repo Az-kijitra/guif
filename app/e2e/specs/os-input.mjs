@@ -2,7 +2,7 @@
 //   SPEC-0300-0020 AC-1348 (F10 / Alt+F reach the menu bar through the OS input path, without the system menu) and the
 //   OS half of SPEC-0300-0015 AC-520 (the viewer is in front by itself and Down scrolls it).
 //
-// It uses the user's real screen and keyboard, so it is OPT-IN: it runs only with REFLEXFILES_E2E_OS_INPUT=1 (R-12-5);
+// It uses the user's real screen and keyboard, so it is OPT-IN: it runs only with GUIF_E2E_OS_INPUT=1 (R-12-5);
 // otherwise the scenario is SKIPPED without even starting the app (run.mjs asks skipReason()). The helper
 // (lib/os-input.mjs) sends only allow-listed names, only while the window of THIS run's app is in front, and never
 // brings a window to the front: if the app did not get the foreground by itself the test FAILS (R-12-4), it is not skipped.
@@ -167,7 +167,7 @@ const scenarioTests = [
 export const scenarios = [
   {
     id: "os-input",
-    title: "OS key input (SPEC-0400-0001 R-12; opt-in with REFLEXFILES_E2E_OS_INPUT=1)",
+    title: "OS key input (SPEC-0400-0001 R-12; opt-in with GUIF_E2E_OS_INPUT=1)",
     skipReason: () => osInputSkipReason(),
     tests: scenarioTests,
   },

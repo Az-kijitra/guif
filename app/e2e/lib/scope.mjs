@@ -2,7 +2,7 @@
 //
 // The functions are injected into the page as source text (`fn.toString()`), so they must stay
 // self-contained (no outer references) and must never throw. The real protection against
-// links / junctions leaving the test folder is the backend scope (REFLEXFILES_E2E_FS_SCOPE,
+// links / junctions leaving the test folder is the backend scope (GUIF_E2E_FS_SCOPE,
 // SPEC-0400-0001 R-10); this layer is the second, textual line of defence.
 //
 //   node app/e2e/lib/scope.mjs --selftest

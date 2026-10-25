@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from "vitest";
 //
 // Contract assumed (reported to the implementer) -- app/scripts/release/*.mjs, Node built-ins only, ES modules:
 //   versions.mjs        export readVersions(appDir: string): { "tauri.conf.json": string; "package.json": string; "package-lock.json": string; "Cargo.toml": string; "Cargo.lock": string }
-//                         - Cargo.toml: `version` of the [package] table; Cargo.lock: the `version` right after `name = "reflexfiles-successor"`;
+//                         - Cargo.toml: `version` of the [package] table; Cargo.lock: the `version` right after `name = "guif"`;
 //                           package-lock.json: the top-level `version`
 //                       export checkVersions(v): { ok: boolean; errors: string[] }   // all equal AND MAJOR.MINOR.PATCH; each error names the offending file
 //                       `node scripts/release/versions.mjs` (npm run release:check) prints and exits 0 when ok, 1 otherwise (run with cwd = app)
@@ -23,7 +23,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 const APP = resolve(__dirname, "..");
 const DIR = join(APP, "scripts", "release");
-const tmp = mkdtempSync(join(tmpdir(), "reflex-release-"));
+const tmp = mkdtempSync(join(tmpdir(), "guif-release-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,18 +51,18 @@ function fixture(v: Vs): string {
   const dir = join(tmp, `app${n++}`);
   mkdirSync(join(dir, "src-tauri"), { recursive: true });
   writeFileSync(join(dir, "src-tauri", "tauri.conf.json"), JSON.stringify({ productName: "guif", version: v.conf }));
-  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "reflexfiles-successor", version: v.pkg }));
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "guif", version: v.pkg }));
   writeFileSync(
     join(dir, "package-lock.json"),
-    JSON.stringify({ name: "reflexfiles-successor", version: v.lock, lockfileVersion: 3, packages: { "": { name: "reflexfiles-successor", version: v.lock } } }),
+    JSON.stringify({ name: "guif", version: v.lock, lockfileVersion: 3, packages: { "": { name: "guif", version: v.lock } } }),
   );
   writeFileSync(
     join(dir, "src-tauri", "Cargo.toml"),
-    `[package]\nname = "reflexfiles-successor"\nversion = "${v.toml}"\nedition = "2021"\n\n[dependencies]\nserde = { version = "1", features = ["derive"] }\n`,
+    `[package]\nname = "guif"\nversion = "${v.toml}"\nedition = "2021"\n\n[dependencies]\nserde = { version = "1", features = ["derive"] }\n`,
   );
   writeFileSync(
     join(dir, "src-tauri", "Cargo.lock"),
-    `version = 4\n\n[[package]]\nname = "aaa"\nversion = "9.9.9"\n\n[[package]]\nname = "reflexfiles-successor"\nversion = "${v.cargoLock}"\ndependencies = [\n "serde",\n]\n\n[[package]]\nname = "zzz"\nversion = "8.8.8"\n`,
+    `version = 4\n\n[[package]]\nname = "aaa"\nversion = "9.9.9"\n\n[[package]]\nname = "guif"\nversion = "${v.cargoLock}"\ndependencies = [\n "serde",\n]\n\n[[package]]\nname = "zzz"\nversion = "8.8.8"\n`,
   );
   return dir;
 }

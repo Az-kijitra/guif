@@ -1,12 +1,12 @@
 // Starts / stops the real app (`tauri dev`) for the E2E run and guards the user's
 // real data (SPEC-0400-0001 第2版 R-08; SPEC-0200-0001 §3.8.14, §3.8.17 MUST-109).
 //
-//  1. a fresh temporary config folder is passed as REFLEXFILES_CONFIG_DIR (the app
+//  1. a fresh temporary config folder is passed as GUIF_CONFIG_DIR (the app
 //     only honours it in debug builds);
 //  2. the app must print `[config] override dir: <that path>` on stderr; if the line
 //     is missing or names another path, the app is killed BEFORE the page is ever
 //     connected, so not a single input is sent;
-//  2b. REFLEXFILES_E2E_FS_SCOPE = the test folder is passed too (debug builds): the backend then
+//  2b. GUIF_E2E_FS_SCOPE = the test folder is passed too (debug builds): the backend then
 //     refuses file operations outside it (SPEC-0400-0001 R-10); the notice `E2E fs scope active: ...`
 //     must be seen on stderr before any input is sent (SPEC-0200-0001 §3.10.17.6);
 //  3. after the run, the real settings folder (%APPDATA%\dev.guif.app\)
@@ -22,7 +22,7 @@ import { listTargets, sleep } from "./cdp.mjs";
 export const VITE_PORT = 5173; // vite.config.ts: strictPort
 export const IDENTIFIER = "dev.guif.app";
 export const REAL_CONFIG_DIR = path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), IDENTIFIER);
-const KEEP_FILE = path.join(os.tmpdir(), "rf-e2e-keep.json");
+const KEEP_FILE = path.join(os.tmpdir(), "guif-e2e-keep.json");
 const OVERRIDE_LINE = /^\[config\] override dir: (.*)$/;
 // SPEC-0400-0001 R-10-2 / SPEC-0200-0001 §3.10.17.6: the backend's notice that the E2E file scope is active.
 const SCOPE_LINE = /^E2E fs scope active: (.*)$/;
@@ -118,7 +118,7 @@ async function ensurePortsFree(ports) {
   for (const pid of leftovers) {
     for (let p = byPid.get(pid), guard = 0; p && guard < 10; p = byPid.get(p.ParentProcessId), guard++) {
       if (p.ProcessId === process.pid || p.ProcessId === process.ppid) break;
-      if (/^(reflexfiles-successor|cargo|node|npm|cmd|tauri)/i.test(p.Name)) victims.add(p.ProcessId);
+      if (/^(guif|cargo|node|npm|cmd|tauri)/i.test(p.Name)) victims.add(p.ProcessId);
       else if (p.ProcessId !== pid) break;
     }
   }
@@ -216,7 +216,7 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
   }
 
   // SHOULD-190: `navigationToml` is `(fx) => string | null` (the content may name folders inside the fresh test
-  // folder `fx.root`, which exists only per start). It is written into cfgDir (= REFLEXFILES_CONFIG_DIR) only,
+  // folder `fx.root`, which exists only per start). It is written into cfgDir (= GUIF_CONFIG_DIR) only,
   // after the Fixtures exist and before the app is spawned; a failure removes the folders and aborts the run.
   if (navigationToml !== undefined && navigationToml !== null) {
     try {
@@ -256,7 +256,7 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
   log(`config override folder: ${cfgDir}`);
 
   // The app's output goes to files (not pipes) so a --keep run can outlive this script.
-  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "rf-e2e-log-"));
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "guif-e2e-log-"));
   const errPath = path.join(logDir, "app.err.log");
   const outFd = fs.openSync(path.join(logDir, "app.out.log"), "w");
   const errFd = fs.openSync(errPath, "w");
@@ -270,8 +270,8 @@ export async function launchApp({ appDir, cdpPort, timeoutMs, log, expectOverrid
       ...process.env,
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}`,
       WEBVIEW2_USER_DATA_FOLDER: userData,
-      REFLEXFILES_CONFIG_DIR: cfgDir,
-      REFLEXFILES_E2E_FS_SCOPE: scopeRoot,
+      GUIF_CONFIG_DIR: cfgDir,
+      GUIF_E2E_FS_SCOPE: scopeRoot,
     },
   });
   const handle = { child, pid: child.pid, cfgDir, userData, logDir, realBefore, cdpPort, attached: false, fsScope: scopeRoot };
@@ -404,7 +404,7 @@ export async function attachApp({ cdpPort, allowRealConfig, log }) {
   // S-3: without the recorded backend scope the app cannot be shown to refuse file operations outside the
   // test folder, and the specs change files: refuse to run at all.
   if (!kept?.fsScope) {
-    throw new AbortRun("--attach: the backend file scope (REFLEXFILES_E2E_FS_SCOPE) of this app cannot be confirmed; refusing to run specs that change files");
+    throw new AbortRun("--attach: the backend file scope (GUIF_E2E_FS_SCOPE) of this app cannot be confirmed; refusing to run specs that change files");
   }
   return {
     child: undefined,

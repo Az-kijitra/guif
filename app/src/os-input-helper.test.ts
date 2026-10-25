@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 // [単体 / 静的] Spec: SPEC-0400-0001 第5版 R-12 (OS key-input E2E: only an allow-list of key NAMES can be sent; the target is identified by process,
 //   not by window title; the foreground window is checked before every send and nothing is sent when it is not the app; the helper never brings a
 //   window to the front; never leaves a modifier held), R-12-1-1 / R-12-2 (identification; no foreground-forcing API), R-12-3 (the allow-list), R-12-4
-//   (wrong foreground = FAIL, not SKIP), R-12-5 (explicit opt-in `REFLEXFILES_E2E_OS_INPUT=1`; otherwise SKIP with the reason), AC-12 (i)~(vii) (the unit /
+//   (wrong foreground = FAIL, not SKIP), R-12-5 (explicit opt-in `GUIF_E2E_OS_INPUT=1`; otherwise SKIP with the reason), AC-12 (i)~(vii) (the unit /
 //   static ones), SPEC-0300-0020 AC-1348 (the keys it needs), SPEC-0300-0015 AC-520 (`ArrowDown` is what it sends).
 // Architecture: SPEC-0200-0001 §3.14.6 + §3.14.12-5 (MUST-133 / 134 / 135, SHOULD-205): `app/e2e/lib/os-input.mjs` (Node built-ins only; PowerShell via
 //   `-EncodedCommand`), the allow-list WITHOUT PageUp / PageDown / Home / End (MUST-133 a), each entry sent as ONE SendInput array including the modifier
@@ -281,7 +281,7 @@ describe("R-12-2 / R-12-4 / MUST-133: sendKeys sends only to the target, one arr
 });
 
 describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
-  const EXPECTED = "C:\\Users\\dev\\git\\project\\app\\src-tauri\\target\\debug\\reflexfiles-successor.exe";
+  const EXPECTED = "C:\\Users\\dev\\git\\project\\app\\src-tauri\\target\\debug\\guif.exe";
   const base = [
     { pid: 100, ppid: 1, exePath: "C:\\Program Files\\nodejs\\node.exe" }, // the test launcher (rootPid)
     { pid: 110, ppid: 100, exePath: "C:\\Windows\\System32\\cmd.exe" },
@@ -315,7 +315,7 @@ describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
     const h = await helper();
     const decoys = [
       { pid: 201, ppid: 100, exePath: "C:\\Users\\dev\\AppData\\Local\\guif\\guif.exe" },
-      { pid: 202, ppid: 100, exePath: "C:\\other\\target\\debug\\reflexfiles-successor.exe" },
+      { pid: 202, ppid: 100, exePath: "C:\\other\\target\\debug\\guif.exe" },
       { pid: 203, ppid: 100, exePath: EXPECTED + ".bak" },
       { pid: 204, ppid: 100, exePath: "D:" + EXPECTED.slice(2) },
       { pid: 205, ppid: 100, exePath: null },
@@ -339,10 +339,10 @@ describe("MUST-134 (a) / R-12-1-1: finding the app process", () => {
     expect(h.selectAppPid(deep, 100, EXPECTED)).toBe(104);
   });
 
-  it("the expected path is built from the build settings: debug is <app>\\src-tauri\\target\\debug\\reflexfiles-successor.exe -- never the user's guif.exe", async () => {
+  it("the expected path is built from the build settings: debug is <app>\\src-tauri\\target\\debug\\guif.exe", async () => {
     const h = await helper();
     const dbg: string = h.expectedExePath({ appDir: "C:\\r\\app", profile: "debug" });
-    expect(dbg.toLowerCase().replace(/\//g, "\\")).toBe("c:\\r\\app\\src-tauri\\target\\debug\\reflexfiles-successor.exe");
+    expect(dbg.toLowerCase().replace(/\//g, "\\")).toBe("c:\\r\\app\\src-tauri\\target\\debug\\guif.exe");
     const rel: string = h.expectedExePath({ appDir: "C:\\r\\app", profile: "release" });
     expect(rel.toLowerCase().replace(/\//g, "\\")).toMatch(/^c:\\r\\app\\src-tauri\\target\\release\\[a-z-]+\.exe$/);
     expect(rel.toLowerCase()).toContain("\\target\\release\\");
@@ -396,9 +396,9 @@ describe("static: os-input.mjs obeys the safety rules (R-12-2, R-12-3, SHOULD-20
     expect(src()).toContain("--selftest");
   });
 
-  it("the E2E opt-in and its SKIP reason are in the code: REFLEXFILES_E2E_OS_INPUT (R-12-5)", () => {
+  it("the E2E opt-in and its SKIP reason are in the code: GUIF_E2E_OS_INPUT (R-12-5)", () => {
     const all = [HELPER_PATH, join(APP, "e2e", "run.mjs")].filter(existsSync).map((f) => readFileSync(f, "utf-8")).join("\n");
-    expect(all).toContain("REFLEXFILES_E2E_OS_INPUT");
+    expect(all).toContain("GUIF_E2E_OS_INPUT");
     expect(all).toContain("OS のキー入力のテストは無効");
   });
 });

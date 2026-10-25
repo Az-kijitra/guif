@@ -32,7 +32,7 @@ describe("tauri.conf.json: product and window (AC-946, R-991~R-993)", () => {
     expect(main.title).toBe(conf.productName);
   });
 
-  it("R-993: the old name `ReflexFiles Successor (Phase 1)` is gone from the config", () => {
+  it("R-993: the old name `Successor (Phase 1)` is gone from the config", () => {
     expect(JSON.stringify(conf)).not.toContain("Successor (Phase 1)");
   });
 

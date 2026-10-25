@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
-const CARGO_PACKAGE = "reflexfiles-successor";
+const CARGO_PACKAGE = "guif";
 
 /** `version` of the [package] table of a Cargo.toml text, or null. */
 function cargoTomlVersion(text) {
@@ -24,7 +24,7 @@ function cargoTomlVersion(text) {
   return null;
 }
 
-/** `version` right after `name = "reflexfiles-successor"` in a Cargo.lock text, or null. */
+/** `version` right after `name = "guif"` in a Cargo.lock text, or null. */
 function cargoLockVersion(text) {
   const m = new RegExp(`name\\s*=\\s*"${CARGO_PACKAGE}"\\s*\\r?\\nversion\\s*=\\s*"([^"]*)"`).exec(text);
   return m ? m[1] : null;

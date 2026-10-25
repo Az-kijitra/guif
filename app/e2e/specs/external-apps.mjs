@@ -2,7 +2,7 @@
 // R-08 / R-08-1 / R-10 / R-10-5. Design: SPEC-0200-0001 §3.16.10 / §3.16.11 (§3.16.15 wins where they differ).
 //
 // Three scenarios = three app starts (config.toml is read once at startup), each with its own throw-away config folder and the E2E file
-// scope (launchApp always passes REFLEXFILES_CONFIG_DIR + REFLEXFILES_E2E_FS_SCOPE and refuses a config.toml without `external_apps`):
+// scope (launchApp always passes GUIF_CONFIG_DIR + GUIF_E2E_FS_SCOPE and refuses a config.toml without `external_apps`):
 //   E0  `external_apps = []`              AC-1501 (no entrance, no launch) + AC-653 (junctions are folders / a broken one is a file)
 //   E1  only probe registrations          keys, menu bar 「ファイル」, row / blank context menu, targets, args, status messages W-94..W-99,
 //                                         auto-repeat, search box focus, overlays, focus return, enabled state, Ctrl+Alt+E vs Alt+E

@@ -29,7 +29,7 @@ pub struct StartupConfig {
 
 impl StartupConfig {
     /// The path goes to `from_path` and nowhere else (SHOULD-183 (c)). A path-resolution failure is handled like an
-    /// unreadable file (R-917-5 (2)); an invalid `REFLEXFILES_CONFIG_DIR` was already rejected by `lib.rs`.
+    /// unreadable file (R-917-5 (2)); an invalid `GUIF_CONFIG_DIR` was already rejected by `lib.rs`.
     pub fn load(app: &AppHandle) -> Self {
         match locate(app) {
             Ok(path) => Self::from_path(&path),

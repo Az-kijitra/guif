@@ -9,7 +9,7 @@
 | 作成日 | 2026-10-18 |
 | 最終改訂 | 2026-10-23(**第2版 APPROVED**。発注者承認)/ 2026-10-23(**第2版 DRAFT**: SPEC-0300-0023 の連動。`ui_theme` の廃止と新しい4つの表)/ 2026-10-20(**第1版 APPROVED**。発注者承認。連動の新版10本と同じ承認)/ 2026-10-18(第1版 DRAFT。発注者決定〈【提案】を【確定】に、起票時の論点 (1)(2)〉の反映と、連動の新版10本の起票: §0.8、§12)/ 2026-10-18(第1版 DRAFT。spec-reviewer の再レビュー〈承認可〉の SHOULD-1 / MINOR-1〜4 の反映: §0.7)/ 2026-10-18(第1版 DRAFT。spec-reviewer のレビュー〈第1回、差し戻し〉の反映: §0.7)/ 2026-10-18(第1版 DRAFT 起票) |
 | 作成者 | spec-writer (Claude) |
-| 一次出典 | **発注者の要望 2026-10-18(原文 §0.1)/ 発注者決定 2026-10-18(AskUserQuestion、オーケストレーター経由で伝達。§0.2)** / 本リポジトリの現状(spec-writer が 2026-10-18 にソースを読んで確かめた。§0.4)/ 既存調査 `specs/_drafts/existing-main-20260922-phase1-detail.md` §2.3 / §2.5、`specs/_drafts/existing-20260922-reflexfiles-overview.md`(旧製品の参考。§0.3)/ spec-reviewer のレビュー(2026-10-18、第1回)/ 承認済み仕様 SPEC-0100-0005 第2版、SPEC-0300-0009 第18版・0010 第17版・0011 第10版・0015 第12版・0016 第4版・0017 第9版・0018 第5版・0019 第4版・0020 第2版・0021 第1版、SPEC-0400-0001 第6版、SPEC-0500-0001、設計 `docs/architecture/proposals/SPEC-0200-0001.md` §3.6.11.9(MUST-92)/ §3.11.3 / SHOULD-119 |
+| 一次出典 | **発注者の要望 2026-10-18(原文 §0.1)/ 発注者決定 2026-10-18(AskUserQuestion、オーケストレーター経由で伝達。§0.2)** / 本リポジトリの現状(spec-writer が 2026-10-18 にソースを読んで確かめた。§0.4)/ 既存調査 `specs/_drafts/existing-main-20260922-phase1-detail.md` §2.3 / §2.5、`specs/_drafts/existing-overview.md`(旧製品の参考。§0.3)/ spec-reviewer のレビュー(2026-10-18、第1回)/ 承認済み仕様 SPEC-0100-0005 第2版、SPEC-0300-0009 第18版・0010 第17版・0011 第10版・0015 第12版・0016 第4版・0017 第9版・0018 第5版・0019 第4版・0020 第2版・0021 第1版、SPEC-0400-0001 第6版、SPEC-0500-0001、設計 `docs/architecture/proposals/SPEC-0200-0001.md` §3.6.11.9(MUST-92)/ §3.11.3 / SHOULD-119 |
 | 関連Issue | 起票: **ISS-0231**(発注者の要望と決定の記録)、**ISS-0232**(【確定 T-01〜T-29】)、**ISS-0233**(承認済み仕様との抵触と必要な新版)、**ISS-0234**(確かめる事実)/ 参照: ISS-0004(設定診断等を今回除外した決定)、**ISS-0021 (a)**(`Ctrl+,` の先取り判定。PENDING_HUMAN_REVIEW。【確定 T-25】で同時に決める)、ISS-0027(`settings` を後続とした決定) |
 
 ## 0. 経緯・出典
@@ -38,12 +38,12 @@
 ### 0.3 旧製品の `main` の事実(既存調査。参考。踏襲しない)
 
 - `Ctrl+,`(`settings`)は設定画面(モーダル)を開き、`config.toml` を OS の既定のテキストエディタで開くのは設定画面の中の別のボタン(`config_open_in_editor`)だった(`existing-main-20260922-phase1-detail.md` §2.3。`main:app/src-tauri/src/config_cmds.rs:298-306` は関数の形だけ確認、中の実装は未確認)。旧製品のマニュアルは `Ctrl+,` で直接エディタが開くように読める記述で、実装と食い違っていた(SPEC-0300-0010 R-44 の注記)。
-- 設定の診断レポートの生成(`config_generate_diagnostic_report`)とバックアップ / リストアがあった(`existing-20260922-reflexfiles-overview.md` 項目6。調査の基準は `new-feature-experiment`)。ISS-0004 / SPEC-0100-0005 §4 で今回のスコープから除外されている。
+- 設定の診断レポートの生成(`config_generate_diagnostic_report`)とバックアップ / リストアがあった(`existing-overview.md` 項目6。調査の基準は `new-feature-experiment`)。ISS-0004 / SPEC-0100-0005 §4 で今回のスコープから除外されている。
 - 本仕様は、設定画面を作らず(【要望 a】)、診断レポート・バックアップは作らない。旧製品のこれらの仕組みは参考にしない(新しい調査は行っていない)。
 
 ### 0.4 本リポジトリの現状(spec-writer が 2026-10-18 にソースを読んで確かめた。規範ではない)
 
-1. **設定フォルダー**: `config/paths.rs` の `config_path` = アプリ設定ディレクトリ直下の `config.toml`。release ビルドでは `%APPDATA%\dev.guif.app`(マニュアル §3)。debug ビルドでは `REFLEXFILES_CONFIG_DIR` で上書きできる(SPEC-0400-0001 R-06)。設定フォルダーには `config.toml`(利用者が書く)、`navigation.toml` / `ui-state.toml` / `viewer-window.toml`(アプリが管理する)がある。
+1. **設定フォルダー**: `config/paths.rs` の `config_path` = アプリ設定ディレクトリ直下の `config.toml`。release ビルドでは `%APPDATA%\dev.guif.app`(マニュアル §3)。debug ビルドでは `GUIF_CONFIG_DIR` で上書きできる(SPEC-0400-0001 R-06)。設定フォルダーには `config.toml`(利用者が書く)、`navigation.toml` / `ui-state.toml` / `viewer-window.toml`(アプリが管理する)がある。
 2. **読み込み**: `config/config_toml.rs` の `load` が1回の TOML 解析で `input_keymap_custom` / `ui_theme` / `external_apps` の生の値を返し、`config/commands.rs` の `StartupConfig::load` が起動時に1回だけ呼んで結果を保持する(R-917-8)。`config.toml` が無いときは既定の結果で、ファイルを作らない(テスト `missing_file_returns_empty_entries_and_no_parse_error`)。
 3. **検証の場所**: `ui_theme` は Rust の `interpret_ui_theme`、`external_apps` の要素は Rust の `external_apps/registry.rs`、登録のキーは TypeScript の `buildRegistry`、`input_keymap_custom` の要素は TypeScript の `features/keyboard/keymap-validate.ts`(設計 MUST-86: Rust にキーの文法を二重に持たない)。起動時の通知の文は `routes/startup-wiring.ts` の `loadKeymapForStartup` が「キー割り当て → テーマ → 外部アプリ」の順に半角スペースでつなぎ(同じ関数が `externalAppsState.hydrate` で状態の書き込みも行う)、`runStartupHydrate` が `config.toml` → `ui-state.toml` → `navigation.toml` の順に ` / ` でつなぎ、`statusMessage.showPriority(…, 6000)`(`STARTUP_NOTICE_DURATION_MS`、設計 SHOULD-119)で 6 秒表示する。
 4. **状態メッセージの仕組み**(`shared/state/status-message.svelte.ts`): `showPriority` は表示中の文を**置き換え**、指定の時間の間「優先」とする。優先の表示中に通常の `show` が呼ばれると、置き換えずに ` / ` で**後ろに足す**(時間は延びない)。優先でないときの `show` は置き換え、既定 2.5 秒。
@@ -319,7 +319,7 @@
 ## 10. 安全とテスト
 
 - **[R-1680]【導出 / レビュー MINOR-6】アプリが開くのは設定フォルダーの `config.toml` だけ、書き込むのは R-1614 のとおり雛形の `config.toml`(無いときだけ)・`config.sample.toml`・見本の書き出しのための一時ファイルだけとする。** アプリは `config.toml` を TOML として読むだけで、その中の値を実行しない(外部アプリの登録の起動は SPEC-0300-0021 のとおり)。
-- **[R-1681]【確定 T-22】debug ビルドで E2E の範囲(SPEC-0400-0001 R-10)が有効な間は、VS Code の起動も関連付けで開く処理も行わず、W-A7 を出す。** 雛形と見本の書き込みは行う。書き込み先は、アプリが決めた設定フォルダー(E2E では `REFLEXFILES_CONFIG_DIR`)の固定の名前のファイルであり、`ui-state.toml` 等と同じく範囲の検査(SPEC-0400-0001 R-10)の対象外とする(同仕様の新版で明記)。
+- **[R-1681]【確定 T-22】debug ビルドで E2E の範囲(SPEC-0400-0001 R-10)が有効な間は、VS Code の起動も関連付けで開く処理も行わず、W-A7 を出す。** 雛形と見本の書き込みは行う。書き込み先は、アプリが決めた設定フォルダー(E2E では `GUIF_CONFIG_DIR`)の固定の名前のファイルであり、`ui-state.toml` 等と同じく範囲の検査(SPEC-0400-0001 R-10)の対象外とする(同仕様の新版で明記)。
 - **[R-1682]【確定 T-22 / レビュー M-3 で改訂】E2E と CDP で使う `config.toml` は、SPEC-0400-0001 R-08-1 の 1 / SPEC-0300-0021 R-1585 の 2 のとおり `external_apps` を書く(テスト用の実行ファイルだけ、または `[]`)。** 本機能の受入基準の E2E は、次の手順で例外を使わずに行う。
   - `config.toml` が無い状態・壊れた状態・書き換えた状態を確かめる E2E(AC-1601、AC-1608、AC-1610、AC-1650、AC-1653 (ii)(iii) ほか)は、`external_apps = []` を書いた `config.toml` で起動した後に、テスト側で `config.toml` を消す・壊す・書き換える。起動時に読んだ登録は再起動まで変わらないため、既定の4つは有効にならない(§0.4 の 11)。
   - **【再レビュー SHOULD-1】起動の後にテスト側が書き込む `config.toml` の内容(AC-1600 (ii)〜(v)、AC-1610、AC-1650、AC-1653 (i)(iii) ほか)にも、例外なく `external_apps = []`(またはテスト用の実行ファイルだけの登録)を入れる。** 構文の誤りのある内容では、`external_apps = []` を壊れた行より前に置く。0 バイトの内容(AC-1600 (iii))は、`external_apps` を書けないため起動後に書き込まず、[単体] だけで確かめる。これにより SPEC-0300-0021 AC-1506 の走査(E2E が作る・使うすべての `config.toml`)を満たし、例外は次の AC-1645 の1つだけのままとする。

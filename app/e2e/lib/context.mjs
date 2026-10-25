@@ -191,7 +191,7 @@ export function createContext({ cdp, fx, shotsDir, log }) {
 
   // §3.10.17.3 / §3.10.17.6: fs_ops_copy / fs_ops_move are let through ONLY while every item and the
   // destination are inside the test folder (the lexical rule of scope.mjs, injected as source text);
-  // the backend (REFLEXFILES_E2E_FS_SCOPE) judges the same paths again, with links resolved.
+  // the backend (GUIF_E2E_FS_SCOPE) judges the same paths again, with links resolved.
   ctx.fileOpsRoot = null;
   ctx.clipboardScopeActive = false;
   const SCOPE_SOURCE = `const isInsideScope = ${isInsideScope.toString()}; const copyMoveArgsAllowed = ${copyMoveArgsAllowed.toString()};`;
