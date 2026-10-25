@@ -106,7 +106,7 @@ fn ac1606_no_capability_gains_an_opener_or_shell_permission() {
 #[test]
 fn the_three_places_agree_on_the_command_count() {
     let handler = handler_commands(LIB_RS);
-    assert_eq!(handler.len(), 35, "generate_handler! has 35 commands (32 + the two settings_file commands + appearance_load)");
+    assert_eq!(handler.len(), 36, "generate_handler! has 36 commands (+ fs_fuzzy_search)");
     assert_eq!(manifest_commands(BUILD_RS), handler, "build.rs lists exactly the handler's commands");
 }
 

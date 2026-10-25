@@ -80,6 +80,7 @@ export interface ListActionDeps<E extends EntryLike = EntryLike> {
   pathBar?: { open(): void };
   // SPEC-0300-0022 R-1671 / SPEC-0200-0001 §3.17.9: the `settings` action = open the settings file (optional like pathBar: unset => nothing).
   settingsFile?: { open(): void | Promise<unknown> };
+  openFuzzySearch?: () => void;
 }
 
 const FILE_OP_ACTIONS = new Set(["copy", "cut", "paste", "delete", "rename", "new_file", "new_folder"]);
@@ -155,6 +156,9 @@ export function createListActionHandler<E extends EntryLike>(deps: ListActionDep
         return true;
       case "search":
         deps.activateSearch();
+        return true;
+      case "fuzzy_find_file":
+        deps.openFuzzySearch?.();
         return true;
       // R-222/R-223: no entries.length guards on purpose.
       case "history":

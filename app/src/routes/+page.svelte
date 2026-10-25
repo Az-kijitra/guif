@@ -44,6 +44,9 @@
   import { createMainTreeState } from "./tree-wiring";
   import { createStatusBarModel } from "./status-bar-wiring.svelte";
   import { createListView } from "./list-view-wiring.svelte";
+  import { fuzzySearchState } from "$lib/features/fuzzy-search/fuzzy-search-state.svelte";
+  import FuzzySearchModal from "$lib/features/fuzzy-search/FuzzySearchModal.svelte";
+  import { createFuzzySearchWiring } from "./fuzzy-wiring";
 
   let ready = $state(false); // SHOULD-120: gate the body until R-77-3-1 applies.
 
@@ -97,12 +100,8 @@
   };
 
   const overlay = createOverlayController({ // §3.2.9-1: search/history/sort-menu exclusion + focus.
-    search: searchState,
-    history: navigationHistoryState,
-    focus,
-    nextTick: tick,
-    navigate: (path) => void afterUserNavigation(fileListState.navigate(path)),
-    sortMenu: sortMenuState,
+    search: searchState, history: navigationHistoryState, focus, nextTick: tick,
+    navigate: (path) => void afterUserNavigation(fileListState.navigate(path)), sortMenu: sortMenuState,
   });
   const { activateSearch, openHistoryList } = overlay;
   const historyRows = createHistoryRowHandlers({ history: navigationHistoryState, overlay, focusContainer: focus.container });
@@ -165,20 +164,17 @@
 
   // File ops (Phase 2) + ZIP (Phase 5): displayed entries only (MUST-61).
   const { fileOps, archive, clipboard } = createOperationControllers({
-    modal: modalHost,
-    status: statusMessage,
-    currentPath: () => fileListState.currentPath,
-    entries: () => fileListState.entries,
-    filteredEntries: () => filteredEntries,
-    selected: () => fileListState.selected,
-    focusedPath: () => focusedPath(),
-    reload: (opts) => fileListState.reload(opts),
+    modal: modalHost, status: statusMessage, currentPath: () => fileListState.currentPath, entries: () => fileListState.entries,
+    filteredEntries: () => filteredEntries, selected: () => fileListState.selected, focusedPath: () => focusedPath(), reload: (opts) => fileListState.reload(opts),
   });
 
   // SPEC-0300-0021/0022 entrances (no logic). closeMenus closes ONLY what is open (R-1671-1: closeNow() alone would steal the focus); both are made below.
+  const closeMenus = () => { if (contextMenu.state.isOpen) contextMenu.closeNow(); if (menuBar.keys.active) menuBar.deactivate(true); };
   const { externalApps, settingsFile } = createEntryWiring({
-    entries: () => externalAppsState.entries, filteredEntries: () => filteredEntries, focusedPath, currentPath: () => fileListState.currentPath, status: statusMessage,
-    closeMenus: () => { if (contextMenu.state.isOpen) contextMenu.closeNow(); if (menuBar.keys.active) menuBar.deactivate(true); },
+    entries: () => externalAppsState.entries, filteredEntries: () => filteredEntries, focusedPath, currentPath: () => fileListState.currentPath, status: statusMessage, closeMenus,
+  });
+  const fuzzyWiring = createFuzzySearchWiring({
+    fuzzySearchState, fileListState, afterUserNavigation, focusContainer: focus.container, closeMenus,
   });
 
   const { onListAction, onTreeAction, onTreeSelectPath } = createListTreeControllers({
@@ -201,6 +197,7 @@
     treeFullyVisibleRows: () => treeFullyVisibleRows,
     pathBar,
     settingsFile,
+    openFuzzySearch: fuzzyWiring.openFuzzySearch,
   });
 
   // SPEC-0300-0018: right-click menu; delegates to the controllers above (no logic here).
@@ -239,15 +236,8 @@
 
   // R-971/R-972: permanent status items (focus area tracked from the DOM, SHOULD-149).
   const status = createStatusBarModel({
-    fileList: fileListState,
-    search: searchState,
-    history: navigationHistoryState,
-    sortMenu: sortMenuState,
-    contextMenu: contextMenu.state,
-    menuBar: menuBar.view,
-    modal: modalHost,
-    pathEditing: () => pathBar.state.editing,
-    filteredEntries: () => filteredEntries,
+    fileList: fileListState, search: searchState, history: navigationHistoryState, sortMenu: sortMenuState,
+    contextMenu: contextMenu.state, menuBar: menuBar.view, modal: modalHost, pathEditing: () => pathBar.state.editing, filteredEntries: () => filteredEntries,
   });
 
   onMount(() => {
@@ -290,6 +280,7 @@
         onTabStop,
         pathBar: { get editing() { return pathBar.state.editing; }, ...pathBar.keys },
         externalApps,
+        fuzzySearch: fuzzySearchState,
       },
       initialDirectory: {
         lastVisited: navigationHistoryState.visitHistory[0],
@@ -395,5 +386,11 @@
   dispatch={(intent) => modalHost.dispatch(intent)}
   setFieldValue={(id, value) => modalHost.setFieldValue(id, value)}
   setChecked={(checked) => modalHost.setChecked(checked)}
+/>
+
+<FuzzySearchModal
+  fuzzy={fuzzySearchState}
+  onSelect={fuzzyWiring.handleFuzzySelect}
+  onClose={() => fuzzySearchState.close()}
 />
 

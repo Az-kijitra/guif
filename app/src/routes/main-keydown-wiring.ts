@@ -61,6 +61,7 @@ export interface MainKeydownWiringDeps {
   };
   // SPEC-0300-0021 R-1550 / SPEC-0200-0001 §3.16.7: a registered external app's key (optional). The logic is in external-apps-wiring.ts.
   externalApps?: { onKey: (event: KeydownLikeEvent) => boolean };
+  fuzzySearch?: { readonly isOpen: boolean };
 }
 
 // Builds the `(event: Event) => void` handler `attachGlobalKeydownListener`
@@ -78,6 +79,10 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       keyCode: ke.keyCode, // R-764: IME marker 229 (MUST-99(c))
       repeat: ke.repeat, // R-1549: an auto-repeat keydown starts no external app
     };
+
+    if (deps.fuzzySearch?.isOpen) {
+      return;
+    }
 
     const flags = computeDispatchOverlayFlags({
       modalOpen: deps.modal.isOpen,

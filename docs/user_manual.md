@@ -68,7 +68,7 @@ guif の設定フォルダーは `%APPDATA%\dev.guif.app` です。次のファ�
 | ファイル | 開く(Enter)、OSの関連付けで開く(Shift+Enter)、新規作成…(Ctrl+N)、新しいフォルダー…(Ctrl+Shift+N)、名前の変更(F2)、削除(Delete)、ZIPに圧縮(Ctrl+Alt+Z)、ZIPを展開(Ctrl+Alt+X)、設定ファイルを開く(Ctrl+,)、設定ファイルのチェック、終了(Ctrl+Q) |
 | 編集 | 切り取り(Ctrl+X)、コピー(Ctrl+C)、貼り付け(Ctrl+V)、パスのコピー、すべて選択(Ctrl+A)、選択の解除(Esc)、検索(/) |
 | 表示 | ツリー(Ctrl+Shift+B)、隠しファイル(Ctrl+H)、サイズの列(Ctrl+Shift+S)、更新日時の列(Ctrl+Shift+T)、並び替え…(S) |
-| 移動 | 親フォルダーへ(Backspace)、パス欄へ移動(Ctrl+L)、履歴(Ctrl+Y)、ジャンプリスト(Ctrl+J)、ジャンプリストに追加(Ctrl+Shift+J) |
+| 移動 | 親フォルダーへ(Backspace)、パス欄へ移動(Ctrl+L)、ファイル検索…(Ctrl+P)、履歴(Ctrl+Y)、ジャンプリスト(Ctrl+J)、ジャンプリストに追加(Ctrl+Shift+J) |
 
 「表示」メニューの上の4項目は、現在の状態をチェックの印(✓)で示します。
 
@@ -164,11 +164,13 @@ guif は Windows 標準のショートカットキー（Windows like）を基本
 | 履歴 | Ctrl+Y | `history` |
 | ジャンプリスト | Ctrl+J | `history_jump_list` |
 | ジャンプリストに追加 | Ctrl+Shift+J, M | `jump_add` |
+| ファイルのファジー検索 | Ctrl+P, Ctrl+F | `fuzzy_find_file` |
 | サイズの列の表示の切り替え | Ctrl+Shift+S | `toggle_size` |
 | 更新日時の列の表示の切り替え | Ctrl+Shift+T | `toggle_time` |
 | ZIPに圧縮 | Ctrl+Alt+Z, Z | `zip_create` |
 | ZIPを展開 | Ctrl+Alt+X, Shift+Z | `zip_extract` |
 
+- **ファイルのファジー検索 (Quick Open)**: `Ctrl+P` または `Ctrl+F` を押すと、画面中央上部に検索パレットがポップアップします。カレントフォルダー配下の全ファイルを再帰的かつインクリメンタルにファジー絞り込みし、`↑` `↓`（または `Ctrl+P` / `Ctrl+N`）で選んで `Enter` を押すとそのファイルが存在するフォルダーへ移動してフォーカスします。`Esc` でキャンセルします。
 - **ツリーでの Space キー**: フォルダーツリー（ドライブ／ツリー）にフォーカスがあるとき、`Space` キー（または `V`）はフォーカス中のフォルダーの開閉（展開／折りたたみのトグル）を行います（ファイル一覧のような複数選択チェックにはなりません）。
 - 完全削除(`Shift+Delete` または `Shift+D`)は独立した割り当てではなく、「削除」のキーに Shift を加えた操作です。復元できません。
 
@@ -196,7 +198,7 @@ move_down = "ArrowDown,J"
 - キー本体は、英数字1文字(大文字と小文字を区別しません)か、次の名前です: `ArrowUp`、`ArrowDown`、`ArrowLeft`、`ArrowRight`、`Enter`、`Escape`、`Delete`、`Backspace`、`Tab`、`Space`、`Home`、`End`、`PageUp`、`PageDown`、`F1`〜`F12`、`Comma`、`Plus`、`Minus`、`Dot`。名前の大文字と小文字は区別しません。
 - `,` と `+` はそのままでは書けません(`,` は複数のキーの区切り、`+` は連結に使うため)。`Comma` と `Plus` と書きます。例: `Ctrl+Comma`、`Ctrl+Plus`。スペースは `Space`、`-` は `Minus`、`.` は `Dot` と書きます。
 - 上の一覧にない名前は、キー割り当てとして受け付けられません。
-- 操作の ID は、`move_up`、`move_down`、`move_left`、`move_right`、`page_up`、`page_down`、`select_toggle`、`select_all`、`clear_selection`、`open`、`go_parent`、`exit`、`settings`、`focus_path`、`toggle_hidden`、`toggle_tree`、`copy`、`cut`、`paste`、`delete`、`rename`、`new_file`、`new_folder`、`search`、`sort_menu`、`history`、`history_jump_list`、`jump_add`、`toggle_size`、`toggle_time`、`zip_create`、`zip_extract` です。
+- 操作の ID は、`move_up`、`move_down`、`move_left`、`move_right`、`page_up`、`page_down`、`select_toggle`、`select_all`、`clear_selection`、`open`、`go_parent`、`exit`、`settings`、`focus_path`、`toggle_hidden`、`toggle_tree`、`copy`、`cut`、`paste`、`delete`、`rename`、`new_file`、`new_folder`、`search`、`sort_menu`、`history`、`history_jump_list`、`jump_add`、`toggle_size`、`toggle_time`、`zip_create`、`zip_extract`、`fuzzy_find_file` です。
 - `config.toml` はアプリの起動時に1回だけ読み込みます。変更は再起動で反映されます。
 - `config.toml` が無いときは、既定のキー割り当てで起動します。読み込めないとき(書き方の誤りなど)は、既定のキー割り当てで起動し、その旨がステータスバーに表示されます。
 - 起動時の表示には、誤りのある設定項目と `config.toml` の行番号が入ります(例: `config.toml の不正なキー割り当て 2 件を無視しました: copy(12 行目), undo(13 行目)。`)。読み方は §8.4 を参照してください。

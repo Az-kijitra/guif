@@ -382,10 +382,10 @@ enum Class {
 /// R-89-1 "検査する引数" (MINOR-7). `destination` is classified per command below.
 const CHECKED: [&str; 7] = ["path", "paths", "items", "destination", "parent", "base_dir", "zip_path"];
 // SPEC-0200-0001 §3.16.5 / §3.16.15 MUST-141 (a): `index` (external_app_launch: the registration number) joins the exempt names (20 -> 21).
-const EXEMPT: [&str; 21] = [
+const EXEMPT: [&str; 23] = [
     "index", "new_name", "name", "kind", "output_path", "item_resolutions", "resolutions", "operation_id", "resolution",
     "effect", "expected_sequence", "probe_only", "sequence", "direction", "request_epoch", "request_seq",
-    "show_hidden", "sort_key", "sort_order", "overwrite", "data",
+    "show_hidden", "sort_key", "sort_order", "overwrite", "data", "query", "max_results",
 ];
 /// Per-command overrides: ZIP `destination` is the user's INPUT string (R-89-5), not checked as given.
 const OVERRIDES: [(&str, &str, Class); 5] = [
@@ -447,7 +447,8 @@ fn a_every_argument_of_every_command_is_classified_and_there_are_thirty_five_com
     // SPEC-0300-0021: +external_apps_load (no argument: no row, no exemption needed) +external_app_launch (index / path / kind).
     // SPEC-0300-0022 (SPEC-0300-0011 第11版 R-89-1 "対象外"): +settings_file_check +settings_file_open (only `window` / `app`: no row, no exemption).
     // SPEC-0300-0023 (SPEC-0200-0001 §3.18.10): +appearance_load (only `window` / `state`: no row, no exemption).
-    assert_eq!(commands.len(), 35, "generate_handler! has 35 commands (SPEC-0300-0011 第11版 R-89-1); update the tables if it changes");
+    // In-app fuzzy search: +fs_fuzzy_search (path / query / max_results).
+    assert_eq!(commands.len(), 36, "generate_handler! has 36 commands; update the tables if it changes");
     let _ = checked_args_by_command(); // panics on an unclassified argument
 }
 
@@ -490,6 +491,12 @@ const ROWS: &[Row] = &[
         command: "fs_list_dir",
         chain: &[("fs/commands.rs", "fs_list_dir"), ("fs/commands.rs", "list_dir_checked")],
         order: &[ABS, "query::fs_list_dir("],
+        counts: &[],
+    },
+    Row {
+        command: "fs_fuzzy_search",
+        chain: &[("fs/commands.rs", "fs_fuzzy_search"), ("fs/commands.rs", "fuzzy_search_checked")],
+        order: &[ABS, "query::fs_fuzzy_search("],
         counts: &[],
     },
     Row {

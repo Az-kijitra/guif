@@ -132,6 +132,29 @@ pub fn fs_list_drives() -> Vec<String> {
     super::win_drives::list_logical_drives()
 }
 
+/// Recursive in-app fuzzy file search (VS Code style Quick Open).
+#[tauri::command(async)]
+pub fn fs_fuzzy_search(
+    path: String,
+    query: String,
+    max_results: usize,
+) -> Result<Vec<super::fuzzy::FuzzyMatchItem>, FsListDirErrorDto> {
+    fuzzy_search_checked(&path, &query, max_results)
+}
+
+/// Inner layer of `fs_fuzzy_search`: `abs(path)` -> `query::fs_fuzzy_search`. No Tauri types.
+pub(crate) fn fuzzy_search_checked(
+    path: &str,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<super::fuzzy::FuzzyMatchItem>, FsListDirErrorDto> {
+    if abs_path::first_relative([path]).is_some() {
+        return Err(FsListDirErrorDto::invalid_path(path));
+    }
+    let results = query::fs_fuzzy_search(&PathBuf::from(path), query, max_results);
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

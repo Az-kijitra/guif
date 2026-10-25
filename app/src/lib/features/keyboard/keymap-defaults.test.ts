@@ -56,9 +56,9 @@ function findFilesMatching(pattern: RegExp, extensions: RegExp): string[] {
 }
 
 describe("ACTION_IDS (SPEC-0300-0010 第8版 R-21, R-21-2)", () => {
-  it("contains exactly 34 action ids", () => {
-    expect(ACTION_IDS).toHaveLength(34);
-    expect(new Set(ACTION_IDS).size).toBe(34); // no duplicates
+  it("contains exactly 35 action ids", () => {
+    expect(ACTION_IDS).toHaveLength(35);
+    expect(new Set(ACTION_IDS).size).toBe(35); // no duplicates
   });
 
   it("R-21-2/ISS-0070: does NOT contain jump_add_url (moved to §4.4, URL jump abolished by SPEC-0300-0013 R-256)", () => {

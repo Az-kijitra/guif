@@ -74,11 +74,11 @@ fn ac1630_the_uncommented_scaffold_and_sample_are_valid_and_complete() {
     }
 }
 
-// R-1638 1 / AC-1630: the keymap = DEFAULT_KEYMAP for the 32 documented operations, nothing else.
+// R-1638 1 / AC-1630: the keymap = DEFAULT_KEYMAP for the 33 documented operations, nothing else.
 #[test]
 fn ac1630_the_uncommented_keymap_equals_default_keymap_for_the_32_operations() {
     let defaults = default_keymap();
-    assert_eq!(defaults.len(), 34, "sanity: the scrape of keymap-defaults.ts saw the 34 default bindings");
+    assert_eq!(defaults.len(), 35, "sanity: the scrape of keymap-defaults.ts saw the 35 default bindings");
     for kind in [Kind::Template, Kind::Sample] {
         let (_d, r) = load_text(&uncomment_settings(&render(kind, version())));
         let got: BTreeMap<String, String> = r.keymap.entries.iter().map(|e| (e.action_id.clone(), e.value.clone().expect("a string value"))).collect();
@@ -86,7 +86,7 @@ fn ac1630_the_uncommented_keymap_equals_default_keymap_for_the_32_operations() {
         expected.remove("help_keymap");
         expected.remove("refresh");
         assert_eq!(got, expected, "{kind:?}");
-        assert_eq!(got.len(), 32);
+        assert_eq!(got.len(), 33);
     }
 }
 

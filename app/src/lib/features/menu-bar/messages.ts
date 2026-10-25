@@ -51,4 +51,5 @@ export const ITEM_LABELS = {
   history: "履歴",
   history_jump_list: "ジャンプリスト",
   jump_add: "ジャンプリストに追加",
+  fuzzy_find_file: "ファイル検索…",
 } as const;

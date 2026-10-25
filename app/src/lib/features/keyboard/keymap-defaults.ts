@@ -41,6 +41,7 @@ export const ACTION_IDS = [
   "toggle_time",
   "zip_create",
   "zip_extract",
+  "fuzzy_find_file",
 ] as const;
 
 export type ActionId = (typeof ACTION_IDS)[number];
@@ -105,6 +106,7 @@ export const DEFAULT_KEYMAP: Record<string, string> = {
   toggle_time: "Ctrl+Shift+T",
   zip_create: "Ctrl+Alt+Z,Z",
   zip_extract: "Ctrl+Alt+X,Shift+Z",
+  fuzzy_find_file: "Ctrl+P,Ctrl+F",
 };
 
 // R-26/§4.2: actions implemented/verified in Phase 1 (SPEC-0300-0009 /

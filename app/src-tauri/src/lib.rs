@@ -168,6 +168,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fs::commands::fs_list_dir,
             fs::commands::fs_list_drives,
+            fs::commands::fs_fuzzy_search,
             fs_ops::commands::fs_ops_copy,
             fs_ops::commands::fs_ops_move,
             fs_ops::commands::fs_ops_cancel,

@@ -13,7 +13,7 @@ const ACTION_ITEMS: readonly ItemId[] = [
   "open", "new_file", "new_folder", "rename", "delete", "zip_create", "zip_extract", "exit",
   "cut", "copy", "paste", "select_all", "clear_selection", "search",
   "toggle_tree", "toggle_hidden", "toggle_size", "toggle_time", "sort_menu",
-  "go_parent", "focus_path", "history", "history_jump_list", "jump_add",
+  "go_parent", "focus_path", "history", "history_jump_list", "jump_add", "fuzzy_find_file",
 ];
 
 // SPEC-0300-0010 §3.1 #2: Shift+Enter is a fixed key.

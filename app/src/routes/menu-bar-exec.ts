@@ -22,7 +22,7 @@ const LIST_ITEMS: ReadonlySet<string> = new Set<ItemId>([
   "open", "os_open", "new_file", "new_folder", "rename", "delete", "zip_create", "zip_extract",
   "cut", "copy", "paste", "select_all", "clear_selection", "search",
   "toggle_tree", "toggle_hidden", "toggle_size", "toggle_time", "sort_menu",
-  "go_parent", "focus_path", "history", "history_jump_list", "jump_add",
+  "go_parent", "focus_path", "history", "history_jump_list", "jump_add", "fuzzy_find_file",
 ]);
 
 // Extra arguments (e.g. the click event) are ignored on purpose: the Shift state of a click never reaches the handler (AC-1331).

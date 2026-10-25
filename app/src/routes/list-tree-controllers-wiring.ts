@@ -44,6 +44,7 @@ export interface ListTreeControllersDeps {
   pathBar?: { open(): void };
   // SPEC-0300-0022 R-1671: the `settings` action (open the settings file).
   settingsFile?: ListActionDeps<FsEntry>["settingsFile"];
+  openFuzzySearch?: () => void;
 }
 
 export function createListTreeControllers(deps: ListTreeControllersDeps) {
@@ -70,6 +71,7 @@ export function createListTreeControllers(deps: ListTreeControllersDeps) {
     focus: { container: deps.focusContainer },
     pathBar: deps.pathBar,
     settingsFile: deps.settingsFile,
+    openFuzzySearch: deps.openFuzzySearch,
   });
 
   const onTreeAction = createTreeActionHandler({

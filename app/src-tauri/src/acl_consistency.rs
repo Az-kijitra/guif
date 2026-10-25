@@ -40,6 +40,7 @@ const REQUIRED_COMMANDS: &[&str] = &[
     // (§3.7.9: "新規コマンドを追加せず既存fs/モジュールに" means a new
     // MODULE is not created, not that the command itself is unchanged).
     "fs_list_drives",
+    "fs_fuzzy_search",
     "config_load_navigation",
     "config_save_navigation",
     // Phase 7 (SPEC-0300-0009/0010; SPEC-0200-0001 §3.6.1/§3.6.11.11
@@ -374,6 +375,7 @@ fn must77_default_json_app_commands_are_the_existing_16_plus_viewer_main_plus_ph
     let expected: BTreeSet<String> = [
         "allow-fs-list-dir",
         "allow-fs-list-drives",
+        "allow-fs-fuzzy-search",
         "allow-config-load-navigation",
         "allow-config-save-navigation",
         "allow-fs-ops-copy",

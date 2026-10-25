@@ -10,6 +10,7 @@ fn main() {
             .app_manifest(tauri_build::AppManifest::new().commands(&[
                 "fs_list_dir",
                 "fs_list_drives",
+                "fs_fuzzy_search",
                 "config_load_navigation",
                 "config_save_navigation",
                 "config_load_keymap",

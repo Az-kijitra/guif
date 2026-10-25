@@ -66,7 +66,7 @@ const EXPECTED_LAYOUT = [
   "# file", "open", "os_open", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit",
   "# edit", "cut", "copy", "paste", "copy_path", "---", "select_all", "clear_selection", "---", "search",
   "# view", "toggle_tree", "toggle_hidden", "toggle_size", "toggle_time", "---", "sort_menu",
-  "# go", "go_parent", "focus_path", "---", "history", "history_jump_list", "jump_add",
+  "# go", "go_parent", "focus_path", "---", "fuzzy_find_file", "---", "history", "history_jump_list", "jump_add",
 ];
 
 describe("R-1301 / R-1310 / R-1312: structure (AC-1301)", () => {
@@ -106,13 +106,13 @@ describe("R-1301 / R-1310 / R-1312: structure (AC-1301)", () => {
       "開く", "OSの関連付けで開く", "新規作成…", "新しいフォルダー…", "名前の変更", "削除", "ZIPに圧縮", "ZIPを展開", "設定ファイルを開く", "設定ファイルのチェック", "終了",
       "切り取り", "コピー", "貼り付け", "パスのコピー", "すべて選択", "選択の解除", "検索",
       "ツリー", "隠しファイル", "サイズの列", "更新日時の列", "並び替え…",
-      "親フォルダーへ", "パス欄へ移動", "履歴", "ジャンプリスト", "ジャンプリストに追加",
+      "親フォルダーへ", "パス欄へ移動", "ファイル検索…", "履歴", "ジャンプリスト", "ジャンプリストに追加",
     ]);
   });
 });
 
 describe("R-1311 / AC-1302: items that must not exist", () => {
-  it("none of the excluded action ids is an item id, and there are exactly 28 items (26 + config_open / config_check, SPEC-0300-0022 R-1670)", () => {
+  it("none of the excluded action ids is an item id, and there are exactly 29 items (27 + config_open / config_check, SPEC-0300-0022 R-1670)", () => {
     const ids = new Set(items(input()).map((i) => i.id as string));
     for (const forbidden of [
       "undo", "redo", "duplicate", "prefix_date", "properties", "open_explorer", "open_vscode", "jump_add_url", "refresh", "settings",
@@ -120,7 +120,7 @@ describe("R-1311 / AC-1302: items that must not exist", () => {
     ]) {
       expect(ids.has(forbidden), forbidden).toBe(false);
     }
-    expect(ids.size).toBe(28);
+    expect(ids.size).toBe(29);
   });
 });
 

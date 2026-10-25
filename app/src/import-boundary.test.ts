@@ -612,6 +612,7 @@ describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, S
     "external-apps", // EXTERNAL-APPS (SPEC-0300-0021 / SPEC-0200-0001 §3.16.6, §3.16.14): the 11th feature with a messages.ts
     "file-list",
     "file-ops",
+    "fuzzy-search",
     "keyboard",
     "menu-bar", // PHASE 13 (SPEC-0200-0001 §3.14.12-1 / MUST-129): the 10th feature with a messages.ts
     "navigation-history",
@@ -626,7 +627,7 @@ describe("文言の置き場所 (SPEC-0200-0001 §3.13.2: messages.ts modules, S
   const ALL_MESSAGES = [SHARED_MESSAGES, ...FEATURE_MESSAGES, ROUTES_MESSAGES];
   const abs = (rel: string) => join(SRC, rel);
 
-  it("the planned modules exist: shared (1) + feature (13) + routes (1) = 15, and no other messages.ts is hiding elsewhere", () => {
+  it("the planned modules exist: shared (1) + feature (14) + routes (1) = 16, and no other messages.ts is hiding elsewhere", () => {
     for (const rel of ALL_MESSAGES) expect(() => statSync(abs(rel)), rel).not.toThrow();
     const found = walk(SRC)
       .filter((f) => /(^|[\\/])messages\.ts$/.test(f))

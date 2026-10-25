@@ -163,6 +163,8 @@ fn compare_type(a: &Entry, b: &Entry) -> Ordering {
     compare_name(a, b)
 }
 
+pub use super::fuzzy::search_files as fs_fuzzy_search;
+
 #[cfg(test)]
 mod tests {
     use super::*;

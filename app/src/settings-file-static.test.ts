@@ -92,9 +92,9 @@ describe("AC-1652: the check and the start-up share the pure evaluation; the che
 });
 
 describe("AC-1663: no new operation id", () => {
-  it("ACTION_IDS keeps its 34 ids and has no config_* id", async () => {
+  it("ACTION_IDS keeps its 35 ids and has no config_* id", async () => {
     const { ACTION_IDS } = await import("$lib/features/keyboard/keymap-defaults");
-    expect(ACTION_IDS).toHaveLength(34);
+    expect(ACTION_IDS).toHaveLength(35);
     expect(ACTION_IDS.filter((id) => id.startsWith("config"))).toEqual([]);
     expect(ACTION_IDS).toContain("settings");
   });

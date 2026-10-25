@@ -12,7 +12,7 @@ export type ItemId =
   | "config_open" | "config_check"
   | "cut" | "copy" | "paste" | "copy_path" | "select_all" | "clear_selection" | "search"
   | "toggle_tree" | "toggle_hidden" | "toggle_size" | "toggle_time" | "sort_menu"
-  | "go_parent" | "focus_path" | "history" | "history_jump_list" | "jump_add";
+  | "go_parent" | "focus_path" | "history" | "history_jump_list" | "jump_add" | "fuzzy_find_file";
 
 // SPEC-0300-0021 R-1552 / SPEC-0200-0001 §3.16.8: a registered external app is a DYNAMIC item `ext:<registration index>`, never an `ItemId`
 // (the static ids, `ITEM_LABELS` and the shortcut table are untouched).
@@ -66,7 +66,7 @@ const LAYOUT: Record<MenuId, readonly Slot[]> = {
   file: ["open", "os_open", "---", "@ext", "---", "new_file", "new_folder", "---", "rename", "delete", "---", "zip_create", "zip_extract", "---", "config_open", "config_check", "---", "exit"],
   edit: ["cut", "copy", "paste", "copy_path", "---", "select_all", "clear_selection", "---", "search"],
   view: ["toggle_tree", "toggle_hidden", "toggle_size", "toggle_time", "---", "sort_menu"],
-  go: ["go_parent", "focus_path", "---", "history", "history_jump_list", "jump_add"],
+  go: ["go_parent", "focus_path", "---", "fuzzy_find_file", "---", "history", "history_jump_list", "jump_add"],
 };
 
 export const MENU_IDS: readonly MenuId[] = ["file", "edit", "view", "go"];

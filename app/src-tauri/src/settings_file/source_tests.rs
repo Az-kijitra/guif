@@ -181,15 +181,15 @@ fn ac1636_uncommenting_the_theme_heading_and_preset_reads_as_a_theme_table_not_a
     assert!(value.get("input_keymap_custom").is_none(), "the keymap heading stays commented");
 }
 
-// R-1633 / T-07 / the Rust side of AC-1632: 32 operations (34 minus help_keymap / refresh), each with a `## ` description above it.
+// R-1633 / T-07 / the Rust side of AC-1632: 33 operations (35 minus help_keymap / refresh), each with a `## ` description above it.
 #[test]
 fn r1633_the_keymap_section_has_the_32_operations_each_after_a_description() {
     let (t, _) = both();
     let all = lines(&t);
     let entries = keymap_lines(&all);
     let ids: BTreeSet<&str> = entries.iter().map(|(id, _)| id.as_str()).collect();
-    assert_eq!(entries.len(), 32, "one line per operation: {entries:?}");
-    assert_eq!(ids.len(), 32, "no duplicate operation");
+    assert_eq!(entries.len(), 33, "one line per operation: {entries:?}");
+    assert_eq!(ids.len(), 33, "no duplicate operation");
     assert!(ids.contains("settings"), "`settings` is listed as 'open the settings file' (T-25 case A)");
     assert!(!ids.contains("help_keymap") && !ids.contains("refresh"), "operations without a function are not advertised");
     for (id, _) in &entries {

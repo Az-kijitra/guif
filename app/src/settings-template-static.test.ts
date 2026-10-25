@@ -128,8 +128,8 @@ describe("AC-1630 / R-1638 1: un-commenting the `# ` lines (the keymap part)", (
   const pairs = keymapPairs();
   const validated = validateKeymapEntries(pairs);
 
-  it("there are 32 pairs", () => {
-    expect(pairs).toHaveLength(32);
+  it("there are 33 pairs", () => {
+    expect(pairs).toHaveLength(33);
   });
 
   it("validateKeymapEntries finds 0 invalid entries", () => {

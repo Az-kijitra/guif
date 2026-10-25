@@ -213,8 +213,8 @@ describe("AC-1544 / R-1512: Ctrl+Alt+E is a registration key, Alt+E is the menu 
 });
 
 describe("the action id set is not changed (SPEC-0300-0010 R-16-3)", () => {
-  it("still the 34 actions, none of them external", () => {
-    expect(ACTION_IDS).toHaveLength(34);
+  it("still the 35 actions, none of them external", () => {
+    expect(ACTION_IDS).toHaveLength(35);
     expect(ACTION_IDS.filter((id) => /external|ext_|launch/.test(id))).toEqual([]);
   });
 });

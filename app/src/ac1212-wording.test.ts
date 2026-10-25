@@ -264,7 +264,8 @@ describe("scan-size guards (SHOULD-194 (c): an empty scan must not pass)", () =>
   // EXTERNAL-APPS UPDATE (SPEC-0300-0021 / SPEC-0200-0001 §3.16.6, §3.16.14): features/external-apps/messages.ts is added -> 13 (shared 1 + feature 11 + routes 1).
   // SETTINGS-FILE UPDATE (SPEC-0300-0022 / SPEC-0200-0001 §3.17.1, §3.17.8): features/settings-file/messages.ts is added -> 14 (shared 1 + feature 12 + routes 1).
   // APPEARANCE UPDATE (SPEC-0300-0023 / SPEC-0200-0001 §3.18.4): features/appearance/messages.ts is added -> 15 (shared 1 + feature 13 + routes 1).
-  it("finds exactly 15 messages.ts (shared 1 + feature 13 + routes 1)", () => {
+  // FUZZY-SEARCH UPDATE: features/fuzzy-search/messages.ts is added -> 16 (shared 1 + feature 14 + routes 1).
+  it("finds exactly 16 messages.ts (shared 1 + feature 14 + routes 1)", () => {
     expect(PROD.filter((f) => f.isMessages).map((f) => f.rel).sort()).toEqual([
       "lib/features/appearance/messages.ts",
       "lib/features/archive/messages.ts",
@@ -272,6 +273,7 @@ describe("scan-size guards (SHOULD-194 (c): an empty scan must not pass)", () =>
       "lib/features/external-apps/messages.ts",
       "lib/features/file-list/messages.ts",
       "lib/features/file-ops/messages.ts",
+      "lib/features/fuzzy-search/messages.ts",
       "lib/features/keyboard/messages.ts",
       "lib/features/menu-bar/messages.ts",
       "lib/features/navigation-history/messages.ts",

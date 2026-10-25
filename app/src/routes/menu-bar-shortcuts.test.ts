@@ -62,6 +62,7 @@ describe("AC-1320: the default keymap, as displayed", () => {
       sort_menu: "S",
       go_parent: "Backspace",
       focus_path: "Ctrl+L",
+      fuzzy_find_file: "Ctrl+P",
       history: "Ctrl+Y",
       history_jump_list: "Ctrl+J",
       jump_add: "Ctrl+Shift+J",

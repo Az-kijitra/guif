@@ -55,13 +55,13 @@ describe("W-65~W-88: the item names, per menu, in order (AC-1214)", () => {
   });
 
   it("移動: W-86~W-88", () => {
-    expect(names(3)).toEqual(["親フォルダーへ", "パス欄へ移動", "履歴", "ジャンプリスト", "ジャンプリストに追加"]);
+    expect(names(3)).toEqual(["親フォルダーへ", "パス欄へ移動", "ファイル検索…", "履歴", "ジャンプリスト", "ジャンプリストに追加"]);
   });
 
   it("the ellipsis is the single character … (U+2026), never three dots (SPEC-0300-0019 R-1206 / AC-1206)", () => {
     const all = buildMenuBar(NO_INPUT as never).flatMap((m) => m.entries.flatMap((e) => (e.type === "item" ? [e.label] : [])));
     for (const l of all) expect(l).not.toContain("...");
-    expect(all.filter((l) => l.endsWith("…"))).toEqual(["新規作成…", "新しいフォルダー…", "並び替え…"]);
+    expect(all.filter((l) => l.endsWith("…"))).toEqual(["新規作成…", "新しいフォルダー…", "並び替え…", "ファイル検索…"]);
   });
 
   it("the shared terms are used as is: 名前の変更 / 削除 / ZIPに圧縮 / ZIPを展開 / 切り取り / コピー / 貼り付け match the R-1220 term table", async () => {
