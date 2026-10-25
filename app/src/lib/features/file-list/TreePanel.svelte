@@ -14,6 +14,7 @@
   import { treeHeadingText } from "./pane-layout";
   import { readRowHeightPx } from "./text-measure";
   import { TREE_MESSAGES } from "./messages";
+  import { ICONS } from "$lib/shared/file-icons";
   import type { TreeRowView } from "./tree-state.svelte";
 
   // R-59-2 / R-942 / AC-623: the tree panel measures ITS OWN viewport (never the
@@ -125,6 +126,7 @@
           >
             {row.expanded ? "▾" : "▸"}
           </button>
+          <span class="nf-icon tree-icon" aria-hidden="true">{row.expanded ? ICONS.folderOpen : ICONS.folder}</span>
           <span class="name">{treeNodeLabel(row.path, row.level, row.name)}</span>
         </div>
       {/each}
@@ -186,6 +188,11 @@
   /* R-937: a node known to have no children hides the caret but keeps its place. */
   .caret.leaf {
     visibility: hidden;
+  }
+  .tree-icon {
+    flex: none;
+    width: 2ch;
+    margin-right: 0.5ch;
   }
   .name {
     min-width: 0;

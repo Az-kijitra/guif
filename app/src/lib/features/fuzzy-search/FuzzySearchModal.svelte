@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import type { FuzzySearchState } from "./fuzzy-search-state.svelte";
   import type { FuzzyMatchItem } from "$lib/shared/ipc/fuzzy";
+  import { getFileIcon } from "$lib/shared/file-icons";
   import { FUZZY_SEARCH_MESSAGES } from "./messages";
 
   interface Props {
@@ -143,7 +144,7 @@
               aria-selected={index === fuzzy.selectedIndex}
               onclick={() => onSelect(item)}
             >
-              <span class="entry-icon" aria-hidden="true">{item.isDir ? "📁" : "📄"}</span>
+              <span class="nf-icon entry-icon" aria-hidden="true">{getFileIcon(item.name, item.isDir)}</span>
               <span class="entry-name">
                 {#each renderHighlightedName(item) as seg}
                   {#if seg.match}
@@ -254,8 +255,10 @@
   }
 
   .entry-icon {
+    width: 1.5em;
     font-size: 13px;
     flex-shrink: 0;
+    text-align: center;
   }
 
   .entry-name {

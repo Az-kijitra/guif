@@ -14,6 +14,14 @@
  * cannot be loaded) and the colour-free fallbacks of `color-scheme` live here.
  */
 
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("/fonts/SymbolsNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* SPEC-0300-0023 R-1750 / R-1752 (second edition): the font, size and line height of the whole main window. These are the
      fallbacks used when the values cannot be loaded; applyAppearance sets the real ones. --ui-font-mono keeps its name and
@@ -137,4 +145,13 @@ body:has(.app-shell) {
   min-height: 0;
   margin: 0 1px 1px;
   overflow: hidden;
+}
+
+.nf-icon {
+  font-family: "Symbols Nerd Font Mono", var(--ui-font);
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  text-align: center;
+  flex-shrink: 0;
 }

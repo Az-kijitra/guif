@@ -11,6 +11,7 @@
   // notice (R-218 is delegated to shared/state/status-message, §3.2.9-2).
 
   import { NAVIGATION_HISTORY_MESSAGES } from "./messages";
+  import { ICONS } from "$lib/shared/file-icons";
 
   interface Props {
     items: readonly string[];
@@ -50,7 +51,7 @@
       aria-selected={index === selectedIndex}
       onclick={() => onRowClick(index)}
     >
-      <span class="icon" aria-hidden="true">📁</span>
+      <span class="nf-icon icon" aria-hidden="true">{ICONS.folder}</span>
       <span class="path" title={path}>{path}</span>
       <button
         type="button"

@@ -13,6 +13,7 @@
   import { formatModifiedForDisplay, formatSizeCell, isExecutableName, selectionMark } from "$lib/features/file-list/format";
   import { rowGridTemplate } from "$lib/features/file-list/list-layout";
   import { ellipsizeFileName, type MeasureText } from "$lib/features/file-list/name-ellipsis";
+  import { getFileIcon } from "$lib/shared/file-icons";
 
   let {
     entry,
@@ -71,7 +72,10 @@
   ondblclick={() => onRowDblClick(entry)}
 >
   <span class="mark" aria-hidden="true">{selectionMark(selected)}</span>
-  <span class="name" title={entry.name}>{shownName}</span>
+  <span class="name" title={entry.name}>
+    <span class="nf-icon row-icon" aria-hidden="true">{getFileIcon(entry.name, isDir)}</span>
+    <span class="name-text">{shownName}</span>
+  </span>
   {#if showSize}
     <span class="size">{formatSizeCell(isDir, entry.size)}</span>
   {/if}
@@ -124,6 +128,16 @@
   .name {
     min-width: 0;
     overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+  }
+  .row-icon {
+    width: 2ch;
+    margin-right: 0.5ch;
+  }
+  .name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .size,
   .modified {
