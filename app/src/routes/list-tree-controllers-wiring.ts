@@ -20,6 +20,7 @@ export interface TreeStateLike {
   handleMoveRight(): void;
   handleMoveLeft(): void;
   selectFocused(): { path: string } | null;
+  toggleExpand(path: string): void;
 }
 
 export interface ListTreeControllersDeps {

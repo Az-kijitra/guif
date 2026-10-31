@@ -6,6 +6,8 @@ const FALLBACK_ROW_HEIGHT = 32;
 
 // R-1781 / R-1782 / R-1783: the mark cell, the size cell and the time cell, in ch; the gap between cells is 1ch.
 const MARK_CELL_CH = 2;
+// SPEC-0300-0023 R-1780-3: the icon at the head of the name cell (FileListRow `.row-icon`: width 2ch + margin-right 0.5ch).
+const ICON_CH = 2.5;
 const SIZE_CELL_CH = 10;
 const TIME_CELL_CH = 16;
 // R-1792: the minimum column also counts the size and the time cell (tuif: min_col_width + 10 + 20).
@@ -113,7 +115,7 @@ export function rowGridTemplate(showSize: boolean, showTime: boolean): string {
 
 // R-1788: the width the name may use (never negative): the column minus the other cells and the 1ch gaps between cells.
 export function computeNameCellWidth(input: { colWidth: number; ch: number; showSize: boolean; showTime: boolean; separator?: boolean }): number {
-  const cells = MARK_CELL_CH + (input.showSize ? SIZE_CELL_CH : 0) + (input.showTime ? TIME_CELL_CH : 0);
+  const cells = MARK_CELL_CH + ICON_CH + (input.showSize ? SIZE_CELL_CH : 0) + (input.showTime ? TIME_CELL_CH : 0);
   const gaps = 1 + (input.showSize ? 1 : 0) + (input.showTime ? 1 : 0);
   // A column with a vertical rule (`.sep`, border-right 1px) has 1px less inside.
   return Math.max(0, input.colWidth - (input.separator ? 1 : 0) - input.ch * (cells + gaps));

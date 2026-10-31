@@ -138,8 +138,9 @@ pub fn fs_fuzzy_search(
     path: String,
     query: String,
     max_results: usize,
+    show_hidden: bool,
 ) -> Result<Vec<super::fuzzy::FuzzyMatchItem>, FsListDirErrorDto> {
-    fuzzy_search_checked(&path, &query, max_results)
+    fuzzy_search_checked(&path, &query, max_results, show_hidden)
 }
 
 /// Inner layer of `fs_fuzzy_search`: `abs(path)` -> `query::fs_fuzzy_search`. No Tauri types.
@@ -147,11 +148,12 @@ pub(crate) fn fuzzy_search_checked(
     path: &str,
     query: &str,
     max_results: usize,
+    show_hidden: bool,
 ) -> Result<Vec<super::fuzzy::FuzzyMatchItem>, FsListDirErrorDto> {
     if abs_path::first_relative([path]).is_some() {
         return Err(FsListDirErrorDto::invalid_path(path));
     }
-    let results = query::fs_fuzzy_search(&PathBuf::from(path), query, max_results);
+    let results = query::fs_fuzzy_search(&PathBuf::from(path), query, max_results, show_hidden);
     Ok(results)
 }
 

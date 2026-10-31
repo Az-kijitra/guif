@@ -20,7 +20,8 @@ export const MENU_TABLE = [
   ],
   [["切り取り", "Ctrl+X"], ["コピー", "Ctrl+C"], ["貼り付け", "Ctrl+V"], ["パスのコピー", ""], "---", ["すべて選択", "Ctrl+A"], ["選択の解除", "Esc"], "---", ["検索", "/"]],
   [["ツリー", "Ctrl+Shift+B"], ["隠しファイル", "Ctrl+H"], ["サイズの列", "Ctrl+Shift+S"], ["更新日時の列", "Ctrl+Shift+T"], "---", ["並び替え…", "S"]],
-  [["親フォルダーへ", "Backspace"], ["パス欄へ移動", "Ctrl+L"], "---", ["履歴", "Ctrl+Y"], ["ジャンプリスト", "Ctrl+J"], ["ジャンプリストに追加", "Ctrl+Shift+J"]],
+  // SPEC-0300-0020 / SPEC-0300-0024 R-2401: ファイル検索… (fuzzy_find_file -> Ctrl+P) between two separators.
+  [["親フォルダーへ", "Backspace"], ["パス欄へ移動", "Ctrl+L"], "---", ["ファイル検索…", "Ctrl+P"], "---", ["履歴", "Ctrl+Y"], ["ジャンプリスト", "Ctrl+J"], ["ジャンプリストに追加", "Ctrl+Shift+J"]],
 ];
 
 export const SHARED = {

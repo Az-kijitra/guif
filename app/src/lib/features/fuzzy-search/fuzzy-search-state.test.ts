@@ -45,6 +45,51 @@ describe("FuzzySearchState", () => {
     expect(state.selectedIndex).toBe(1);
   });
 
+  it("SPEC-0300-0024: the search follows the list's hidden-files setting given to open()", async () => {
+    const { fsFuzzySearch } = await import("$lib/shared/ipc/fuzzy");
+    vi.mocked(fsFuzzySearch).mockClear();
+    const state = new FuzzySearchState();
+    state.open("C:\\app", true);
+    expect(fsFuzzySearch).toHaveBeenCalledWith(expect.objectContaining({ path: "C:\\app", query: "", showHidden: true }));
+  });
+
+  it("SPEC-0300-0024: typing searches once the input has been still for 150ms (one search for a burst)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { fsFuzzySearch } = await import("$lib/shared/ipc/fuzzy");
+      const state = new FuzzySearchState();
+      state.open("C:\\app", false);
+      vi.mocked(fsFuzzySearch).mockClear();
+      state.setQuery("m");
+      state.setQuery("ma");
+      state.setQuery("mai");
+      expect(fsFuzzySearch).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(149);
+      expect(fsFuzzySearch).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fsFuzzySearch).toHaveBeenCalledTimes(1);
+      expect(fsFuzzySearch).toHaveBeenCalledWith(expect.objectContaining({ query: "mai", showHidden: false }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("close() cancels a pending search", async () => {
+    vi.useFakeTimers();
+    try {
+      const { fsFuzzySearch } = await import("$lib/shared/ipc/fuzzy");
+      const state = new FuzzySearchState();
+      state.open("C:\\app", false);
+      vi.mocked(fsFuzzySearch).mockClear();
+      state.setQuery("x");
+      state.close();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(fsFuzzySearch).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("close() resets state", () => {
     const state = new FuzzySearchState();
     state.open("C:/app");

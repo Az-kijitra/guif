@@ -447,7 +447,11 @@ export function createContext({ cdp, fx, shotsDir, log }) {
     await ctx.click(c.x, c.y);
   };
 
-  ctx.focusList = () => cdp.ev(`document.querySelector('.app-shell [role=listbox]').focus(); true`);
+  // The first test of a scenario can run before the list is mounted (the app has just started): wait for it.
+  ctx.focusList = async () => {
+    await ctx.waitFor(`!!document.querySelector('.app-shell [role=listbox]')`, { label: "the file list" });
+    return cdp.ev(`document.querySelector('.app-shell [role=listbox]').focus(); true`);
+  };
 
   ctx.press = {
     ctrlL: () => ctx.key("l", MOD.Ctrl, "KeyL"),

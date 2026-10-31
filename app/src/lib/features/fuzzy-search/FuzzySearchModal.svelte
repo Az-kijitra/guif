@@ -32,6 +32,8 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    // While an IME is composing, Enter / Escape / arrows belong to the IME (confirm or cancel the conversion).
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
       e.preventDefault();
       fuzzy.moveSelection(1);
@@ -108,7 +110,7 @@
       role="dialog"
       tabindex="-1"
       aria-modal="true"
-      aria-label="Quick Open File Search"
+      aria-label={FUZZY_SEARCH_MESSAGES.dialogLabel}
       onclick={(e) => e.stopPropagation()}
     >
       <div class="fuzzy-input-wrapper">

@@ -73,7 +73,7 @@
 >
   <span class="mark" aria-hidden="true">{selectionMark(selected)}</span>
   <span class="name" title={entry.name}>
-    <span class="nf-icon row-icon" aria-hidden="true">{getFileIcon(entry.name, isDir)}</span>
+    <span class="row-icon" aria-hidden="true"><span class="nf-icon">{getFileIcon(entry.name, isDir)}</span></span>
     <span class="name-text">{shownName}</span>
   </span>
   {#if showSize}
@@ -131,9 +131,14 @@
     display: inline-flex;
     align-items: center;
   }
+  /* R-1780-3: the box is in the LIST font, so 2ch + 0.5ch is exactly what computeNameCellWidth subtracts
+     (the glyph inside uses the Nerd Fonts symbol font, whose own `ch` would differ). */
   .row-icon {
     width: 2ch;
     margin-right: 0.5ch;
+    flex-shrink: 0;
+    display: inline-flex;
+    justify-content: center;
   }
   .name-text {
     overflow: hidden;

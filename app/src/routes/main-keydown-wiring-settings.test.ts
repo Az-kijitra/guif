@@ -99,3 +99,21 @@ describe("AC-1661 / AC-1664 (unit part): it is evaluated ahead of every overlay 
     if (mb) expect(mb.onKey).not.toHaveBeenCalled();
   });
 });
+
+describe("SPEC-0300-0024: while the fuzzy search is shown", () => {
+  it("Ctrl+, and Ctrl+Q still reach onHardcodedShortcut (the same as with the other overlays)", () => {
+    for (const [ev, action] of [[CTRL_COMMA(), "settings"], [key("q", { ctrlKey: true }), "exit"]] as const) {
+      const deps = makeDeps({ fuzzySearch: { isOpen: true } });
+      fire(deps, ev);
+      expect(hardcoded(deps)).toHaveBeenCalledWith(action, expect.objectContaining({ ctrlKey: true }));
+      expect(ev.preventDefault).toHaveBeenCalled();
+    }
+  });
+
+  it("other keys are left to the search box (no list action)", () => {
+    const deps = makeDeps({ fuzzySearch: { isOpen: true } });
+    fire(deps, key("ArrowDown"));
+    expect(deps.onListAction).not.toHaveBeenCalled();
+    expect(hardcoded(deps)).not.toHaveBeenCalled();
+  });
+});

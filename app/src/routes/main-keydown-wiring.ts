@@ -8,6 +8,7 @@
 
 import {
   dispatchKeydown,
+  matchesHardcodedShortcut,
   type DispatchContext,
   type PathBarFixedKey,
   type PathBarOverlayAction,
@@ -64,6 +65,11 @@ export interface MainKeydownWiringDeps {
   fuzzySearch?: { readonly isOpen: boolean };
 }
 
+function handleHardcodedOnly(event: KeydownLikeEvent, deps: MainKeydownWiringDeps): boolean {
+  const hardcoded = matchesHardcodedShortcut(event);
+  return hardcoded !== null && deps.onHardcodedShortcut(hardcoded, event);
+}
+
 // Builds the `(event: Event) => void` handler `attachGlobalKeydownListener`
 // (R-10) registers on `window`.
 export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: Event) => void {
@@ -79,10 +85,6 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       keyCode: ke.keyCode, // R-764: IME marker 229 (MUST-99(c))
       repeat: ke.repeat, // R-1549: an auto-repeat keydown starts no external app
     };
-
-    if (deps.fuzzySearch?.isOpen) {
-      return;
-    }
 
     const flags = computeDispatchOverlayFlags({
       modalOpen: deps.modal.isOpen,
@@ -129,7 +131,9 @@ export function createMainKeydownHandler(deps: MainKeydownWiringDeps): (event: E
       onExternalAppKey: deps.externalApps?.onKey,
     };
 
-    const handled = dispatchKeydown(keydownLike, ctx);
+    // SPEC-0300-0024: while the fuzzy search is shown its box handles its own keys; only the hardcoded
+    // Ctrl+Q / Ctrl+, still work (as with the other overlays).
+    const handled = deps.fuzzySearch?.isOpen ? handleHardcodedOnly(keydownLike, deps) : dispatchKeydown(keydownLike, ctx);
     if (handled) {
       ke.preventDefault();
     }

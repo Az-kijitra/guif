@@ -77,7 +77,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "viewer-highlight", "viewer-keys", "viewer-text", "menubar", "wording", "config", "appearance"];
+const SPEC_FILES = ["window", "layout", "color-font", "path-bar", "tree", "list", "scroll", "select-focus", "status-bar", "overlay", "contextmenu", "clipboard", "viewer", "viewer-highlight", "viewer-keys", "viewer-text", "menubar", "wording", "config", "appearance", "fuzzy-search"];
 
 async function loadTests() {
   const all = [];

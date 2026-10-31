@@ -385,6 +385,6 @@
 <FuzzySearchModal
   fuzzy={fuzzySearchState}
   onSelect={fuzzyWiring.handleFuzzySelect}
-  onClose={() => fuzzySearchState.close()}
+  onClose={fuzzyWiring.closeFuzzySearch}
 />
 

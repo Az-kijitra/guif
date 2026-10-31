@@ -51,7 +51,7 @@ export const tests = [
   },
   {
     id: "AC-939",
-    title: "visit history: max-height 240, scrolls, highlighted row = hover colour, long path ellipsized with title, 📁 first, × last",
+    title: "visit history: max-height 240, scrolls, highlighted row = hover colour, long path ellipsized with title, folder icon first, × last",
     async run(t, ctx) {
       const longName = "a_long_folder_name_".repeat(8); // 152 characters
       const dirs = [];
@@ -72,7 +72,10 @@ export const tests = [
       t.eq(selected["background-color"], RGB.hover, "highlighted row background");
       const rows = await ctx.ev(`[...document.querySelectorAll('.nav-history-row')].map((r) => { const p = r.querySelector('.path'); return { first: r.firstElementChild.textContent.trim(), last: r.lastElementChild.tagName + ':' + r.lastElementChild.textContent.trim(), title: p.title, overflow: getComputedStyle(p).textOverflow, sw: p.scrollWidth, cw: p.clientWidth }; })`);
       t.ok(rows.length >= 20, "at least 20 history rows", String(rows.length));
-      t.ok(rows.every((r) => r.first === "📁"), "every row starts with 📁");
+      // SPEC-0300-0023 R-1780-4: the folder icon is the Nerd Fonts glyph in a `.nf-icon` span (no emoji).
+      const icons = await ctx.ev(`[...document.querySelectorAll('.nav-history-row')].map((r) => r.firstElementChild.classList.contains('nf-icon') && r.firstElementChild.getAttribute('aria-hidden') === 'true' && r.firstElementChild.textContent.trim() !== '')`);
+      t.ok(icons.length > 0 && icons.every(Boolean), "every row starts with the folder icon (.nf-icon, aria-hidden)");
+      t.ok(rows.every((r) => r.first !== "📁"), "no emoji icon");
       t.ok(rows.every((r) => r.last === "BUTTON:×"), "every row ends with a × button");
       const long = rows.find((r) => r.title.endsWith(longName));
       t.ok(long, "the long path is listed");

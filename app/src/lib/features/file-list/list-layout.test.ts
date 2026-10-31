@@ -173,10 +173,14 @@ describe("buildGeometry (SPEC-0200-0001 §3.18.15 SHOULD-2: values only)", () =>
 });
 
 describe("cell widths in ch (R-1780 .. R-1783)", () => {
-  it("computeNameCellWidth: the column minus mark 2ch, size 10ch, time 16ch and 1ch between the cells", () => {
-    expect(computeNameCellWidth({ colWidth: 500, ch: 10, showSize: false, showTime: false })).toBe(500 - 20 - 10);
-    expect(computeNameCellWidth({ colWidth: 500, ch: 10, showSize: true, showTime: false })).toBe(500 - 20 - 100 - 20);
-    expect(computeNameCellWidth({ colWidth: 600, ch: 10, showSize: true, showTime: true })).toBe(600 - 20 - 100 - 160 - 30);
+  it("computeNameCellWidth: the column minus mark 2ch, the icon 2.5ch (2ch + 0.5ch gap, R-1780-3), size 10ch, time 16ch and 1ch between the cells", () => {
+    expect(computeNameCellWidth({ colWidth: 500, ch: 10, showSize: false, showTime: false })).toBe(500 - 20 - 25 - 10);
+    expect(computeNameCellWidth({ colWidth: 500, ch: 10, showSize: true, showTime: false })).toBe(500 - 20 - 25 - 100 - 20);
+    expect(computeNameCellWidth({ colWidth: 600, ch: 10, showSize: true, showTime: true })).toBe(600 - 20 - 25 - 100 - 160 - 30);
+  });
+
+  it("a column with a vertical rule has 1px less", () => {
+    expect(computeNameCellWidth({ colWidth: 500, ch: 10, showSize: false, showTime: false, separator: true })).toBe(500 - 1 - 20 - 25 - 10);
   });
 
   it("never negative", () => {

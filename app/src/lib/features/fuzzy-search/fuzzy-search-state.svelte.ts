@@ -11,6 +11,18 @@ export class FuzzySearchState {
   currentSearchPath = $state("");
 
   private requestSequence = 0;
+  private showHidden = false;
+  private debounce: ReturnType<typeof setTimeout> | null = null;
+
+  /** SPEC-0300-0024: typing searches once the input has been still for this long (one search per burst). */
+  static readonly DEBOUNCE_MS = 150;
+
+  private cancelPending(): void {
+    if (this.debounce !== null) {
+      clearTimeout(this.debounce);
+      this.debounce = null;
+    }
+  }
 
   get selectedItem(): FuzzyMatchItem | null {
     if (this.items.length === 0 || this.selectedIndex < 0 || this.selectedIndex >= this.items.length) {
@@ -19,7 +31,9 @@ export class FuzzySearchState {
     return this.items[this.selectedIndex] ?? null;
   }
 
-  open(path: string): void {
+  open(path: string, showHidden = false): void {
+    this.cancelPending();
+    this.showHidden = showHidden;
     this.currentSearchPath = path;
     this.query = "";
     this.items = [];
@@ -29,6 +43,7 @@ export class FuzzySearchState {
   }
 
   close(): void {
+    this.cancelPending();
     this.isOpen = false;
     this.query = "";
     this.items = [];
@@ -40,7 +55,11 @@ export class FuzzySearchState {
   setQuery(newQuery: string): void {
     this.query = newQuery;
     this.selectedIndex = 0;
-    this.runSearch(newQuery);
+    this.cancelPending();
+    this.debounce = setTimeout(() => {
+      this.debounce = null;
+      void this.runSearch(newQuery);
+    }, FuzzySearchState.DEBOUNCE_MS);
   }
 
   moveSelection(delta: number): void {
@@ -64,6 +83,7 @@ export class FuzzySearchState {
         path: this.currentSearchPath,
         query: searchQuery,
         maxResults: 100,
+        showHidden: this.showHidden,
       });
 
       // Ignore stale responses

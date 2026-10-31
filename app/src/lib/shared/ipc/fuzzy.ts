@@ -15,6 +15,8 @@ export interface FsFuzzySearchParams {
   path: string;
   query: string;
   maxResults?: number;
+  /** SPEC-0300-0024: dot-named entries are searched only when the list shows hidden files. */
+  showHidden: boolean;
 }
 
 export async function fsFuzzySearch(params: FsFuzzySearchParams): Promise<FuzzyMatchItem[]> {
@@ -22,5 +24,6 @@ export async function fsFuzzySearch(params: FsFuzzySearchParams): Promise<FuzzyM
     path: params.path,
     query: params.query,
     maxResults: params.maxResults ?? 100,
+    showHidden: params.showHidden,
   });
 }

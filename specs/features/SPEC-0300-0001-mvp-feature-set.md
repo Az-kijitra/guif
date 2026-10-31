@@ -29,7 +29,7 @@
 | SPEC-0300-0005 | ファイル操作(コピー/移動/削除/リネーム/新規作成) | Copy / Move / Delete / Rename / Create |
 | SPEC-0300-0006 | ZIP 作成 / 展開 | ZIP create / extract |
 | SPEC-0300-0007 | ジャンプリストと履歴 | Jump list and history |
-| SPEC-0300-0008 | 内蔵ビューア統合 | Integrated 内蔵ビューア |
+| SPEC-0300-0008 | 内蔵ビューア統合 | Integrated viewer |
 
 ## 2. 根拠・出典
 

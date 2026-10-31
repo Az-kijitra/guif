@@ -18,15 +18,19 @@ function sparseFile(ctx, dirRel, name, size) {
 
 const bold = (weight) => Number(weight) >= 600 || weight === "bold";
 
-// Rows of the list as plain data (R-1780: mark, name, size, time cells).
+// Rows of the list as plain data (R-1780: mark, name, size, time cells). The name cell holds the icon (R-1780-3:
+// `.row-icon`, 2ch + 0.5ch gap) and the name itself (`.name-text`); the name is measured without the icon.
 const ROWS = `[...document.querySelectorAll('.file-list-row')].map((r) => {
   const mark = r.querySelector('.mark');
   const name = r.querySelector('.name');
+  const nameText = name.querySelector('.name-text') ?? name;
+  const icon = name.querySelector('.row-icon');
+  const iconW = icon ? icon.offsetWidth + parseFloat(getComputedStyle(icon).marginRight || '0') : 0;
   const size = r.querySelector('.size');
   const time = r.querySelector('.modified');
   const s = getComputedStyle(r);
-  return { id: r.id, label: r.getAttribute('aria-label'), classes: r.className, mark: mark.textContent, nameText: name.textContent, title: name.title,
-    nameSW: name.scrollWidth, nameCW: name.clientWidth, cells: r.children.length, text: r.textContent,
+  return { id: r.id, label: r.getAttribute('aria-label'), classes: r.className, mark: mark.textContent, nameText: nameText.textContent, title: name.title,
+    nameSW: nameText.scrollWidth, nameCW: name.clientWidth - iconW, iconW, cells: r.children.length, text: r.textContent,
     size: size ? size.textContent : null, sizeSW: size ? size.scrollWidth : 0, sizeCW: size ? size.clientWidth : 0, sizeAlign: size ? getComputedStyle(size).textAlign : null,
     time: time ? time.textContent : null, timeSW: time ? time.scrollWidth : 0, timeCW: time ? time.clientWidth : 0,
     color: s.color, background: s.backgroundColor, weight: s.fontWeight, opacity: s.opacity, outline: s.outlineStyle, font: s.font };
@@ -146,7 +150,8 @@ export const tests = [
       await ctx.reload();
       await ctx.nav(ctx.fx.at("names"));
       await ctx.ensureView({ size: true, time: true, tree: true, hidden: false });
-      await fitBody(ctx, 300, 328); // a narrow list, so that the long names have to be shortened
+      // A narrow list, so that the long names have to be shortened (320 = the former 300 + the icon's 2.5ch, R-1780-3).
+      await fitBody(ctx, 320, 328);
       for (const [full, head, needle] of [[LONG_ASCII, "ave", "quarterly"], [LONG_JAPANESE, "とて", "四半期"]]) {
         await ctx.focusList();
         await ctx.press.search();

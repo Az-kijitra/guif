@@ -258,7 +258,7 @@ export const tests = [
       await ctx.waitFor(`!!document.querySelector('.search-bar input')`, { label: "the search bar" });
       await ctx.type("quarterly");
       await ctx.settle(300);
-      const row = await ctx.ev(`(() => { const r = [...document.querySelectorAll('.file-list-row')].find((x) => x.querySelector('.name').title.startsWith('avery')); const n = r.querySelector('.name'); const g = getComputedStyle(r); return { title: n.title, text: n.textContent, grid: g.gridTemplateColumns, overflow: g.overflow, size: r.querySelector('.size').getBoundingClientRect().width, time: r.querySelector('.modified').getBoundingClientRect().width }; })()`);
+      const row = await ctx.ev(`(() => { const r = [...document.querySelectorAll('.file-list-row')].find((x) => x.querySelector('.name').title.startsWith('avery')); const n = r.querySelector('.name'); const g = getComputedStyle(r); return { title: n.title, text: (n.querySelector('.name-text') ?? n).textContent, grid: g.gridTemplateColumns, overflow: g.overflow, size: r.querySelector('.size').getBoundingClientRect().width, time: r.querySelector('.modified').getBoundingClientRect().width }; })()`);
       t.eq(row.title, "averyveryveryverylongname_quarterly_report_final.xlsx", "title = the full name");
       t.eq(row.text, "…", "the name part is the ellipsis only");
       t.eq(row.overflow, "hidden", "row overflow");

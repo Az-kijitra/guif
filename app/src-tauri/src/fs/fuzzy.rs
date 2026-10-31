@@ -39,12 +39,14 @@ const IGNORED_DIR_NAMES: &[&str] = &[
 /// Maximum number of filesystem entries visited during a single search.
 const MAX_SCAN_LIMIT: usize = 40_000;
 
-/// Tests if a directory name should be skipped.
+/// Tests if a directory name should be skipped (heavy tool folders, whatever the hidden-files setting).
 pub fn is_ignored_dir(name: &str) -> bool {
-    if name.starts_with('.') && name != "." && name != ".." {
-        return true;
-    }
     IGNORED_DIR_NAMES.iter().any(|&ign| ign.eq_ignore_ascii_case(name))
+}
+
+/// The list's rule for "hidden" (SPEC-0300-0009 R-74, `fs/query.rs`): the name starts with a dot.
+fn is_hidden_name(name: &str) -> bool {
+    name.starts_with('.')
 }
 
 /// Matches `query` against `target` with fuzzy ranking and returns (score, match_indices).
@@ -133,12 +135,22 @@ pub fn fuzzy_match(target: &str, query: &str) -> Option<(i32, Vec<usize>)> {
     // Penalize long paths to prioritize shorter, tighter matches
     score -= (target_chars.len() as i32) / 2;
 
+    // The screen highlights by JavaScript string position (UTF-16 code units), not by `char`.
+    let mut utf16_start = Vec::with_capacity(target_chars.len());
+    let mut offset = 0usize;
+    for c in &target_chars {
+        utf16_start.push(offset);
+        offset += c.len_utf16();
+    }
+    let indices = indices.into_iter().map(|i| utf16_start[i]).collect();
+
     Some((score, indices))
 }
 
 /// Recursively searches for files and directories matching `query` starting from `root`.
-/// Returns sorted matches (highest score first) up to `max_results`.
-pub fn search_files(root: &Path, query: &str, max_results: usize) -> Vec<FuzzyMatchItem> {
+/// Returns sorted matches (highest score first) up to `max_results`. Hidden (dot-named) entries are
+/// searched only when `show_hidden` is true, the same as the list.
+pub fn search_files(root: &Path, query: &str, max_results: usize, show_hidden: bool) -> Vec<FuzzyMatchItem> {
     let mut matches = Vec::new();
     let mut visited = 0usize;
 
@@ -176,11 +188,17 @@ pub fn search_files(root: &Path, query: &str, max_results: usize) -> Vec<FuzzyMa
             let file_name = entry.file_name().to_string_lossy().to_string();
             let is_dir = file_type.is_dir();
 
+            if !show_hidden && is_hidden_name(&file_name) {
+                continue;
+            }
             if is_dir && is_ignored_dir(&file_name) {
                 continue;
             }
 
             let full_path = entry.path();
+            // `path` is the navigation target and keeps the native form (`C:\…`, accepted by
+            // `abs_path::is_absolute_path`); only the displayed `relative_path` uses `/`.
+            let native_path = full_path.to_string_lossy().into_owned();
             let relative = match full_path.strip_prefix(root) {
                 Ok(r) => r.to_string_lossy().replace('\\', "/"),
                 Err(_) => file_name.clone(),
@@ -191,7 +209,7 @@ pub fn search_files(root: &Path, query: &str, max_results: usize) -> Vec<FuzzyMa
                 let depth = relative.chars().filter(|&c| c == '/').count();
                 let score = 1000 - (depth as i32 * 50) - (relative.len() as i32);
                 matches.push(FuzzyMatchItem {
-                    path: full_path.to_string_lossy().replace('\\', "/"),
+                    path: native_path,
                     relative_path: relative,
                     name: file_name,
                     is_dir,
@@ -200,7 +218,7 @@ pub fn search_files(root: &Path, query: &str, max_results: usize) -> Vec<FuzzyMa
                 });
             } else if let Some((score, indices)) = fuzzy_match(&relative, trimmed_query) {
                 matches.push(FuzzyMatchItem {
-                    path: full_path.to_string_lossy().replace('\\', "/"),
+                    path: native_path,
                     relative_path: relative,
                     name: file_name,
                     is_dir,
@@ -259,6 +277,52 @@ mod tests {
     #[test]
     fn test_fuzzy_match_no_match() {
         assert!(fuzzy_match("main.rs", "xyz").is_none());
+    }
+
+    /// SPEC-0300-0024: a result's `path` is what the list navigates to, so it must pass the same absolute-path
+    /// check as `fs_list_dir` (`C:\…`, not `C:/…`). Only `relative_path` (shown on screen) uses `/`.
+    #[test]
+    fn result_paths_are_native_absolute_paths_and_relative_paths_use_slashes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("sub")).expect("mkdir");
+        std::fs::write(dir.path().join("sub").join("note.txt"), b"x").expect("write");
+        let found = search_files(dir.path(), "note", 10, false);
+        let item = found.iter().find(|m| m.name == "note.txt").expect("note.txt is found");
+        assert!(crate::shared::abs_path::is_absolute_path(&item.path), "navigable path: {}", item.path);
+        assert!(!item.path.contains('/'), "native separators only: {}", item.path);
+        assert_eq!(item.relative_path, "sub/note.txt");
+        let sub = search_files(dir.path(), "sub", 10, false);
+        let folder = sub.iter().find(|m| m.name == "sub").expect("sub is found");
+        assert!(folder.is_dir && crate::shared::abs_path::is_absolute_path(&folder.path), "navigable folder: {}", folder.path);
+    }
+
+    /// SPEC-0300-0024: the screen highlights with JavaScript string positions (UTF-16 code units), so a character
+    /// outside the BMP before the match must count as 2.
+    #[test]
+    fn match_indices_are_utf16_positions() {
+        let (_, indices) = fuzzy_match("😀ab", "b").expect("match");
+        assert_eq!(indices, vec![3]);
+        let (_, plain) = fuzzy_match("xab", "b").expect("match");
+        assert_eq!(plain, vec![2]);
+    }
+
+    /// SPEC-0300-0024: hidden (dot-named) files and folders follow the list's "hidden files" setting;
+    /// the heavy folders (`.git`, `node_modules`, ...) are skipped either way.
+    #[test]
+    fn hidden_entries_follow_the_show_hidden_setting() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join(".env"), b"x").expect("write");
+        std::fs::create_dir(dir.path().join(".config")).expect("mkdir");
+        std::fs::write(dir.path().join(".config").join("app.toml"), b"x").expect("write");
+        std::fs::create_dir(dir.path().join(".git")).expect("mkdir");
+        std::fs::write(dir.path().join(".git").join("app.cfg"), b"x").expect("write");
+        let names = |show: bool| -> Vec<String> { search_files(dir.path(), "", 50, show).into_iter().map(|m| m.relative_path).collect() };
+        let hidden_off = names(false);
+        assert!(hidden_off.is_empty(), "nothing dot-named when hidden files are not shown: {hidden_off:?}");
+        let hidden_on = names(true);
+        assert!(hidden_on.contains(&".env".to_string()), "{hidden_on:?}");
+        assert!(hidden_on.contains(&".config/app.toml".to_string()), "{hidden_on:?}");
+        assert!(!hidden_on.iter().any(|p| p.starts_with(".git")), "heavy folders stay skipped: {hidden_on:?}");
     }
 
     #[test]

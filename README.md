@@ -58,7 +58,7 @@ npm run tauri build
 
 ## 主な特徴
 
-- **キーボード中心ナビゲーション**: 矢印キー移動、Shift+矢印による範囲選択、Space 選択、Tab / Ctrl+Tab によるペイン切替、Enter 実行など、キーボードだけでスムーズに操作可能。
+- **キーボード中心ナビゲーション**: 矢印キー移動、Shift+矢印による範囲選択、Space 選択、Tab / Shift+Tab によるツリーと一覧の切替、Enter 実行など、キーボードだけでスムーズに操作可能。
 - **ファイル一覧 & ツリービュー**: 多段カラム表示に対応したファイル一覧とフォルダーツリー。ツリー幅や表示・非表示（`Ctrl+Shift+B` または `T`）は自由に調整可能。
 - **内蔵ファジー検索 (Quick Open)**: `Ctrl+P` または `Ctrl+F` で検索パレットを呼び出し、カレントフォルダー配下の全ファイルを再帰的かつインクリメンタルに検索して素早く移動。
 - **tuif-look 外観 & Nerd Fonts アイコン**: CUI ファイラー `tuif` と共通の配色パレット、Monospace 等幅フォント、Nerd Fonts によるファイル種別アイコン表示に対応。外観設定は `config.toml` からカスタマイズ可能。
@@ -100,3 +100,5 @@ Windows の「設定」→「アプリ」（「インストールされている
 ## ライセンス
 
 [MIT License](LICENSE)
+
+アイコンの表示に Nerd Fonts の記号フォント(Symbols Nerd Font Mono、SIL Open Font License 1.1)を同梱しています。フォントに含まれるアイコン集のライセンスと作者の表示は [app/static/fonts/THIRD_PARTY_NOTICES.md](app/static/fonts/THIRD_PARTY_NOTICES.md) にあります。
