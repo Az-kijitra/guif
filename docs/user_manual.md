@@ -429,6 +429,17 @@ args = ["{path}"]
 key = "Ctrl+Alt+V"
 ```
 
+[guif-pdf](https://github.com/Az-kijitra/guif-pdf)(PDF の閲覧・注釈・ページ編集ツール)で開く。PDF はそのファイルを、フォルダーはその中の PDF の一覧を開きます:
+
+```toml
+[[external_apps]]
+name = "guif-pdfで開く"
+program = "%LOCALAPPDATA%\\guif-pdf\\guif-pdf.exe"
+args = ["{dir}"]
+args_for_file = ["{path}"]
+key = "Ctrl+Alt+P"
+```
+
 ## 8. 設定ファイルを開く・チェックする
 
 設定は `config.toml`(設定フォルダー `%APPDATA%\dev.guif.app` の中。§3)に書きます。設定を変える画面はありません。メニューバーの「ファイル」の次の2つの項目で、`config.toml` を開いて編集し、書き方を確かめます。
